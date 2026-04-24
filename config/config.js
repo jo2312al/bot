@@ -1,0 +1,12 @@
+module.exports = {
+
+  GROUP_ID:
+    "123456789-123456@g.us",
+
+  CALL_CENTER:
+    "9932054701",
+
+  COTIZACIONES_WHATSAPP:
+    "529932054701"
+
+};
