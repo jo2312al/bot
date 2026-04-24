@@ -180,13 +180,21 @@ async function startBot() {
 
         // IGNORAR GRUPOS
 
-        if (
-          from.endsWith(
-            "@g.us"
-          )
-        )
-          return;
+        // ==========================================
+// LOG GRUPOS
+// ==========================================
 
+if (
+  from.endsWith("@g.us")
+) {
+
+  log(
+    `[GRUPO] ${from}: ${text}`
+  );
+
+  return;
+
+}
         const text =
 
           msg.message
