@@ -20,6 +20,19 @@ const {
   "./handlers/messageHandler"
 );
 
+// ==========================================
+// DELAY
+// ==========================================
+
+function delay(ms) {
+
+  return new Promise(
+    resolve =>
+      setTimeout(resolve, ms)
+  );
+
+}
+
 async function startBot() {
 
   const {
@@ -54,18 +67,38 @@ async function startBot() {
 
     });
 
-  // ==========================
-  // GUARDAR
-  // ==========================
+  // ==========================================
+  // DELAY GLOBAL MENSAJES
+  // ==========================================
+
+  const originalSendMessage =
+    sock.sendMessage.bind(sock);
+
+  sock.sendMessage =
+    async (...args) => {
+
+      // delay 5 segundos
+
+      await delay(1500);
+
+      return originalSendMessage(
+        ...args
+      );
+
+    };
+
+  // ==========================================
+  // GUARDAR SESIÓN
+  // ==========================================
 
   sock.ev.on(
     "creds.update",
     saveCreds
   );
 
-  // ==========================
+  // ==========================================
   // CONEXIÓN
-  // ==========================
+  // ==========================================
 
   sock.ev.on(
     "connection.update",
@@ -77,7 +110,9 @@ async function startBot() {
         lastDisconnect
       } = update;
 
+      // ======================================
       // QR
+      // ======================================
 
       if (qr) {
 
@@ -94,7 +129,9 @@ async function startBot() {
 
       }
 
-      // OPEN
+      // ======================================
+      // CONECTADO
+      // ======================================
 
       if (
         connection ===
@@ -107,7 +144,9 @@ async function startBot() {
 
       }
 
-      // CLOSE
+      // ======================================
+      // DESCONECTADO
+      // ======================================
 
       if (
         connection ===
@@ -132,6 +171,10 @@ async function startBot() {
 
         if (reconnect) {
 
+          log(
+            "🔄 RECONECTANDO..."
+          );
+
           startBot();
 
         }
@@ -141,9 +184,9 @@ async function startBot() {
     }
   );
 
-  // ==========================
+  // ==========================================
   // MENSAJES
-  // ==========================
+  // ==========================================
 
   sock.ev.on(
     "messages.upsert",
@@ -153,6 +196,10 @@ async function startBot() {
     }) => {
 
       try {
+
+        // ======================================
+        // SOLO notify
+        // ======================================
 
         if (
           type !==
@@ -168,33 +215,26 @@ async function startBot() {
         )
           return;
 
+        // ======================================
         // IGNORAR BOT
+        // ======================================
 
         if (
           msg.key.fromMe
         )
           return;
 
+        // ======================================
+        // FROM
+        // ======================================
+
         const from =
           msg.key.remoteJid;
 
-        // IGNORAR GRUPOS
+        // ======================================
+        // TEXTO
+        // ======================================
 
-        // ==========================================
-// LOG GRUPOS
-// ==========================================
-
-if (
-  from.endsWith("@g.us")
-) {
-
-  log(
-    `[GRUPO] ${from}: ${text}`
-  );
-
-  return;
-
-}
         const text =
 
           msg.message
@@ -209,9 +249,33 @@ if (
         if (!text)
           return;
 
+        // ======================================
+        // LOG GRUPOS
+        // ======================================
+
+        if (
+          from.endsWith("@g.us")
+        ) {
+
+          log(
+            `[GRUPO] ${from}: ${text}`
+          );
+
+          return;
+
+        }
+
+        // ======================================
+        // LOG PRIVADOS
+        // ======================================
+
         log(
-          `${from}: ${text}`
+          `[PRIVADO] ${from}: ${text}`
         );
+
+        // ======================================
+        // MANEJAR MENSAJE
+        // ======================================
 
         await handleMessage({
 
@@ -223,7 +287,9 @@ if (
 
       } catch (err) {
 
-        log(err);
+        log(
+          `ERROR: ${err}`
+        );
 
       }
 
@@ -231,5 +297,9 @@ if (
   );
 
 }
+
+// ==========================================
+// START
+// ==========================================
 
 startBot();

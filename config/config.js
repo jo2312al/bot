@@ -1,7 +1,7 @@
 module.exports = {
 
   GROUP_ID:
-    "123456789-123456@g.us",
+    "120363038237669558@g.us",
 
   CALL_CENTER:
     "9932054701",

@@ -1,18 +1,22 @@
+// handlers/messageHandler.js
+
 const userState =
   require("../state/userState");
 
 const {
-  sendMenu
-} = require("./menuHandler");
+  routerHandler
+} = require("./routerHandler");
 
-const {
-  handleReserva
-} = require("./reservaHandler");
+// ==========================================
+// CONFIG
+// ==========================================
 
-const {
-  CALL_CENTER,
-  COTIZACIONES_WHATSAPP
-} = require("../config/config");
+const ONE_HOUR =
+  60 * 60 * 1000;
+
+// ==========================================
+// MESSAGE HANDLER
+// ==========================================
 
 async function handleMessage({
 
@@ -33,9 +37,13 @@ async function handleMessage({
 
     userState[from] = {
 
+      module: null,
+
       step: null,
 
-      data: {}
+      data: {},
+
+      lastMenu: null
 
     };
 
@@ -45,7 +53,7 @@ async function handleMessage({
     userState[from];
 
   // ==========================================
-  // ENVIAR MENSAJE
+  // SEND
   // ==========================================
 
   const send =
@@ -61,118 +69,189 @@ async function handleMessage({
     };
 
   // ==========================================
-  // VOLVER AL MENÚ
+  // CONTROL MENÚ
+  // ==========================================
+
+  const now =
+    Date.now();
+
+  const shouldShowMenu =
+
+    !state.lastMenu
+
+    ||
+
+    (
+
+      now - state.lastMenu
+
+      >
+
+      ONE_HOUR
+
+    );
+
+  // ==========================================
+  // RESET AUTOMÁTICO
   // ==========================================
 
   if (
-
-    [
-      "menu",
-      "inicio",
-      "0",
-      "cancelar"
-    ].includes(input)
-
+    shouldShowMenu
   ) {
 
-    // reset
+    state.module = null;
 
     state.step = null;
+
     state.data = {};
 
-    await send(`❌ Operación cancelada
+  }
 
-🔄 Volviendo al menú...`);
+  // ==========================================
+  // CANCELAR
+  // ==========================================
 
-    return sendMenu(send);
+  if (
+
+    input === "menu"
+
+    ||
+
+    input === "inicio"
+
+    ||
+
+    input === "cancelar"
+
+  ) {
+
+    state.module = null;
+
+    state.step = null;
+
+    state.data = {};
+
+    state.lastMenu =
+      Date.now();
+
+    return send(`🏨 Hotel Villa Margaritas
+
+¿En qué podemos ayudarte?
+
+1️⃣ Reservas
+
+2️⃣ Cotizaciones
+
+3️⃣ Quejas
+
+4️⃣ Objetos extraviados
+
+5️⃣ Galería
+
+6️⃣ Qué hacer en Tabasco
+
+7️⃣ Servicios
+
+8️⃣ Foto gratis del mes
+
+9️⃣ Redes sociales
+
+🔟 Película personaje
+
+1️⃣1️⃣ Call center
+
+📍 Dirección:
+Andrés Sánchez Magallanes 910 Col Centro`);
 
   }
 
   // ==========================================
-  // OPCIÓN 1
+  // MOSTRAR MENÚ AUTOMÁTICO
   // ==========================================
 
   if (
-    input === "1"
+
+    shouldShowMenu
+
     &&
-    !state.step
+
+    !state.module
+
   ) {
 
-    return handleReserva({
+    state.lastMenu =
+      now;
 
-      input,
-      text,
-      state,
-      send,
-      sock,
-      from
+    // si ya eligió opción
+    // dejar continuar
 
-    });
+    const validOptions = [
 
-  }
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10",
+      "11"
 
-  // ==========================================
-  // FLUJO ACTIVO
-  // ==========================================
+    ];
 
-  if (state.step) {
+    if (
+      !validOptions.includes(input)
+    ) {
 
-    return handleReserva({
+      return send(`🏨 Hotel Villa Margaritas
 
-      input,
-      text,
-      state,
-      send,
-      sock,
-      from
+¿En qué podemos ayudarte?
 
-    });
+1️⃣ Reservas
 
-  }
+2️⃣ Cotizaciones
 
-  // ==========================================
-  // OPCIÓN 2
-  // ==========================================
+3️⃣ Quejas
 
-  if (
-    input === "2"
-  ) {
+4️⃣ Objetos extraviados
 
-    return send(`💼 COTIZACIONES
+5️⃣ Galería
 
-Para cotizaciones comunícate aquí:
+6️⃣ Qué hacer en Tabasco
 
-https://wa.me/${COTIZACIONES_WHATSAPP}
+7️⃣ Servicios
 
-📞 ${CALL_CENTER}`);
+8️⃣ Foto gratis del mes
 
-  }
+9️⃣ Redes sociales
 
-  // ==========================================
-  // OPCIÓN 3
-  // ==========================================
+🔟 Película personaje
 
-  if (
-    input === "3"
-  ) {
+1️⃣1️⃣ Call center
 
-    return send(`📞 CALL CENTER
+📍 Dirección:
+Andrés Sánchez Magallanes 910 Col Centro`);
 
-Teléfono:
-
-${CALL_CENTER}
-
-WhatsApp:
-
-https://wa.me/${COTIZACIONES_WHATSAPP}`);
+    }
 
   }
 
   // ==========================================
-  // MENÚ AUTOMÁTICO
+  // ROUTER
   // ==========================================
 
-  return sendMenu(send);
+  return routerHandler({
+
+    input,
+    state,
+    send,
+    sock,
+    from,
+    text
+
+  });
 
 }
 
