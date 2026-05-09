@@ -1,5 +1,11 @@
 // handlers/messageHandler.js
 
+const {
+  MAIN_MENU
+} = require(
+  "../constants/menus"
+);
+
 const userState =
   require("../state/userState");
 
@@ -134,34 +140,7 @@ async function handleMessage({
     state.lastMenu =
       Date.now();
 
-    return send(`🏨 Hotel Villa Margaritas
-
-¿En qué podemos ayudarte?
-
-1️⃣ Reservas
-
-2️⃣ Cotizaciones
-
-3️⃣ Quejas
-
-4️⃣ Objetos extraviados
-
-5️⃣ Galería
-
-6️⃣ Qué hacer en Tabasco
-
-7️⃣ Servicios
-
-8️⃣ Foto gratis del mes
-
-9️⃣ Redes sociales
-
-🔟 Película personaje
-
-1️⃣1️⃣ Call center
-
-📍 Dirección:
-Andrés Sánchez Magallanes 910 Col Centro`);
+    return send(MAIN_MENU);
 
   }
 
@@ -182,8 +161,9 @@ Andrés Sánchez Magallanes 910 Col Centro`);
     state.lastMenu =
       now;
 
-    // si ya eligió opción
-    // dejar continuar
+    // ======================================
+    // OPCIONES VÁLIDAS
+    // ======================================
 
     const validOptions = [
 
@@ -201,38 +181,15 @@ Andrés Sánchez Magallanes 910 Col Centro`);
 
     ];
 
+    // ======================================
+    // SI NO ELIGIÓ OPCIÓN
+    // ======================================
+
     if (
       !validOptions.includes(input)
     ) {
 
-      return send(`🏨 Hotel Villa Margaritas
-
-¿En qué podemos ayudarte?
-
-1️⃣ Reservas
-
-2️⃣ Cotizaciones
-
-3️⃣ Quejas
-
-4️⃣ Objetos extraviados
-
-5️⃣ Galería
-
-6️⃣ Qué hacer en Tabasco
-
-7️⃣ Servicios
-
-8️⃣ Foto gratis del mes
-
-9️⃣ Redes sociales
-
-🔟 Película personaje
-
-1️⃣1️⃣ Call center
-
-📍 Dirección:
-Andrés Sánchez Magallanes 910 Col Centro`);
+      return send(MAIN_MENU);
 
     }
 

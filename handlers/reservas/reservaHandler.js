@@ -1,12 +1,33 @@
+const {
+  withMenuFooter
+} = require(
+  "../../utils/menuFooter"
+);
+// ==========================================
+// FLOW
+// ==========================================
+
 const flow =
   require("../../flows/reservas/reservaFlow");
 
+// ==========================================
+// VALIDATORS
+// ==========================================
+
 const validators =
-  require("../../validators/reservaValidator");
+  require("../../validators/reservas/reservaValidator");
+
+// ==========================================
+// CONFIG
+// ==========================================
 
 const {
   GROUP_ID
 } = require("../../config/config");
+
+// ==========================================
+// SERVICES
+// ==========================================
 
 const {
 
@@ -17,6 +38,10 @@ const {
   "../../services/reservationService"
 );
 
+// ==========================================
+// MESSAGES
+// ==========================================
+
 const {
 
   reservaConfirmada,
@@ -25,6 +50,10 @@ const {
 } = require(
   "../../messages/reservas/reservaMessages"
 );
+
+// ==========================================
+// HANDLER
+// ==========================================
 
 async function handleReserva({
 
@@ -46,19 +75,20 @@ async function handleReserva({
 
     state.step = 0;
 
-    return send(`🏨 RESERVAS
-      precios promocionales
+    return send( withMenuFooter(`🏨 RESERVAS
 
-💰 1-2 personas → $700
+💰 1-2 adultos → $700
 
-👥 3-4 personas → $800 
+👥 3-4 adultos → $800
+
+🧒 Niños GRATIS
 
 🌞 Antes de 1 PM:
 +$200 tarifa mañanera
 
 Todos nuestros servicios son facturables
 
-${flow[0].question}`);
+${flow[0].question}`));
 
   }
 
@@ -133,16 +163,16 @@ ${currentStep.question}`);
 
     } = calcularPrecio({
 
-  adultos:
-    state.data.adultos,
+      adultos:
+        state.data.adultos,
 
-  ninos:
-    state.data.ninos,
+      ninos:
+        state.data.ninos,
 
-  horaTexto:
-    state.data.hora
+      horaTexto:
+        state.data.hora
 
-});
+    });
 
     // ==================================
     // FOLIO
@@ -202,6 +232,8 @@ ${currentStep.question}`);
     // RESET
     // ==================================
 
+    state.module = null;
+
     state.step = null;
 
     state.data = {};
@@ -212,7 +244,8 @@ ${currentStep.question}`);
 
     return send(`🤝 ¿Necesitas algo más?
 
-👉 escribe menu`);
+👉 escribe:
+menu`);
 
   }
 

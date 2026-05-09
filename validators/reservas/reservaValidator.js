@@ -2,7 +2,7 @@
 
 const {
   esNumeroValido
-} = require("../utils/helpers");
+} = require("../../utils/helpers");
 
 const validators = {
 
