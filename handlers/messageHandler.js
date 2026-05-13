@@ -49,6 +49,8 @@ async function handleMessage({
 
       data: {},
 
+      history: [],
+
       lastMenu: null
 
     };
@@ -111,6 +113,8 @@ async function handleMessage({
 
     state.data = {};
 
+    state.history = [];
+
   }
 
   // ==========================================
@@ -136,6 +140,8 @@ async function handleMessage({
     state.step = null;
 
     state.data = {};
+
+    state.history = [];
 
     state.lastMenu =
       Date.now();
@@ -182,7 +188,7 @@ async function handleMessage({
     ];
 
     // ======================================
-    // SI NO ELIGIÓ OPCIÓN
+    // MOSTRAR MENÚ SI NO ES OPCIÓN
     // ======================================
 
     if (
@@ -192,6 +198,66 @@ async function handleMessage({
       return send(MAIN_MENU);
 
     }
+
+    // ======================================
+    // SI ES OPCIÓN
+    // CONTINUAR AL ROUTER
+    // ======================================
+
+  }
+
+  // ==========================================
+  // VOLVER
+  // ==========================================
+
+  if (
+    input === "volver"
+  ) {
+
+    // ======================================
+    // SIN HISTORIAL
+    // ======================================
+
+    if (
+      !state.history.length
+    ) {
+
+      return send(`⚠️ No puedes volver más atrás`);
+
+    }
+
+    // ======================================
+    // ÚLTIMO ESTADO
+    // ======================================
+
+    const previousState =
+      state.history.pop();
+
+    // ======================================
+    // RESTAURAR
+    // ======================================
+
+    state.step =
+      previousState.step;
+
+    state.data =
+      previousState.data;
+
+    // ======================================
+    // REEJECUTAR
+    // ======================================
+
+    return routerHandler({
+
+      input: "",
+
+      state,
+      send,
+      sock,
+      from,
+      text: ""
+
+    });
 
   }
 

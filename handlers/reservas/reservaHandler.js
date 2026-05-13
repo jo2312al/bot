@@ -3,6 +3,7 @@ const {
 } = require(
   "../../utils/menuFooter"
 );
+
 // ==========================================
 // FLOW
 // ==========================================
@@ -75,7 +76,11 @@ async function handleReserva({
 
     state.step = 0;
 
-    return send( withMenuFooter(`🏨 RESERVAS
+    state.history = [];
+
+    return send(
+
+      withMenuFooter(`🏨 RESERVAS
 
 💰 1-2 adultos → $700
 
@@ -88,7 +93,9 @@ async function handleReserva({
 
 Todos nuestros servicios son facturables
 
-${flow[0].question}`));
+${flow[0].question}`)
+
+    );
 
   }
 
@@ -116,9 +123,13 @@ ${flow[0].question}`));
     !validator(input)
   ) {
 
-    return send(`⚠️ Dato inválido
+    return send(
 
-${currentStep.question}`);
+      withMenuFooter(`⚠️ Dato inválido
+
+${currentStep.question}`)
+
+    );
 
   }
 
@@ -136,6 +147,32 @@ ${currentStep.question}`);
           .transform(input)
 
       : text;
+
+  // ======================================
+  // LIMITAR HISTORIAL
+  // ======================================
+
+  if (
+    state.history.length > 20
+  ) {
+
+    state.history.shift();
+
+  }
+
+  // ======================================
+  // GUARDAR HISTORIAL
+  // ======================================
+
+  state.history.push({
+
+    step: state.step,
+
+    data: {
+      ...state.data
+    }
+
+  });
 
   // ======================================
   // SIGUIENTE STEP
@@ -238,14 +275,20 @@ ${currentStep.question}`);
 
     state.data = {};
 
+    state.history = [];
+
     // ==================================
     // FINAL
     // ==================================
 
-    return send(`🤝 ¿Necesitas algo más?
+    return send(
+
+      withMenuFooter(`🤝 ¿Necesitas algo más?
 
 👉 escribe:
-menu`);
+menu`)
+
+    );
 
   }
 
@@ -255,9 +298,13 @@ menu`);
 
   return send(
 
-    flow[
-      state.step
-    ].question
+    withMenuFooter(
+
+      flow[
+        state.step
+      ].question
+
+    )
 
   );
 
