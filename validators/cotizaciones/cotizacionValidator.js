@@ -1,13 +1,6 @@
 const validators = {
-  nombre(value) {
-    const limpio = value.trim();
-    const palabras = limpio.split(/\s+/);
-    if (palabras.length < 2) return false;
-    return /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(limpio);
-  },
-  habitacion(value) {
-    const limpio = value.trim();
-    return limpio.length >= 1 && limpio.length <= 4 && /^[a-zA-Z0-9]+$/.test(limpio);
+  texto(value) {
+    return value.trim().length >= 3;
   },
   fecha(value) {
     const regex = /^(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[0-2])$/;
@@ -19,10 +12,15 @@ const validators = {
     const fecha = new Date(year, mes - 1, dia);
 
     if (fecha.getDate() !== dia || fecha.getMonth() !== mes - 1) return false;
+
+    const hoyLimpio = new Date(year, hoy.getMonth(), hoy.getDate());
+    if (fecha < hoyLimpio) return false;
+
     return true;
   },
-  descripcion(value) {
-    return value.trim().length >= 3;
+  numero(value) {
+    const num = parseInt(value);
+    return !isNaN(num) && num > 0;
   },
   telefono(value) {
     return /^\d{10}$/.test(value.trim());

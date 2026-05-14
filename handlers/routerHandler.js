@@ -1,3 +1,4 @@
+const log = require("../services/loggerService");
 // ==========================================
 // RESERVAS
 // ==========================================
@@ -239,6 +240,7 @@ menu`);
   // EJECUTAR HANDLER
   // ========================================
 
+  log({usuario: from, modulo: state.module, accion: text});
   return currentRoute
     .handler({
 

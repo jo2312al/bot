@@ -1,24 +1,31 @@
 const fs = require("fs");
+const path = require("path");
 
-const LOG_FILE =
-  "logs/bot.log";
+const LOG_FILE = "logs/bot.log";
 
-function log(message) {
+function log(data) {
+  const time = new Date().toLocaleString();
+  let line = "";
 
-  const time =
-    new Date()
-      .toLocaleString();
+  if (typeof data === "string") {
+    line = `[${time}] ${data}\n`;
+    console.log(data);
+  } else if (typeof data === "object" && data !== null) {
+    const { usuario, modulo, accion } = data;
+    line = `[${time}] User: ${usuario || 'Unknown'} | Modulo: ${modulo || 'Unknown'} | Action: ${accion || 'Unknown'}\n`;
+    console.log(`[LOG] User: ${usuario} | Mod: ${modulo} | Act: ${accion}`);
+  } else {
+    line = `[${time}] ${JSON.stringify(data)}\n`;
+    console.log(data);
+  }
 
-  const line =
-    `[${time}] ${message}\n`;
+  // Ensure logs directory exists
+  const dir = path.dirname(LOG_FILE);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
 
-  console.log(message);
-
-  fs.appendFileSync(
-    LOG_FILE,
-    line
-  );
-
+  fs.appendFileSync(LOG_FILE, line);
 }
 
 module.exports = log;
