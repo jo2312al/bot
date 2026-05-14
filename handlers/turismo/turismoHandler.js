@@ -3,11 +3,16 @@ const {
 } = require(
   "../../utils/menuFooter"
 );
+
 const {
-  TURISMO
+  getYoutubeVideos
 } = require(
-  "../../constants/tourism"
+  "../../services/youtubeService"
 );
+
+// ==========================================
+// HANDLER
+// ==========================================
 
 async function handleTurismo({
 
@@ -15,11 +20,83 @@ async function handleTurismo({
 
 }) {
 
-  return send(
-  withMenuFooter(
-    TURISMO
-  )
-);
+  try {
+
+    const videos =
+      await getYoutubeVideos();
+
+    // ================================
+    // SIN VIDEOS
+    // ================================
+
+    if (
+      !videos.length
+    ) {
+
+      return send(
+
+        withMenuFooter(`⚠️ No hay videos disponibles`)
+
+      );
+
+    }
+
+    // ================================
+    // TEXTO
+    // ================================
+
+    let message =
+      `🌴 Qué hacer en Tabasco
+
+🎥 Videos turísticos:
+
+`;
+
+    // ================================
+    // AGREGAR VIDEOS
+    // ================================
+
+    videos
+      .slice(0, 10)
+      .forEach((video, index) => {
+
+        message +=
+
+`${index + 1}️⃣ ${video.title}
+
+${video.link}
+
+`;
+
+      });
+
+    // ================================
+    // ENVIAR
+    // ================================
+
+    return send(
+
+      withMenuFooter(message)
+
+    );
+
+  }
+
+  // ==================================
+  // ERROR
+  // ==================================
+
+  catch (error) {
+
+    console.log(error);
+
+    return send(
+
+      withMenuFooter(`⚠️ Error obteniendo videos`)
+
+    );
+
+  }
 
 }
 
