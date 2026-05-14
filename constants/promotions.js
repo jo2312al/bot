@@ -2,19 +2,14 @@
 // PROMOCIONES
 // ==========================================
 
-const PROMOCIONES = `🎉 PROMOCIONES
+const PROMOCIONES = `📸 FOTO GRATIS DEL MES
 
-✅ INAPAM
+✨ Reserva tu estancia y ven por tu foto especial
+en Hotel Villa Margaritas
 
-✅ PEMEX
+🌐 Reserva aquí:
 
-✅ ADO
-
-✅ Centenario
-
-📞 Más información:
-
-9932054701`;
+https://villamargaritasreservas.com.mx/`;
 
 module.exports = {
 
