@@ -6,6 +6,19 @@ const {
   "../../utils/menuFooter"
 );
 
+const {
+  quejaConfirmada,
+  quejaGrupo
+} = require(
+  "../../messages/quejas/quejasMessages"
+);
+
+const {
+  RECEPCION_GROUP_ID,
+  RESTAURANT_GROUP_ID,
+  FACTURACION_GROUP_ID
+} = require("../../config/config");
+
 // ==========================================
 // HANDLER
 // ==========================================
@@ -15,7 +28,9 @@ async function handleQuejas({
   input,
   text,
   state,
-  send
+  send,
+  sock,
+  from
 
 }) {
 
@@ -30,6 +45,7 @@ async function handleQuejas({
     state.step = 0;
 
     state.data = {};
+    state.history = [];
 
     return send(
 
@@ -44,6 +60,17 @@ Selecciona tipo de reporte:
     );
 
   }
+
+  // Helper para guardar historial
+  const saveHistory = () => {
+    if (state.history.length > 20) {
+      state.history.shift();
+    }
+    state.history.push({
+      step: state.step,
+      data: { ...state.data }
+    });
+  };
 
   // ======================================
   // STEP 0
@@ -61,6 +88,7 @@ Selecciona tipo de reporte:
     if (
       input === "1"
     ) {
+      saveHistory();
 
       state.data.tipo =
         "facturacion";
@@ -88,6 +116,7 @@ Selecciona área:
     if (
       input === "2"
     ) {
+      saveHistory();
 
       state.data.tipo =
         "servicio";
@@ -138,7 +167,7 @@ Selecciona:
     if (
       input === "1"
     ) {
-
+      saveHistory();
       state.data.area =
         "recepcion";
 
@@ -151,7 +180,7 @@ Selecciona:
     else if (
       input === "2"
     ) {
-
+      saveHistory();
       state.data.area =
         "restaurant";
 
@@ -199,6 +228,7 @@ Selecciona:
   if (
     state.step === 2
   ) {
+    saveHistory();
 
     state.data.nombre =
       text;
@@ -276,6 +306,7 @@ Selecciona:
   if (
     state.step === 3
   ) {
+    saveHistory();
 
     // ==================================
     // FACTURACIÓN
@@ -372,6 +403,7 @@ Selecciona:
   if (
     state.step === 4
   ) {
+    saveHistory();
 
     // ==================================
     // FACTURACIÓN
@@ -456,6 +488,31 @@ Selecciona:
     state.data.observaciones =
       text;
 
+    // Enviar a grupo correcto
+    let targetGroup = RECEPCION_GROUP_ID; // default
+
+    if (state.data.tipo === "facturacion") {
+      targetGroup = FACTURACION_GROUP_ID;
+    } else if (state.data.tipo === "servicio" && state.data.area === "restaurant") {
+      targetGroup = RESTAURANT_GROUP_ID;
+    } else if (state.data.tipo === "servicio" && state.data.area === "recepcion") {
+      targetGroup = RECEPCION_GROUP_ID;
+    }
+
+    await sock.sendMessage(
+      targetGroup,
+      {
+        text: quejaGrupo({
+          data: state.data,
+          from
+        })
+      }
+    );
+
+    await send(
+      withMenuFooter(quejaConfirmada({ data: state.data }))
+    );
+
     // ==================================
     // RESET
     // ==================================
@@ -472,14 +529,7 @@ Selecciona:
     // FINAL
     // ==================================
 
-    return send(
-
-      withMenuFooter(`✅ Tu reporte fue enviado
-
-Gracias por ayudarnos a mejorar`)
-
-    );
-
+    return;
   }
 
 }

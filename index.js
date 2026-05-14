@@ -138,9 +138,7 @@ async function startBot() {
         "open"
       ) {
 
-        log(
-          "✅ BOT CONECTADO"
-        );
+        log({usuario: "Sistema", modulo: "Core", accion: "✅ BOT CONECTADO"});
 
       }
 
@@ -153,9 +151,7 @@ async function startBot() {
         "close"
       ) {
 
-        log(
-          "❌ DESCONECTADO"
-        );
+        log({usuario: "Sistema", modulo: "Core", accion: "❌ DESCONECTADO"});
 
         const reconnect =
 
@@ -171,9 +167,7 @@ async function startBot() {
 
         if (reconnect) {
 
-          log(
-            "🔄 RECONECTANDO..."
-          );
+          log({usuario: "Sistema", modulo: "Core", accion: "🔄 RECONECTANDO..."});
 
           startBot();
 
@@ -257,9 +251,7 @@ async function startBot() {
           from.endsWith("@g.us")
         ) {
 
-          log(
-            `[GRUPO] ${from}: ${text}`
-          );
+          log({usuario: from, modulo: "Chat Grupal", accion: text});
 
           return;
 
@@ -269,9 +261,7 @@ async function startBot() {
         // LOG PRIVADOS
         // ======================================
 
-        log(
-          `[PRIVADO] ${from}: ${text}`
-        );
+        log({usuario: from, modulo: "Chat Privado", accion: text});
 
         // ======================================
         // MANEJAR MENSAJE
@@ -287,9 +277,7 @@ async function startBot() {
 
       } catch (err) {
 
-        log(
-          `ERROR: ${err}`
-        );
+        log({usuario: "Sistema", modulo: "Error", accion: err.toString()});
 
       }
 
