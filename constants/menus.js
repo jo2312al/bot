@@ -16,7 +16,7 @@ const MAIN_MENU = `🏨 Hotel Villa Margaritas en VIllahermosa, Tabasco zona cen
 
 5️⃣ Galería
 
-6️⃣ Qué hacer en Tabasco
+6️⃣ ¿Qué hacer en Tabasco?
 
 7️⃣ Servicios
 
@@ -24,7 +24,7 @@ const MAIN_MENU = `🏨 Hotel Villa Margaritas en VIllahermosa, Tabasco zona cen
 
 9️⃣ Redes sociales
 
-🔟 Película personaje
+🔟 Margarita la pelicula
 
 1️⃣1️⃣ Call center
 

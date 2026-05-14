@@ -21,4 +21,7 @@ module.exports = {
   OBJETOS_GROUP_ID:
     "120363424880089679@g.us",
 
+  VENTAS_GROUP_ID:
+    "120363424880089679@g.us",  
+
 };

@@ -214,7 +214,7 @@ Selecciona:
 
     return send(
 
-      withMenuFooter(`👤 Escribe nombre completo`)
+      withMenuFooter(`👤 Escribe tu nombre completo`)
 
     );
 
