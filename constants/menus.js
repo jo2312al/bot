@@ -2,7 +2,7 @@
 // MENÚ PRINCIPAL
 // ==========================================
 
-const MAIN_MENU = `🏨 Hotel Villa Margaritas
+const MAIN_MENU = `🏨 Hotel Villa Margaritas en VIllahermosa, Tabasco zona centro 
 
 ¿En qué podemos ayudarte?
 
