@@ -80,7 +80,7 @@ async function handleReserva({
 
     return send(
 
-      withMenuFooter(`🏨 RESERVAS
+      withMenuFooter(`🏨 TARIFAS PROMOCIONALES DE RESERVACION
 
 💰 1-2 adultos → $700
 
