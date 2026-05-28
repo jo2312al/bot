@@ -1,76 +1,59 @@
 // messages/reservaMessages.js
 
 function reservaConfirmada({
-
   data,
   precio,
   mensajeTarifa,
   folio
-
 }) {
+  return `RESERVA RECIBIDA
 
-  return `✅ RESERVA CONFIRMADA
+${data.nombre}
 
-👤 ${data.nombre}
+Adultos: ${data.adultos}
+Ninos: ${data.ninos}
+Habitacion: ${data.habitacion}
+Fecha: ${data.fecha}
+Noches: ${data.noches}
+Hora llegada: ${data.hora}
+Telefono: ${data.telefono}
 
-👨 Adultos: ${data.adultos}
-
-🧒 Niños: ${data.ninos}
-
-🛏️ ${data.habitacion}
-
-📅 ${data.fecha}
-
-🌙 Noches: ${data.noches}
-
-⏰ ${data.hora}
-
-📞 ${data.telefono}
-
-💰 Total: $${precio}
+Total: $${precio}
 ${mensajeTarifa}
 
-🔢 Folio: #${folio}`;
+Folio: #${folio}
 
+Para garantizar tu reservacion se requiere un anticipo por transferencia.
+Te enviaremos los datos de transferencia en imagen.
+
+Importante: si no recibimos el anticipo o comprobante dentro de 24 horas, la reservacion se cancela automaticamente.`;
 }
 
 function reservaGrupo({
-
   data,
   precio,
   mensajeTarifa,
   folio
-
 }) {
+  return `NUEVA RESERVA PENDIENTE DE ANTICIPO
 
-  return `🏨 NUEVA RESERVA
+${data.nombre}
 
-👤 ${data.nombre}
+Adultos: ${data.adultos}
+Ninos: ${data.ninos}
+Habitacion: ${data.habitacion}
+Fecha: ${data.fecha}
+Noches: ${data.noches}
+Hora llegada: ${data.hora}
+Telefono: ${data.telefono}
 
-👨 Adultos: ${data.adultos}
-
-🧒 Niños: ${data.ninos}
-
-🛏️ ${data.habitacion}
-
-📅 ${data.fecha}
-
-🌙 Noches: ${data.noches}
-
-⏰ ${data.hora}
-
-📞 ${data.telefono}
-
-💰 $${precio}
+$${precio}
 ${mensajeTarifa}
 
-🔢 #${folio}`;
-
+#${folio}`;
 }
 
 module.exports = {
-
   reservaConfirmada,
   reservaGrupo
-
 };

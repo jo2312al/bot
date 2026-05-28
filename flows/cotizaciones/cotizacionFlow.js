@@ -1,38 +1,42 @@
 module.exports = [
   {
     key: "tipo_evento",
-    question: `💼 COTIZACIONES
+    question: `COTIZACIONES
 
-¿Qué tipo de evento te interesa?
+Que tipo de evento te interesa?
 
-✅ Ejemplo:
-Boda, XV años, Conferencia`,
+Realizamos desayunos, comidas, cenas, reuniones, cursos, juntas y baby shower.
+
+Ejemplo:
+Desayuno, curso o reunion`,
     validator: "texto"
   },
   {
     key: "fecha",
-    question: `📅 Fecha estimada
+    question: `Fecha estimada
 
 Formato:
 dd/mm
 
-✅ Ejemplo:
+Ejemplo:
 25/12`,
     validator: "fecha"
   },
   {
     key: "personas",
-    question: `👥 Cantidad de personas
+    question: `Cantidad de personas
 
-✅ Ejemplo:
-150`,
+Nuestros salones son para maximo 15 o 50 personas.
+
+Ejemplo:
+15`,
     validator: "numero"
   },
   {
     key: "telefono",
-    question: `📱 Teléfono de contacto
+    question: `Telefono de contacto
 
-✅ Ejemplo:
+Ejemplo:
 9931234567`,
     validator: "telefono"
   }

@@ -20,7 +20,7 @@ const validators = {
   },
   numero(value) {
     const num = parseInt(value);
-    return !isNaN(num) && num > 0;
+    return !isNaN(num) && num > 0 && num <= 50;
   },
   telefono(value) {
     return /^\d{10}$/.test(value.trim());

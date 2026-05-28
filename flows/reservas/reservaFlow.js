@@ -4,6 +4,10 @@ const {
   formatReservationDate
 } = require("../../utils/dateUtils");
 
+const {
+  normalizarHoraLlegada
+} = require("../../services/reservationService");
+
 module.exports = [
 
   {
@@ -137,9 +141,13 @@ Después te preguntaré cuántas noches deseas reservar.`,
 ✅ Ejemplo:
 
 10 am
-8 pm`,
+8 pm
+9pm`,
 
-    validator: "hora"
+    validator: "hora",
+
+    transform: value =>
+      normalizarHoraLlegada(value)
 
   }
 

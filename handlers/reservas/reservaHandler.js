@@ -14,11 +14,23 @@ const {
   GROUP_ID
 } = require("../../config/config");
 
+const fs =
+  require("fs");
+
+const path =
+  require("path");
+
 const {
   calcularPrecio,
   generarFolio
 } = require(
   "../../services/reservationService"
+);
+
+const {
+  registerPendingReservation
+} = require(
+  "../../services/paymentReservationService"
 );
 
 const {
@@ -28,13 +40,40 @@ const {
   "../../messages/reservas/reservaMessages"
 );
 
+function getTransferImagePath() {
+  const mediaDir =
+    path.join(
+      __dirname,
+      "../../media/pagos"
+    );
+
+  const extensions = [
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp"
+  ];
+
+  return extensions
+    .map(extension =>
+      path.join(
+        mediaDir,
+        `transferencia${extension}`
+      )
+    )
+    .find(filePath =>
+      fs.existsSync(filePath)
+    );
+}
+
 async function handleReserva({
 
   input,
   text,
   state,
   send,
-  sock
+  sock,
+  from
 
 }) {
 
@@ -164,6 +203,16 @@ ${currentStep.question}`)
       }
     );
 
+    registerPendingReservation({
+
+      from,
+
+      sock,
+
+      folio
+
+    });
+
     const mensajeCliente =
       `${reservaConfirmada({
 
@@ -188,9 +237,34 @@ menu`;
     state.data = {};
     state.history = [];
 
-    return send(
+    await send(
 
       withMenuFooter(mensajeCliente)
+
+    );
+
+    const transferImage =
+      getTransferImagePath();
+
+    if (
+      transferImage
+    ) {
+
+      return sock.sendMessage(
+        from,
+        {
+          image: {
+            url: transferImage
+          },
+          caption: "Datos de transferencia para tu anticipo"
+        }
+      );
+
+    }
+
+    return send(
+
+      "Por el momento no encuentro la imagen de datos de transferencia. Favor de solicitarla al 9932054701."
 
     );
 

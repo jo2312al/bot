@@ -1,23 +1,25 @@
 function cotizacionConfirmada({ data }) {
-  return `✅ SOLICITUD DE COTIZACIÓN ENVIADA
+  return `SOLICITUD DE COTIZACION ENVIADA
 
 Hemos recibido tu solicitud.
 
-🎉 Evento: ${data.tipo_evento}
-📅 Fecha: ${data.fecha}
-👥 Personas: ${data.personas}
-📱 Teléfono: ${data.telefono}
+Nuestros salones tienen capacidad maxima para 15 o 50 personas. Realizamos desayunos, comidas, cenas, reuniones, cursos, juntas y baby shower.
 
-Un agente de ventas se comunicará contigo pronto.`;
+Evento: ${data.tipo_evento}
+Fecha: ${data.fecha}
+Personas: ${data.personas}
+Telefono: ${data.telefono}
+
+Un agente de ventas se comunicara contigo pronto.`;
 }
 
 function cotizacionGrupo({ data, from }) {
-  return `💼 NUEVA COTIZACIÓN
+  return `NUEVA COTIZACION
 
-🎉 Evento: ${data.tipo_evento}
-📅 Fecha: ${data.fecha}
-👥 Personas: ${data.personas}
-📱 Contacto: ${data.telefono}
+Evento: ${data.tipo_evento}
+Fecha: ${data.fecha}
+Personas: ${data.personas}
+Contacto: ${data.telefono}
 WhatsApp: ${from}`;
 }
 

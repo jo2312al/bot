@@ -110,6 +110,16 @@ const {
 );
 
 // ==========================================
+// ROMANTICAS
+// ==========================================
+
+const {
+  handleRomanticas
+} = require(
+  "./romanticas/romanticasHandler"
+);
+
+// ==========================================
 // ROUTER
 // ==========================================
 
@@ -183,6 +193,11 @@ const routes = {
   "11": {
     module: "callcenter",
     handler: handleCallcenter
+  },
+
+  "12": {
+    module: "romanticas",
+    handler: handleRomanticas
   }
 
 };

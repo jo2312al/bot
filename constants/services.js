@@ -2,37 +2,39 @@
 // SERVICIOS
 // ==========================================
 
-const HOTEL_SERVICES = `🏨 SERVICIOS
+const HOTEL_SERVICES = `SERVICIOS
 
-✅ Recepción 24 horas
+Recepcion 24 horas
 
-✅ Estacionamiento
+Estacionamiento
 
-✅ Vigilancia 24/7
+Vigilancia 24/7
 
-✅ Restaurante
+Restaurante
 
-✅ Terraza
+Cenas romanticas
 
-✅ Salones de eventos
+Terraza
 
-✅ 69 habitaciones
+Salones de eventos
 
-✅ Habitaciones:
-• Doble
-• King
-• Suite
+Habitaciones decoradas con petalos y globos
+
+69 habitaciones
+
+Habitaciones:
+- Doble
+- King
+- Suite
 
 Todas las habitaciones incluyen:
 
-📺 TV con cable
+TV con cable
 
-📶 WiFi
+WiFi
 
-❄️ Aire acondicionado`;
+Aire acondicionado`;
 
 module.exports = {
-
   HOTEL_SERVICES
-
 };

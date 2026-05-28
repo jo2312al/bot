@@ -2,6 +2,51 @@ const {
   generarFolio
 } = require("../utils/helpers");
 
+function parseHoraLlegada(horaTexto) {
+  const match =
+    horaTexto
+      .trim()
+      .toLowerCase()
+      .match(/^(\d{1,2})\s*(am|pm)$/);
+
+  if (!match) return null;
+
+  let hora =
+    parseInt(match[1], 10);
+
+  const periodo =
+    match[2];
+
+  if (
+    periodo === "pm"
+    &&
+    hora !== 12
+  ) {
+
+    hora += 12;
+
+  }
+
+  if (
+    periodo === "am"
+    &&
+    hora === 12
+  ) {
+
+    hora = 0;
+
+  }
+
+  return hora;
+}
+
+function normalizarHoraLlegada(horaTexto) {
+  return horaTexto
+    .trim()
+    .toLowerCase()
+    .replace(/^(\d{1,2})\s*(am|pm)$/, "$1 $2");
+}
+
 // ==========================================
 // CALCULAR PRECIO
 // ==========================================
@@ -26,38 +71,14 @@ function calcularPrecio({
   let mensajeTarifa =
     "";
 
-  const partes =
-    horaTexto
-      .toLowerCase()
-      .split(" ");
-
-  let hora =
-    parseInt(partes[0]);
-
-  const periodo =
-    partes[1];
+  const hora =
+    parseHoraLlegada(horaTexto);
 
   if (
-    periodo === "pm"
+    hora !== null
     &&
-    hora !== 12
+    hora < 13
   ) {
-
-    hora += 12;
-
-  }
-
-  if (
-    periodo === "am"
-    &&
-    hora === 12
-  ) {
-
-    hora = 0;
-
-  }
-
-  if (hora < 13) {
 
     precio += 200;
 
@@ -78,6 +99,8 @@ function calcularPrecio({
 module.exports = {
 
   calcularPrecio,
-  generarFolio
+  generarFolio,
+  normalizarHoraLlegada,
+  parseHoraLlegada
 
 };

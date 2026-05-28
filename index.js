@@ -20,6 +20,19 @@ const {
   "./handlers/messageHandler"
 );
 
+const {
+  clearPendingReservation,
+  hasPendingReservation
+} = require(
+  "./services/paymentReservationService"
+);
+
+const {
+  GROUP_ID
+} = require(
+  "./config/config"
+);
+
 // ==========================================
 // DELAY
 // ==========================================
@@ -238,10 +251,29 @@ async function startBot() {
             .extendedTextMessage
             ?.text ||
 
+          msg.message
+            .imageMessage
+            ?.caption ||
+
+          msg.message
+            .documentMessage
+            ?.caption ||
+
           "";
 
-        if (!text)
-          return;
+        const hasPaymentProof =
+
+          Boolean(
+            msg.message
+              .imageMessage
+          )
+
+          ||
+
+          Boolean(
+            msg.message
+              .documentMessage
+          );
 
         // ======================================
         // LOG GRUPOS
@@ -262,6 +294,43 @@ async function startBot() {
         // ======================================
 
         log({usuario: from, modulo: "Chat Privado", accion: text});
+
+        if (
+          hasPaymentProof
+          &&
+          hasPendingReservation(from)
+        ) {
+
+          const pending =
+            clearPendingReservation(from);
+
+          await sock.sendMessage(
+            GROUP_ID,
+            {
+              text: `COMPROBANTE RECIBIDO
+
+Folio: #${pending.folio}
+WhatsApp: ${from}
+
+El cliente envio una imagen o documento como comprobante de anticipo. Favor de validar la transferencia.`
+            }
+          );
+
+          await sock.sendMessage(
+            from,
+            {
+              text: `Comprobante recibido
+
+Gracias. Enviaremos tu comprobante al equipo para validacion.`
+            }
+          );
+
+          return;
+
+        }
+
+        if (!text)
+          return;
 
         // ======================================
         // MANEJAR MENSAJE

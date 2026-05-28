@@ -183,7 +183,8 @@ async function handleMessage({
       "8",
       "9",
       "10",
-      "11"
+      "11",
+      "12"
 
     ];
 
