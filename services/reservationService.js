@@ -10,14 +10,18 @@ function calcularPrecio({
 
   adultos,
   ninos,
-  horaTexto
+  horaTexto,
+  noches = 1
 
 }) {
 
-  let precio =
+  const tarifaNoche =
     adultos <= 2
       ? 700
       : 800;
+
+  let precio =
+    tarifaNoche * noches;
 
   let mensajeTarifa =
     "";

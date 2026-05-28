@@ -21,6 +21,8 @@ function reservaConfirmada({
 
 📅 ${data.fecha}
 
+🌙 Noches: ${data.noches}
+
 ⏰ ${data.hora}
 
 📞 ${data.telefono}
@@ -52,6 +54,8 @@ function reservaGrupo({
 🛏️ ${data.habitacion}
 
 📅 ${data.fecha}
+
+🌙 Noches: ${data.noches}
 
 ⏰ ${data.hora}
 

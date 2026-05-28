@@ -133,7 +133,10 @@ ${currentStep.question}`)
         state.data.ninos,
 
       horaTexto:
-        state.data.hora
+        state.data.hora,
+
+      noches:
+        state.data.noches
 
     });
 

@@ -1,5 +1,9 @@
 // flows/reservaFlow.js
 
+const {
+  formatReservationDate
+} = require("../../utils/dateUtils");
+
 module.exports = [
 
   {
@@ -93,13 +97,34 @@ Si no hay escribe:
 
     question: `📅 Fecha ingreso
 
-Formato:
-dd/mm
+Puedes escribirla como:
+25/12
+25/12/26
+25 de diciembre
+25 diciembre 2026
+
+Después te preguntaré cuántas noches deseas reservar.`,
+
+    validator: "fecha",
+
+    transform: value =>
+      formatReservationDate(value)
+
+  },
+
+  {
+
+    key: "noches",
+
+    question: `🌙 ¿Cuántas noches deseas reservar?
 
 ✅ Ejemplo:
-25/12`,
+1`,
 
-    validator: "fecha"
+    validator: "noches",
+
+    transform: value =>
+      parseInt(value)
 
   },
 
