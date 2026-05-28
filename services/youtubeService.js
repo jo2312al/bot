@@ -1,14 +1,38 @@
-const Parser =
-  require("rss-parser");
+function createParser() {
 
-const parser =
-  new Parser();
+  try {
+
+    const Parser =
+      require("rss-parser");
+
+    return new Parser();
+
+  } catch (error) {
+
+    if (
+      error.code === "MODULE_NOT_FOUND"
+    ) {
+
+      throw new Error(
+        "Falta instalar rss-parser. Ejecuta npm install antes de usar turismo."
+      );
+
+    }
+
+    throw error;
+
+  }
+
+}
 
 // ==========================================
 // OBTENER VIDEOS YOUTUBE
 // ==========================================
 
 async function getYoutubeVideos() {
+
+  const parser =
+    createParser();
 
   const feedUrl =
 

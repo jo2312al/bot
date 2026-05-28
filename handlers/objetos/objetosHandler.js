@@ -30,17 +30,23 @@ async function handleObjetos({ input, text, state, send, sock, from }) {
   state.step++;
 
   if (state.step >= flow.length) {
-    await send(objetoConfirmado({ data: state.data }));
     await sock.sendMessage(OBJETOS_GROUP_ID, {
       text: objetoGrupo({ data: state.data, from })
     });
+
+    const mensajeCliente = `${objetoConfirmado({ data: state.data })}
+
+🤝 ¿Necesitas algo más?
+
+👉 escribe:
+menu`;
 
     state.module = null;
     state.step = null;
     state.data = {};
     state.history = [];
 
-    return send(withMenuFooter(`🤝 ¿Necesitas algo más?\n\n👉 escribe:\nmenu`));
+    return send(withMenuFooter(mensajeCliente));
   }
 
   return send(withMenuFooter(flow[state.step].question));

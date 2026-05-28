@@ -4,57 +4,29 @@ const {
   "../../utils/menuFooter"
 );
 
-// ==========================================
-// FLOW
-// ==========================================
-
 const flow =
   require("../../flows/reservas/reservaFlow");
 
-// ==========================================
-// VALIDATORS
-// ==========================================
-
 const validators =
   require("../../validators/reservas/reservaValidator");
-
-// ==========================================
-// CONFIG
-// ==========================================
 
 const {
   GROUP_ID
 } = require("../../config/config");
 
-// ==========================================
-// SERVICES
-// ==========================================
-
 const {
-
   calcularPrecio,
   generarFolio
-
 } = require(
   "../../services/reservationService"
 );
 
-// ==========================================
-// MESSAGES
-// ==========================================
-
 const {
-
   reservaConfirmada,
   reservaGrupo
-
 } = require(
   "../../messages/reservas/reservaMessages"
 );
-
-// ==========================================
-// HANDLER
-// ==========================================
 
 async function handleReserva({
 
@@ -66,10 +38,6 @@ async function handleReserva({
 
 }) {
 
-  // ======================================
-  // INICIO
-  // ======================================
-
   if (
     state.step === null
   ) {
@@ -80,7 +48,7 @@ async function handleReserva({
 
     return send(
 
-      withMenuFooter(`🏨 TARIFAS PROMOCIONALES DE RESERVACION
+      withMenuFooter(`🏨 TARIFAS PROMOCIONALES DE RESERVACIÓN
 
 💰 1-2 adultos → $700
 
@@ -99,25 +67,13 @@ ${flow[0].question}`)
 
   }
 
-  // ======================================
-  // STEP ACTUAL
-  // ======================================
-
   const currentStep =
     flow[state.step];
-
-  // ======================================
-  // VALIDATOR
-  // ======================================
 
   const validator =
     validators[
       currentStep.validator
     ];
-
-  // ======================================
-  // VALIDAR
-  // ======================================
 
   if (
     !validator(input)
@@ -133,24 +89,13 @@ ${currentStep.question}`)
 
   }
 
-  // ======================================
-  // GUARDAR
-  // ======================================
-
   state.data[
     currentStep.key
   ] =
-
     currentStep.transform
-
       ? currentStep
           .transform(input)
-
       : text;
-
-  // ======================================
-  // LIMITAR HISTORIAL
-  // ======================================
 
   if (
     state.history.length > 20
@@ -159,10 +104,6 @@ ${currentStep.question}`)
     state.history.shift();
 
   }
-
-  // ======================================
-  // GUARDAR HISTORIAL
-  // ======================================
 
   state.history.push({
 
@@ -174,30 +115,15 @@ ${currentStep.question}`)
 
   });
 
-  // ======================================
-  // SIGUIENTE STEP
-  // ======================================
-
   state.step++;
 
-  // ======================================
-  // TERMINÓ
-  // ======================================
-
   if (
-    state.step >=
-    flow.length
+    state.step >= flow.length
   ) {
 
-    // ==================================
-    // PRECIO
-    // ==================================
-
     const {
-
       precio,
       mensajeTarifa
-
     } = calcularPrecio({
 
       adultos:
@@ -211,44 +137,14 @@ ${currentStep.question}`)
 
     });
 
-    // ==================================
-    // FOLIO
-    // ==================================
-
     const folio =
       generarFolio();
-
-    // ==================================
-    // CLIENTE
-    // ==================================
-
-    await send(
-
-      reservaConfirmada({
-
-        data:
-          state.data,
-
-        precio,
-
-        mensajeTarifa,
-
-        folio
-
-      })
-
-    );
-
-    // ==================================
-    // GRUPO
-    // ==================================
 
     await sock.sendMessage(
       GROUP_ID,
       {
 
         text:
-
           reservaGrupo({
 
             data:
@@ -265,45 +161,44 @@ ${currentStep.question}`)
       }
     );
 
-    // ==================================
-    // RESET
-    // ==================================
+    const mensajeCliente =
+      `${reservaConfirmada({
+
+        data:
+          state.data,
+
+        precio,
+
+        mensajeTarifa,
+
+        folio
+
+      })}
+
+🤝 ¿Necesitas algo más?
+
+👉 escribe:
+menu`;
 
     state.module = null;
-
     state.step = null;
-
     state.data = {};
-
     state.history = [];
-
-    // ==================================
-    // FINAL
-    // ==================================
 
     return send(
 
-      withMenuFooter(`🤝 ¿Necesitas algo más?
-
-👉 escribe:
-menu`)
+      withMenuFooter(mensajeCliente)
 
     );
 
   }
 
-  // ======================================
-  // SIGUIENTE PREGUNTA
-  // ======================================
-
   return send(
 
     withMenuFooter(
-
       flow[
         state.step
       ].question
-
     )
 
   );
