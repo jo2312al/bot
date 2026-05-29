@@ -1,5 +1,11 @@
 // messages/reservaMessages.js
 
+function getPromocionLabel(data) {
+  return data.promocion && data.promocion !== "no"
+    ? data.promocion.toUpperCase()
+    : "No aplica";
+}
+
 function reservaConfirmada({
   data,
   precio,
@@ -10,31 +16,31 @@ function reservaConfirmada({
     data.servicioEspecial === "Habitacion decorada";
 
   const promocion =
-    data.promocion && data.promocion !== "no"
-      ? data.promocion.toUpperCase()
-      : "No aplica";
+    getPromocionLabel(data);
 
   return `✅ RESERVA RECIBIDA
 
-👤 ${data.nombre}
+Gracias, hemos recibido tu solicitud de reservacion con estos datos:
+
+👤 Nombre: ${data.nombre}
 
 🧑 Adultos: ${data.adultos}
 
 🧒 Niños: ${data.ninos}
 
-🛏️ ${data.habitacion}
+🛏️ Habitacion: ${data.habitacion}
 ${data.servicioEspecial ? `🎈 Servicio especial: ${data.servicioEspecial}\n` : ""}
-📅 ${data.fecha}
+📅 Fecha de ingreso: ${data.fecha}
 
 🌙 Noches: ${data.noches}
 
 🎟️ Promocion: ${promocion}
 
-⏰ ${data.hora}
+⏰ Hora estimada de llegada: ${data.hora}
 
-📞 ${data.telefono}
+📞 Telefono: ${data.telefono}
 
-💰 Total: $${precio}
+💰 Total estimado: $${precio}
 ${mensajeTarifa}
 
 🔢 Folio: #${folio}
@@ -44,7 +50,10 @@ ${requiereAnticipo
 Te enviaremos los datos de transferencia en imagen.
 
 ⚠️ Importante: si no recibimos el anticipo o comprobante dentro de 24 horas, la reservacion se cancela automaticamente.`
-  : "✅ Tu solicitud de reservacion fue enviada correctamente."}`;
+  : `✅ Tu solicitud de reservacion fue enviada correctamente.
+
+💳 El pago puede realizarse con tarjeta o efectivo.
+🧾 El total incluye IVA.`}`;
 }
 
 function reservaGrupo({
@@ -57,9 +66,7 @@ function reservaGrupo({
     data.servicioEspecial === "Habitacion decorada";
 
   const promocion =
-    data.promocion && data.promocion !== "no"
-      ? data.promocion.toUpperCase()
-      : "No aplica";
+    getPromocionLabel(data);
 
   return `${requiereAnticipo ? "🏨 NUEVA RESERVA PENDIENTE DE ANTICIPO" : "🏨 NUEVA RESERVA"}
 

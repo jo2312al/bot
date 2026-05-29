@@ -1,5 +1,9 @@
 const pendingReservations = new Map();
 
+const {
+  cancelRoomReservationByFolio
+} = require("./roomInventoryService");
+
 const PAYMENT_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
 function registerPendingReservation({
@@ -13,6 +17,8 @@ function registerPendingReservation({
     if (!pendingReservations.has(from)) return;
 
     pendingReservations.delete(from);
+
+    cancelRoomReservationByFolio(folio);
 
     await sock.sendMessage(from, {
       text: `Reservacion cancelada

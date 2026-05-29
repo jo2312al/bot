@@ -14,7 +14,9 @@ module.exports = [
 
     key: "nombre",
 
-    question: `✍️ Nombre completo
+    question: `📝 Paso 1 de 9: Nombre completo
+
+Por favor escribe el nombre y apellido de la persona que quedara registrada en la reservacion.
 
 ✅ Ejemplo:
 Juan Perez`,
@@ -27,11 +29,15 @@ Juan Perez`,
 
     key: "adultos",
 
-    question: `🧑 Adultos
+    question: `🧑 Paso 2 de 9: Adultos
 
-👉 Ingresa cantidad de adultos
+¿Cuantos adultos se hospedaran en la habitacion?
 
-Maximo 4 personas por habitacion`,
+✅ Responde solo con numero.
+Ejemplo:
+2
+
+ℹ️ Maximo 4 personas por habitacion, contando adultos y niños.`,
 
     validator: "personas",
 
@@ -44,14 +50,16 @@ Maximo 4 personas por habitacion`,
 
     key: "ninos",
 
-    question: `🧒 Niños
+    question: `🧒 Paso 3 de 9: Niños
 
-👉 Ingresa cantidad de niños
+¿Cuantos niños se hospedaran?
 
-Recuerda que el maximo es de 4 personas por habitacion, contando adultos y niños.
+✅ Responde solo con numero.
+Ejemplo:
+0
 
-Si no hay escribe:
-0`,
+ℹ️ Si no hay niños, escribe 0.
+El maximo es de 4 personas por habitacion, contando adultos y niños.`,
 
     validator: "ninos",
 
@@ -64,15 +72,17 @@ Si no hay escribe:
 
     key: "habitacion",
 
-    question: `🛏️ Tipo de habitacion
+    question: `🛏️ Paso 4 de 9: Tipo de habitacion
+
+Elige una opcion:
 
 1️⃣ King
-⚠️ sujeto a disponibilidad
+Una cama king. Sujeta a disponibilidad.
 
 2️⃣ Doble
-(dos camas matrimoniales)
+Dos camas matrimoniales.
 
-👉 responde:
+✅ Responde solo:
 1 o 2`,
 
     validator: "habitacion",
@@ -88,7 +98,9 @@ Si no hay escribe:
 
     key: "telefono",
 
-    question: `📞 Numero celular
+    question: `📞 Paso 5 de 9: Numero celular
+
+Escribe un numero de contacto a 10 digitos.
 
 ✅ Ejemplo:
 9931234567`,
@@ -101,15 +113,17 @@ Si no hay escribe:
 
     key: "fecha",
 
-    question: `📅 Fecha ingreso
+    question: `📅 Paso 6 de 9: Fecha de ingreso
 
-Puedes escribirla como:
+Indica la fecha en la que deseas llegar al hotel.
+
+Puedes escribirla de cualquiera de estas formas:
 25/12
 25/12/26
 25 de diciembre
 25 diciembre 2026
 
-Despues te preguntare cuantas noches deseas reservar.`,
+ℹ️ Despues te preguntare cuantas noches deseas reservar.`,
 
     validator: "fecha",
 
@@ -122,9 +136,12 @@ Despues te preguntare cuantas noches deseas reservar.`,
 
     key: "noches",
 
-    question: `🌙 ¿Cuantas noches deseas reservar?
+    question: `🌙 Paso 7 de 9: Noches de hospedaje
 
-✅ Ejemplo:
+¿Cuantas noches deseas reservar?
+
+✅ Responde solo con numero.
+Ejemplo:
 1`,
 
     validator: "noches",
@@ -138,7 +155,7 @@ Despues te preguntare cuantas noches deseas reservar.`,
 
     key: "promocion",
 
-    question: `🎟️ Tarifa promocional
+    question: `🎟️ Paso 8 de 9: Tarifa promocional
 
 Contamos con tarifa promocional de $650 por noche para:
 
@@ -147,13 +164,19 @@ Contamos con tarifa promocional de $650 por noche para:
 • ADO
 • Centenario
 
-Esta tarifa solo sera valida presentando la credencial correspondiente de PEMEX o INAPAM, o bien el boleto de ADO o Centenario.
+La promocion solo sera valida presentando:
+• Credencial de PEMEX o INAPAM
+• Boleto de ADO o Centenario
 
-Aplica para 1 o 2 personas. A partir de la tercera persona se agregan $100 por persona adicional, con maximo 4 personas por habitacion.
+ℹ️ Aplica para 1 o 2 personas. A partir de la tercera persona se agregan $100 por persona adicional, con maximo 4 personas por habitacion.
 
-Por favor indica cual opcion aplicaria para tu reservacion.
+Por favor escribe cual opcion aplica:
+pemex
+inapam
+ado
+centenario
 
-Si no cuentas con alguna de estas opciones, escribe:
+Si no cuentas con promocion, escribe:
 no`,
 
     validator: "promocion",
@@ -169,13 +192,16 @@ no`,
 
     key: "hora",
 
-    question: `⏰ Hora llegada
+    question: `⏰ Paso 9 de 9: Hora estimada de llegada
 
-✅ Ejemplo:
+Indica aproximadamente a que hora llegaras.
 
+✅ Ejemplos:
 10 am
 8 pm
-9pm`,
+9pm
+
+ℹ️ Llegadas antes de la 1:00 PM tienen tarifa mañanera de +$200.`,
 
     validator: "hora",
 

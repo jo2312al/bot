@@ -34,6 +34,13 @@ const {
 );
 
 const {
+  checkRoomAvailability,
+  saveRoomReservation
+} = require(
+  "../../services/roomInventoryService"
+);
+
+const {
   reservaConfirmada,
   reservaGrupo
 } = require(
@@ -66,6 +73,13 @@ function getTransferImagePath() {
     );
 }
 
+function resetReservaState(state) {
+  state.module = null;
+  state.step = null;
+  state.data = {};
+  state.history = [];
+}
+
 async function handleReserva({
 
   input,
@@ -87,18 +101,26 @@ async function handleReserva({
 
     return send(
 
-      withMenuFooter(`🏨 TARIFAS PROMOCIONALES DE RESERVACIÓN
+      withMenuFooter(`🏨 Reservacion de habitacion
 
-💰 1-2 adultos → $700
+Te ayudare paso a paso. Solo responde lo que se pide en cada mensaje.
 
-👥 3-4 adultos → $800
+💰 Tarifas base por noche:
+• 1 a 2 adultos: $700
+• 3 a 4 adultos: $800
 
-🧒 Niños GRATIS
+🎟️ Promocion: $650 por noche para PEMEX, INAPAM, ADO o Centenario.
+Aplica para 1 o 2 personas. Persona adicional: +$100 por noche.
 
-🌞 Antes de 1 PM:
+🧒 Niños incluidos dentro del maximo de 4 personas por habitacion.
+
+🌞 Llegadas antes de la 1:00 PM:
 +$200 tarifa mañanera
 
-Todos nuestros servicios son facturables
+✅ Todos nuestros servicios son facturables.
+
+Si deseas cancelar o volver al menu, escribe:
+menu
 
 ${flow[0].question}`)
 
@@ -120,7 +142,9 @@ ${flow[0].question}`)
 
     return send(
 
-      withMenuFooter(`⚠️ Dato inválido
+      withMenuFooter(`⚠️ No pude validar ese dato.
+
+Revisa el formato y responde nuevamente:
 
 ${currentStep.question}`)
 
@@ -146,7 +170,9 @@ ${currentStep.question}`)
 
 Adultos registrados: ${state.data.adultos}
 
-Por favor ingresa una cantidad de niños que no exceda ese limite.`)
+Por favor ingresa una cantidad de niños que no exceda ese limite.
+
+Ejemplo: si registraste 3 adultos, puedes agregar maximo 1 niño.`)
 
     );
 
@@ -181,6 +207,45 @@ Por favor ingresa una cantidad de niños que no exceda ese limite.`)
     state.step >= flow.length
   ) {
 
+    const availability =
+      checkRoomAvailability({
+
+        habitacion:
+          state.data.habitacion,
+
+        fecha:
+          state.data.fecha,
+
+        noches:
+          state.data.noches
+
+      });
+
+    if (
+      !availability.available
+    ) {
+
+      const habitacionSolicitada =
+        state.data.habitacion;
+
+      resetReservaState(state);
+
+      return send(
+
+        withMenuFooter(`⚠️ Por el momento no tenemos disponibilidad de habitacion ${availability.limit ? habitacionSolicitada : ""} para la fecha solicitada.
+
+Fecha(s) sin disponibilidad:
+${availability.fullDates.join("\n")}
+
+Puedes intentar con otra fecha u otro tipo de habitacion.
+
+👉 escribe:
+menu`)
+
+      );
+
+    }
+
     const {
       precio,
       mensajeTarifa
@@ -208,6 +273,15 @@ Por favor ingresa una cantidad de niños que no exceda ese limite.`)
 
     const folio =
       generarFolio();
+
+    saveRoomReservation({
+
+      folio,
+
+      data:
+        state.data
+
+    });
 
     const requiereAnticipo =
       state.data.servicioEspecial === "Habitacion decorada";
@@ -263,15 +337,12 @@ Por favor ingresa una cantidad de niños que no exceda ese limite.`)
 
       })}
 
-🤝 ¿Necesitas algo más?
+🤝 ¿Necesitas algo mas?
 
 👉 escribe:
 menu`;
 
-    state.module = null;
-    state.step = null;
-    state.data = {};
-    state.history = [];
+    resetReservaState(state);
 
     await send(
 
