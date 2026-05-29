@@ -6,6 +6,12 @@ const {
   "../constants/menus"
 );
 
+const {
+  resolveMenuOption
+} = require(
+  "../constants/menuAliases"
+);
+
 const userState =
   require("../state/userState");
 
@@ -34,6 +40,9 @@ async function handleMessage({
 
   const input =
     text.toLowerCase().trim();
+
+  const menuInput =
+    resolveMenuOption(input);
 
   // ==========================================
   // CREAR USUARIO
@@ -123,15 +132,15 @@ async function handleMessage({
 
   if (
 
-    input === "menu"
+    menuInput === "menu"
 
     ||
 
-    input === "inicio"
+    menuInput === "inicio"
 
     ||
 
-    input === "cancelar"
+    menuInput === "cancelar"
 
   ) {
 
@@ -193,7 +202,7 @@ async function handleMessage({
     // ======================================
 
     if (
-      !validOptions.includes(input)
+      !validOptions.includes(menuInput)
     ) {
 
       return send(MAIN_MENU);
@@ -212,7 +221,7 @@ async function handleMessage({
   // ==========================================
 
   if (
-    input === "volver"
+    menuInput === "volver"
   ) {
 
     // ======================================
@@ -268,7 +277,10 @@ async function handleMessage({
 
   return routerHandler({
 
-    input,
+    input:
+      !state.module
+        ? menuInput
+        : input,
     state,
     send,
     sock,

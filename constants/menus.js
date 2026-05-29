@@ -19,6 +19,9 @@ const MAIN_MENU = `🏨 Hotel Villa Margaritas Villahermosa Tabasco zona centro
 1️⃣1️⃣ Call center
 1️⃣2️⃣ Cena romantica y habitaciones decoradas
 
+Puedes responder con el numero o con palabras, por ejemplo:
+reservas, cotizacion, quejas, fotos, servicios, cena romantica.
+
 📍 Direccion:
 Andres Sanchez Magallanes 910 Col Centro`;
 
