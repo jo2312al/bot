@@ -27,6 +27,29 @@ const MONTHS = {
   dic: 12
 };
 
+const CLOSED_RESERVATION_DATES = [
+  {
+    year: 2026,
+    month: 7,
+    day: 1
+  },
+  {
+    year: 2026,
+    month: 7,
+    day: 2
+  },
+  {
+    year: 2026,
+    month: 7,
+    day: 3
+  },
+  {
+    year: 2026,
+    month: 7,
+    day: 4
+  }
+];
+
 function getMexicoToday() {
 
   const parts =
@@ -137,6 +160,17 @@ function pad(value) {
 
 }
 
+function isClosedReservationDate(dateParts) {
+  return CLOSED_RESERVATION_DATES
+    .some(closedDate =>
+      compareDateParts(
+        dateParts,
+        closedDate
+      ) === 0
+    );
+
+}
+
 function parseReservationDate(value) {
 
   const today =
@@ -239,6 +273,14 @@ function parseReservationDate(value) {
 
   }
 
+  if (
+    isClosedReservationDate(parsed)
+  ) {
+
+    return null;
+
+  }
+
   return {
     ...parsed,
     display:
@@ -261,5 +303,6 @@ function formatReservationDate(value) {
 module.exports = {
   getMexicoToday,
   parseReservationDate,
-  formatReservationDate
+  formatReservationDate,
+  isClosedReservationDate
 };

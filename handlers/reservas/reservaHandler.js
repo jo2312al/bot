@@ -44,7 +44,7 @@ function getTransferImagePath() {
   const mediaDir =
     path.join(
       __dirname,
-      "../../media/pagos"
+      "../../media/imagenes/transferencia"
     );
 
   const extensions = [
@@ -175,12 +175,18 @@ ${currentStep.question}`)
         state.data.hora,
 
       noches:
-        state.data.noches
+        state.data.noches,
+
+      servicioEspecial:
+        state.data.servicioEspecial
 
     });
 
     const folio =
       generarFolio();
+
+    const requiereAnticipo =
+      state.data.servicioEspecial === "Habitacion decorada";
 
     await sock.sendMessage(
       GROUP_ID,
@@ -203,15 +209,21 @@ ${currentStep.question}`)
       }
     );
 
-    registerPendingReservation({
+    if (
+      requiereAnticipo
+    ) {
 
-      from,
+      registerPendingReservation({
 
-      sock,
+        from,
 
-      folio
+        sock,
 
-    });
+        folio
+
+      });
+
+    }
 
     const mensajeCliente =
       `${reservaConfirmada({
@@ -242,6 +254,14 @@ menu`;
       withMenuFooter(mensajeCliente)
 
     );
+
+    if (
+      !requiereAnticipo
+    ) {
+
+      return;
+
+    }
 
     const transferImage =
       getTransferImagePath();

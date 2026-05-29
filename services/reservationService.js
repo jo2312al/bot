@@ -56,7 +56,8 @@ function calcularPrecio({
   adultos,
   ninos,
   horaTexto,
-  noches = 1
+  noches = 1,
+  servicioEspecial = null
 
 }) {
 
@@ -71,6 +72,17 @@ function calcularPrecio({
   let mensajeTarifa =
     "";
 
+  if (
+    servicioEspecial === "Habitacion decorada"
+  ) {
+
+    precio += 300;
+
+    mensajeTarifa +=
+      "\n🎈 Decoracion romantica (+$300)";
+
+  }
+
   const hora =
     parseHoraLlegada(horaTexto);
 
@@ -82,7 +94,7 @@ function calcularPrecio({
 
     precio += 200;
 
-    mensajeTarifa =
+    mensajeTarifa +=
       "\n🌞 Tarifa mañanera (+$200)";
 
   }
