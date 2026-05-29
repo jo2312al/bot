@@ -17,7 +17,7 @@ module.exports = [
     question: `✍️ Nombre completo
 
 ✅ Ejemplo:
-Juan Pérez`,
+Juan Perez`,
 
     validator: "nombre"
 
@@ -27,11 +27,11 @@ Juan Pérez`,
 
     key: "adultos",
 
-    question: `👨 Adultos
+    question: `🧑 Adultos
 
 👉 Ingresa cantidad de adultos
 
-Máximo 4`,
+Maximo 4 personas por habitacion`,
 
     validator: "personas",
 
@@ -48,6 +48,8 @@ Máximo 4`,
 
 👉 Ingresa cantidad de niños
 
+Recuerda que el maximo es de 4 personas por habitacion, contando adultos y niños.
+
 Si no hay escribe:
 0`,
 
@@ -62,7 +64,7 @@ Si no hay escribe:
 
     key: "habitacion",
 
-    question: `🛏️ Tipo de habitación
+    question: `🛏️ Tipo de habitacion
 
 1️⃣ King
 ⚠️ sujeto a disponibilidad
@@ -86,7 +88,7 @@ Si no hay escribe:
 
     key: "telefono",
 
-    question: `📞 Número celular
+    question: `📞 Numero celular
 
 ✅ Ejemplo:
 9931234567`,
@@ -107,7 +109,7 @@ Puedes escribirla como:
 25 de diciembre
 25 diciembre 2026
 
-Después te preguntaré cuántas noches deseas reservar.`,
+Despues te preguntare cuantas noches deseas reservar.`,
 
     validator: "fecha",
 
@@ -120,7 +122,7 @@ Después te preguntaré cuántas noches deseas reservar.`,
 
     key: "noches",
 
-    question: `🌙 ¿Cuántas noches deseas reservar?
+    question: `🌙 ¿Cuantas noches deseas reservar?
 
 ✅ Ejemplo:
 1`,
@@ -129,6 +131,37 @@ Después te preguntaré cuántas noches deseas reservar.`,
 
     transform: value =>
       parseInt(value)
+
+  },
+
+  {
+
+    key: "promocion",
+
+    question: `🎟️ Tarifa promocional
+
+Contamos con tarifa promocional de $650 por noche para:
+
+• PEMEX
+• INAPAM
+• ADO
+• Centenario
+
+Esta tarifa solo sera valida presentando la credencial correspondiente de PEMEX o INAPAM, o bien el boleto de ADO o Centenario.
+
+Aplica para 1 o 2 personas. A partir de la tercera persona se agregan $100 por persona adicional, con maximo 4 personas por habitacion.
+
+Por favor indica cual opcion aplicaria para tu reservacion.
+
+Si no cuentas con alguna de estas opciones, escribe:
+no`,
+
+    validator: "promocion",
+
+    transform: value =>
+      value
+        .trim()
+        .toLowerCase()
 
   },
 

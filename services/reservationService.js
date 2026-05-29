@@ -57,12 +57,31 @@ function calcularPrecio({
   ninos,
   horaTexto,
   noches = 1,
-  servicioEspecial = null
+  servicioEspecial = null,
+  promocion = "no"
 
 }) {
 
+  const tienePromocion =
+    promocion
+    &&
+    promocion !== "no";
+
+  const totalPersonas =
+    adultos + ninos;
+
+  const personasAdicionalesPromo =
+    tienePromocion
+      ? Math.max(
+        totalPersonas - 2,
+        0
+      )
+      : 0;
+
   const tarifaNoche =
-    adultos <= 2
+    tienePromocion
+      ? 650 + (personasAdicionalesPromo * 100)
+      : adultos <= 2
       ? 700
       : 800;
 
@@ -71,6 +90,24 @@ function calcularPrecio({
 
   let mensajeTarifa =
     "";
+
+  if (
+    tienePromocion
+  ) {
+
+    mensajeTarifa +=
+      `\n🎟️ Tarifa promocional ${promocion.toUpperCase()} ($650 por noche)`;
+
+    if (
+      personasAdicionalesPromo > 0
+    ) {
+
+      mensajeTarifa +=
+        `\n👥 ${personasAdicionalesPromo} persona(s) adicional(es) (+$${personasAdicionalesPromo * 100} por noche)`;
+
+    }
+
+  }
 
   if (
     servicioEspecial === "Habitacion decorada"

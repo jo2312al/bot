@@ -97,6 +97,23 @@ const validators = {
 
   },
 
+  promocion(value) {
+
+    const limpio =
+      value
+        .trim()
+        .toLowerCase();
+
+    return [
+      "pemex",
+      "inapam",
+      "ado",
+      "centenario",
+      "no"
+    ].includes(limpio);
+
+  },
+
   hora(value) {
 
     return /^(0?[1-9]|1[0-2])\s?(am|pm)$/i

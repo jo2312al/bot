@@ -9,30 +9,42 @@ function reservaConfirmada({
   const requiereAnticipo =
     data.servicioEspecial === "Habitacion decorada";
 
-  return `RESERVA RECIBIDA
+  const promocion =
+    data.promocion && data.promocion !== "no"
+      ? data.promocion.toUpperCase()
+      : "No aplica";
 
-${data.nombre}
+  return `✅ RESERVA RECIBIDA
 
-Adultos: ${data.adultos}
-Ninos: ${data.ninos}
-Habitacion: ${data.habitacion}
-${data.servicioEspecial ? `Servicio especial: ${data.servicioEspecial}\n` : ""}
-Fecha: ${data.fecha}
-Noches: ${data.noches}
-Hora llegada: ${data.hora}
-Telefono: ${data.telefono}
+👤 ${data.nombre}
 
-Total: $${precio}
+🧑 Adultos: ${data.adultos}
+
+🧒 Niños: ${data.ninos}
+
+🛏️ ${data.habitacion}
+${data.servicioEspecial ? `🎈 Servicio especial: ${data.servicioEspecial}\n` : ""}
+📅 ${data.fecha}
+
+🌙 Noches: ${data.noches}
+
+🎟️ Promocion: ${promocion}
+
+⏰ ${data.hora}
+
+📞 ${data.telefono}
+
+💰 Total: $${precio}
 ${mensajeTarifa}
 
-Folio: #${folio}
+🔢 Folio: #${folio}
 
 ${requiereAnticipo
-  ? `Para garantizar tu reservacion se requiere un anticipo por transferencia.
+  ? `🤝 Para garantizar tu reservacion se requiere un anticipo por transferencia.
 Te enviaremos los datos de transferencia en imagen.
 
-Importante: si no recibimos el anticipo o comprobante dentro de 24 horas, la reservacion se cancela automaticamente.`
-  : "Tu solicitud de reservacion fue enviada correctamente."}`;
+⚠️ Importante: si no recibimos el anticipo o comprobante dentro de 24 horas, la reservacion se cancela automaticamente.`
+  : "✅ Tu solicitud de reservacion fue enviada correctamente."}`;
 }
 
 function reservaGrupo({
@@ -44,23 +56,35 @@ function reservaGrupo({
   const requiereAnticipo =
     data.servicioEspecial === "Habitacion decorada";
 
-  return `${requiereAnticipo ? "NUEVA RESERVA PENDIENTE DE ANTICIPO" : "NUEVA RESERVA"}
+  const promocion =
+    data.promocion && data.promocion !== "no"
+      ? data.promocion.toUpperCase()
+      : "No aplica";
 
-${data.nombre}
+  return `${requiereAnticipo ? "🏨 NUEVA RESERVA PENDIENTE DE ANTICIPO" : "🏨 NUEVA RESERVA"}
 
-Adultos: ${data.adultos}
-Ninos: ${data.ninos}
-Habitacion: ${data.habitacion}
-${data.servicioEspecial ? `Servicio especial: ${data.servicioEspecial}\n` : ""}
-Fecha: ${data.fecha}
-Noches: ${data.noches}
-Hora llegada: ${data.hora}
-Telefono: ${data.telefono}
+👤 ${data.nombre}
 
-$${precio}
+🧑 Adultos: ${data.adultos}
+
+🧒 Niños: ${data.ninos}
+
+🛏️ ${data.habitacion}
+${data.servicioEspecial ? `🎈 Servicio especial: ${data.servicioEspecial}\n` : ""}
+📅 ${data.fecha}
+
+🌙 Noches: ${data.noches}
+
+🎟️ Promocion: ${promocion}
+
+⏰ ${data.hora}
+
+📞 ${data.telefono}
+
+💰 $${precio}
 ${mensajeTarifa}
 
-#${folio}`;
+🔢 #${folio}`;
 }
 
 module.exports = {

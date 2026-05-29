@@ -128,13 +128,34 @@ ${currentStep.question}`)
 
   }
 
-  state.data[
-    currentStep.key
-  ] =
+  const transformedValue =
     currentStep.transform
       ? currentStep
           .transform(input)
       : text;
+
+  if (
+    currentStep.key === "ninos"
+    &&
+    state.data.adultos + transformedValue > 4
+  ) {
+
+    return send(
+
+      withMenuFooter(`⚠️ El maximo permitido es de 4 personas por habitacion, contando adultos y niños.
+
+Adultos registrados: ${state.data.adultos}
+
+Por favor ingresa una cantidad de niños que no exceda ese limite.`)
+
+    );
+
+  }
+
+  state.data[
+    currentStep.key
+  ] =
+    transformedValue;
 
   if (
     state.history.length > 20
@@ -178,7 +199,10 @@ ${currentStep.question}`)
         state.data.noches,
 
       servicioEspecial:
-        state.data.servicioEspecial
+        state.data.servicioEspecial,
+
+      promocion:
+        state.data.promocion
 
     });
 
