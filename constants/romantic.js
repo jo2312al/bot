@@ -19,12 +19,13 @@ Entrada para compartir, postre, bebida y mesa con petalos.
 
 🕕 Horario: 6:00 PM a 10:00 PM`;
 
-const DECORATED_ROOM_INFO = `🛏️ HABITACIONES PARA 2 PERSONAS
+const DECORATED_ROOM_INFO = `🛏️ HABITACION DECORADA
 
-🎈 Habitacion con decoracion: $1,000
+🎈 Habitacion King para 2 personas con decoracion: $1,000
 Incluye petalos y globos.
 
-🛏️ Habitacion sin decoracion: $700
+ℹ️ Solo se vende por 1 noche.
+ℹ️ Debe reservarse con minimo 2 dias de anticipacion.
 
 ✅ Check-in: 3:00 PM
 ✅ Check-out: 12:00 PM`;

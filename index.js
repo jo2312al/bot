@@ -2,7 +2,8 @@ const {
   default: makeWASocket,
   useMultiFileAuthState,
   DisconnectReason,
-  fetchLatestBaileysVersion
+  fetchLatestBaileysVersion,
+  downloadMediaMessage
 } = require("@whiskeysockets/baileys");
 
 const pino =
@@ -31,6 +32,12 @@ const {
   GROUP_ID
 } = require(
   "./config/config"
+);
+
+const {
+  analyzeRackImage
+} = require(
+  "./services/rackAnalysisService"
 );
 
 // ==========================================
@@ -275,6 +282,19 @@ async function startBot() {
               .documentMessage
           );
 
+        const isRackImage =
+
+          Boolean(
+            msg.message
+              .imageMessage
+          )
+
+          &&
+
+          text
+            .toLowerCase()
+            .includes("rack");
+
         // ======================================
         // LOG GRUPOS
         // ======================================
@@ -294,6 +314,50 @@ async function startBot() {
         // ======================================
 
         log({usuario: from, modulo: "Chat Privado", accion: text});
+
+        if (
+          isRackImage
+        ) {
+
+          const buffer =
+            await downloadMediaMessage(
+              msg,
+              "buffer",
+              {},
+              {
+                logger: pino({
+                  level: "silent"
+                }),
+                reuploadRequest:
+                  sock.updateMediaMessage
+              }
+            );
+
+          const result =
+            await analyzeRackImage({
+              imageBase64:
+                buffer.toString("base64"),
+              mimeType:
+                msg.message
+                  .imageMessage
+                  ?.mimetype
+                  ||
+                  "image/jpeg"
+            });
+
+          await sock.sendMessage(
+            from,
+            {
+              text:
+                result.ok
+                  ? result.message
+                  : result.error
+            }
+          );
+
+          return;
+
+        }
 
         if (
           hasPaymentProof

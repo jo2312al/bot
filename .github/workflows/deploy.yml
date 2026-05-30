@@ -16,6 +16,17 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Validate JavaScript
+        run: npm run check
+
       - name: Setup SSH
         run: |
 
@@ -33,6 +44,8 @@ jobs:
           rsync -avz --delete \
           --exclude=node_modules \
           --exclude=auth \
+          --exclude=data/reservas.json \
+          --exclude=logs \
           ./ jose@48.202.58.124:/home/jose/bot2/
 
       - name: Restart bot
@@ -40,6 +53,11 @@ jobs:
 
           ssh jose@48.202.58.124 "
           cd /home/jose/bot2 &&
+          if ! command -v tesseract >/dev/null 2>&1; then
+            sudo apt-get update &&
+            sudo apt-get install -y tesseract-ocr
+          fi &&
           npm install &&
-          pm2 restart bot2
+          pm2 restart bot2 &&
+          (pm2 restart bot2-dashboard || pm2 start dashboard.js --name bot2-dashboard)
           "

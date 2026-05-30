@@ -87,18 +87,6 @@ function resetState(state) {
   state.history = [];
 }
 
-function isName(value) {
-  return reservaValidators.nombre(value);
-}
-
-function isPhone(value) {
-  return reservaValidators.telefono(value);
-}
-
-function isReservationDate(value) {
-  return reservaValidators.fecha(value);
-}
-
 function isDecoratedRoomDate(value) {
   const parsed = parseReservationDate(value);
 
@@ -110,10 +98,6 @@ function isDecoratedRoomDate(value) {
   const diffDays = Math.floor((requestedDate - todayDate) / (24 * 60 * 60 * 1000));
 
   return diffDays >= 2;
-}
-
-function isHour(value) {
-  return reservaValidators.hora(value);
 }
 
 async function sendTransferImage({ sock, from }) {
@@ -198,16 +182,14 @@ async function finishDecoratedReservation({
   });
 
   if (!availability.available) {
-    const habitacionSolicitada = state.data.habitacion;
-
     resetState(state);
 
-    return send(withMenuFooter(`⚠️ Por el momento no tenemos disponibilidad de habitacion ${habitacionSolicitada} para la fecha solicitada.
+    return send(withMenuFooter(`⚠️ Por el momento no tenemos disponibilidad de habitacion King decorada para la fecha solicitada.
 
 Fecha(s) sin disponibilidad:
 ${availability.fullDates.join("\n")}
 
-Puedes intentar con otra fecha u otro tipo de habitacion.
+Puedes intentar con otra fecha.
 
 👉 escribe:
 menu`));
@@ -267,6 +249,19 @@ menu`));
   });
 }
 
+function startDecoratedReservation(state) {
+  state.step = 20;
+  state.data = {
+    tipo: "decorada",
+    servicioEspecial: "Habitacion decorada",
+    adultos: 2,
+    ninos: 0,
+    habitacion: "King",
+    noches: 1,
+    promocion: "no"
+  };
+}
+
 function handleDecoratedStep({
   input,
   text,
@@ -276,10 +271,10 @@ function handleDecoratedStep({
   from
 }) {
   if (state.step === 20) {
-    if (!isName(input)) {
+    if (!reservaValidators.nombre(input)) {
       return send(withMenuFooter(`⚠️ No pude validar el nombre.
 
-📝 Paso 1 de 9: Nombre completo
+📝 Paso 1 de 4: Nombre completo
 
 Ejemplo:
 Juan Perez`));
@@ -288,81 +283,7 @@ Juan Perez`));
     state.data.nombre = text;
     state.step = 21;
 
-    return send(withMenuFooter(`🧑 Paso 2 de 9: Adultos
-
-¿Cuantos adultos se hospedaran?
-
-Responde solo con numero.
-Ejemplo:
-2`));
-  }
-
-  if (state.step === 21) {
-    if (!reservaValidators.personas(input)) {
-      return send(withMenuFooter(`⚠️ Ingresa una cantidad valida de adultos.
-
-Maximo 4 personas por habitacion.
-
-Ejemplo:
-2`));
-    }
-
-    state.data.adultos = parseInt(input);
-    state.step = 22;
-
-    return send(withMenuFooter(`🧒 Paso 3 de 9: Niños
-
-¿Cuantos niños se hospedaran?
-
-Si no hay niños, escribe:
-0`));
-  }
-
-  if (state.step === 22) {
-    if (!reservaValidators.ninos(input)) {
-      return send(withMenuFooter(`⚠️ Ingresa una cantidad valida de niños.
-
-Si no hay niños, escribe:
-0`));
-    }
-
-    const ninos = parseInt(input);
-
-    if (state.data.adultos + ninos > 4) {
-      return send(withMenuFooter(`⚠️ El maximo permitido es de 4 personas por habitacion, contando adultos y niños.
-
-Adultos registrados: ${state.data.adultos}
-
-Por favor ingresa una cantidad de niños que no exceda ese limite.`));
-    }
-
-    state.data.ninos = ninos;
-    state.step = 23;
-
-    return send(withMenuFooter(`🛏️ Paso 4 de 9: Tipo de habitacion
-
-1️⃣ King
-2️⃣ Doble
-
-Responde solo:
-1 o 2`));
-  }
-
-  if (state.step === 23) {
-    if (!reservaValidators.habitacion(input)) {
-      return send(withMenuFooter(`⚠️ Opcion invalida.
-
-Elige:
-1️⃣ King
-2️⃣ Doble`));
-    }
-
-    state.data.habitacion = input === "1"
-      ? "King"
-      : "Doble";
-    state.step = 24;
-
-    return send(withMenuFooter(`📞 Paso 5 de 9: Numero celular
+    return send(withMenuFooter(`📞 Paso 2 de 4: Numero celular
 
 Escribe un numero de contacto a 10 digitos.
 
@@ -370,8 +291,8 @@ Ejemplo:
 9931234567`));
   }
 
-  if (state.step === 24) {
-    if (!isPhone(input)) {
+  if (state.step === 21) {
+    if (!reservaValidators.telefono(input)) {
       return send(withMenuFooter(`⚠️ Numero invalido.
 
 Escribe un numero a 10 digitos.
@@ -381,11 +302,16 @@ Ejemplo:
     }
 
     state.data.telefono = input;
-    state.step = 25;
+    state.step = 22;
 
-    return send(withMenuFooter(`📅 Paso 6 de 9: Fecha de ingreso
+    return send(withMenuFooter(`📅 Paso 3 de 4: Fecha de ingreso
 
-La habitacion decorada debe reservarse con minimo 2 dias de anticipacion.
+La habitacion decorada siempre es:
+• King
+• Para 2 personas
+• Solo 1 noche
+
+Debe reservarse con minimo 2 dias de anticipacion.
 
 Puedes escribir:
 25/12
@@ -393,8 +319,8 @@ Puedes escribir:
 25 de diciembre`));
   }
 
-  if (state.step === 25) {
-    if (!isReservationDate(input)) {
+  if (state.step === 22) {
+    if (!reservaValidators.fecha(input)) {
       return send(withMenuFooter(`⚠️ Fecha invalida o sin disponibilidad.
 
 Puedes escribir:
@@ -410,61 +336,9 @@ Por favor indica una fecha posterior.`));
     }
 
     state.data.fecha = formatReservationDate(input);
-    state.step = 26;
+    state.step = 23;
 
-    return send(withMenuFooter(`🌙 Paso 7 de 9: Noches de hospedaje
-
-¿Cuantas noches deseas reservar?
-
-Ejemplo:
-1`));
-  }
-
-  if (state.step === 26) {
-    if (!reservaValidators.noches(input)) {
-      return send(withMenuFooter(`⚠️ Ingresa una cantidad valida de noches.
-
-Ejemplo:
-1`));
-    }
-
-    state.data.noches = parseInt(input);
-    state.step = 27;
-
-    return send(withMenuFooter(`🎟️ Paso 8 de 9: Tarifa promocional
-
-Contamos con tarifa promocional de $650 por noche para PEMEX, INAPAM, ADO o Centenario.
-
-Aplica para 1 o 2 personas. Persona adicional: +$100 por noche.
-
-Escribe una opcion:
-pemex
-inapam
-ado
-centenario
-
-Si no aplica, escribe:
-no`));
-  }
-
-  if (state.step === 27) {
-    if (!reservaValidators.promocion(input)) {
-      return send(withMenuFooter(`⚠️ Opcion invalida.
-
-Escribe:
-pemex
-inapam
-ado
-centenario
-
-Si no aplica, escribe:
-no`));
-    }
-
-    state.data.promocion = input.trim().toLowerCase();
-    state.step = 28;
-
-    return send(withMenuFooter(`⏰ Paso 9 de 9: Hora estimada de llegada
+    return send(withMenuFooter(`⏰ Paso 4 de 4: Hora estimada de llegada
 
 Ejemplos:
 10 am
@@ -472,8 +346,8 @@ Ejemplos:
 9pm`));
   }
 
-  if (state.step === 28) {
-    if (!isHour(input)) {
+  if (state.step === 23) {
+    if (!reservaValidators.hora(input)) {
       return send(withMenuFooter(`⚠️ Hora invalida.
 
 Ejemplos:
@@ -575,10 +449,9 @@ ${ROMANTIC_RESERVE_PROMPT}`));
     }
 
     if (state.data.tipo === "decorada") {
-      state.step = 20;
-      state.data.servicioEspecial = "Habitacion decorada";
+      startDecoratedReservation(state);
 
-      return send(withMenuFooter(`📝 Paso 1 de 9: Nombre completo
+      return send(withMenuFooter(`📝 Paso 1 de 4: Nombre completo
 
 Por favor escribe el nombre y apellido de la persona que quedara registrada.
 
@@ -595,7 +468,7 @@ Juan Perez`));
   }
 
   if (state.step === 2) {
-    if (!isName(input)) {
+    if (!reservaValidators.nombre(input)) {
       return send(withMenuFooter(`⚠️ Dato invalido
 
 ✍️ Nombre completo
@@ -614,7 +487,7 @@ Ejemplo:
   }
 
   if (state.step === 3) {
-    if (!isPhone(input)) {
+    if (!reservaValidators.telefono(input)) {
       return send(withMenuFooter(`⚠️ Dato invalido
 
 📞 Numero celular
@@ -636,7 +509,7 @@ Ejemplo:
   }
 
   if (state.step === 4) {
-    if (!isReservationDate(input)) {
+    if (!reservaValidators.fecha(input)) {
       return send(withMenuFooter(`⚠️ Dato invalido
 
 📅 Fecha de la cena
@@ -659,7 +532,7 @@ Ejemplo:
   }
 
   if (state.step === 5) {
-    if (!isHour(input)) {
+    if (!reservaValidators.hora(input)) {
       return send(withMenuFooter(`⚠️ Dato invalido
 
 ⏰ Hora de la cena

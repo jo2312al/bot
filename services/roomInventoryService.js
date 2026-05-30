@@ -12,6 +12,12 @@ const ROOM_LIMITS = {
   Doble: 20
 };
 
+function getRoomLimits() {
+  return {
+    ...ROOM_LIMITS
+  };
+}
+
 function ensureDataFile() {
   const dataDir =
     path.dirname(DATA_FILE);
@@ -186,12 +192,22 @@ function saveRoomReservation({
 
   reservations.push({
     folio,
+    nombre:
+      data.nombre || "",
+    telefono:
+      data.telefono || "",
     habitacion:
       data.habitacion,
     fecha:
       data.fecha,
     noches:
       data.noches,
+    adultos:
+      data.adultos,
+    ninos:
+      data.ninos,
+    servicioEspecial:
+      data.servicioEspecial || "",
     dates:
       getStayDates({
         fecha: data.fecha,
@@ -240,6 +256,8 @@ function cancelRoomReservationByFolio(folio) {
 }
 
 module.exports = {
+  getRoomLimits,
+  readReservations,
   checkRoomAvailability,
   saveRoomReservation,
   cancelRoomReservationByFolio

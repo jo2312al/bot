@@ -129,10 +129,15 @@ function calcularPrecio({
     hora < 13
   ) {
 
-    precio += 200;
+    const tarifaMananera =
+      servicioEspecial === "Habitacion decorada"
+        ? 600
+        : 200;
+
+    precio += tarifaMananera;
 
     mensajeTarifa +=
-      "\n🌞 Tarifa mañanera (+$200)";
+      `\n🌞 Tarifa mañanera (+$${tarifaMananera}, solo primera noche)`;
 
   }
 
