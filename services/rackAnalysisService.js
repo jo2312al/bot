@@ -8,6 +8,15 @@ const {
 const TESSERACT_COMMAND =
   process.env.TESSERACT_PATH || "tesseract";
 
+const IMAGE_MAGICK_COMMAND =
+  process.env.IMAGE_MAGICK_PATH
+  ||
+  (
+    process.platform === "win32"
+      ? "magick"
+      : "convert"
+  );
+
 const RACK_STATUSES = {
   BLO: "Bloqueado",
   VL: "Vacio limpio",
@@ -100,25 +109,135 @@ function runTesseract(imagePath, options = []) {
   });
 }
 
+function runImageMagick(args) {
+  return new Promise(resolve => {
+    execFile(
+      IMAGE_MAGICK_COMMAND,
+      args,
+      {
+        windowsHide: true,
+        timeout: 45000,
+        maxBuffer: 1024 * 1024 * 8
+      },
+      error => {
+        resolve(!error);
+      }
+    );
+  });
+}
+
+async function createPreprocessedImages(imagePath, tmpDir) {
+  const variants = [
+    imagePath
+  ];
+
+  const basePath =
+    path.join(
+      tmpDir,
+      `rack-clean-${Date.now()}.png`
+    );
+
+  const croppedPath =
+    path.join(
+      tmpDir,
+      `rack-crop-${Date.now()}.png`
+    );
+
+  const thresholdPath =
+    path.join(
+      tmpDir,
+      `rack-threshold-${Date.now()}.png`
+    );
+
+  const baseOk =
+    await runImageMagick([
+      imagePath,
+      "-auto-orient",
+      "-colorspace",
+      "Gray",
+      "-resize",
+      "260%",
+      "-contrast-stretch",
+      "2%x2%",
+      "-sharpen",
+      "0x1",
+      basePath
+    ]);
+
+  if (baseOk) {
+    variants.push(basePath);
+  }
+
+  const croppedOk =
+    await runImageMagick([
+      imagePath,
+      "-auto-orient",
+      "-gravity",
+      "North",
+      "-crop",
+      "100%x82%+0+0",
+      "+repage",
+      "-colorspace",
+      "Gray",
+      "-resize",
+      "280%",
+      "-contrast-stretch",
+      "2%x2%",
+      "-sharpen",
+      "0x1",
+      croppedPath
+    ]);
+
+  if (croppedOk) {
+    variants.push(croppedPath);
+  }
+
+  const thresholdOk =
+    await runImageMagick([
+      croppedOk ? croppedPath : imagePath,
+      "-colorspace",
+      "Gray",
+      "-resize",
+      "120%",
+      "-contrast-stretch",
+      "1%x1%",
+      "-threshold",
+      "58%",
+      thresholdPath
+    ]);
+
+  if (thresholdOk) {
+    variants.push(thresholdPath);
+  }
+
+  return variants;
+}
+
 async function runTesseractPasses(imagePath) {
   const passes = [
     [
       "--psm",
       "6",
       "-c",
-      "preserve_interword_spaces=1"
+      "preserve_interword_spaces=1",
+      "-c",
+      "tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz()#* "
     ],
     [
       "--psm",
       "11",
       "-c",
-      "preserve_interword_spaces=1"
+      "preserve_interword_spaces=1",
+      "-c",
+      "tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz()#* "
     ],
     [
       "--psm",
       "12",
       "-c",
-      "preserve_interword_spaces=1"
+      "preserve_interword_spaces=1",
+      "-c",
+      "tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz()#* "
     ]
   ];
 
@@ -470,8 +589,22 @@ async function analyzeRackImage({
   );
 
   try {
+    const imageVariants =
+      await createPreprocessedImages(
+        imagePath,
+        tmpDir
+      );
+
+    const outputs = [];
+
+    for (const variant of imageVariants) {
+      outputs.push(
+        await runTesseractPasses(variant)
+      );
+    }
+
     const text =
-      await runTesseractPasses(imagePath);
+      outputs.join("\n");
 
     const rooms =
       parseRackText(text);
@@ -503,6 +636,24 @@ async function analyzeRackImage({
       fs.unlinkSync(imagePath);
     } catch (error) {
       // Ignorar limpieza fallida de archivo temporal.
+    }
+
+    try {
+      fs.readdirSync(tmpDir)
+        .filter(file =>
+          file.startsWith("rack-clean-")
+          ||
+          file.startsWith("rack-crop-")
+          ||
+          file.startsWith("rack-threshold-")
+        )
+        .forEach(file =>
+          fs.unlinkSync(
+            path.join(tmpDir, file)
+          )
+        );
+    } catch (error) {
+      // Ignorar limpieza fallida de variantes temporales.
     }
   }
 }
