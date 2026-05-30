@@ -203,6 +203,10 @@ function pageHtml() {
       cursor: pointer;
       font-weight: 600;
     }
+    button:disabled {
+      cursor: wait;
+      opacity: .65;
+    }
     button.primary {
       background: var(--accent);
       border-color: var(--accent);
@@ -216,6 +220,11 @@ function pageHtml() {
       border-radius: 6px;
       padding: 9px 10px;
       min-width: 220px;
+      max-width: 100%;
+    }
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
     }
     table {
       width: 100%;
@@ -269,10 +278,40 @@ function pageHtml() {
       font-family: Consolas, monospace;
       white-space: pre-wrap;
     }
+    .rack-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
     @media (max-width: 800px) {
       .grid { grid-template-columns: 1fr; }
       table { font-size: 13px; }
       header, main { padding-left: 14px; padding-right: 14px; }
+      header { position: static; }
+      h1 { font-size: 20px; }
+      .toolbar {
+        align-items: stretch;
+        flex-direction: column;
+      }
+      .toolbar > div {
+        width: 100%;
+      }
+      .rack-controls {
+        display: grid;
+        grid-template-columns: 1fr;
+      }
+      input,
+      button {
+        width: 100%;
+        min-width: 0;
+      }
+      textarea {
+        min-height: 280px;
+      }
+      th, td {
+        padding: 9px 6px;
+      }
     }
   </style>
 </head>
@@ -315,8 +354,10 @@ function pageHtml() {
           <div class="muted">Sube una foto del rack. El dashboard usa Tesseract OCR local para leer habitaciones disponibles y suites.</div>
         </div>
       </div>
-      <input id="rackImage" type="file" accept="image/*">
-      <button class="primary" onclick="analyzeRack()">Analizar rack</button>
+      <div class="rack-controls">
+        <input id="rackImage" type="file" accept="image/*">
+        <button id="analyzeRackButton" class="primary" onclick="analyzeRack()">Analizar rack</button>
+      </div>
       <div style="margin-top:12px">
         <textarea id="rackResult" readonly placeholder="Aqui aparecera el resultado del rack."></textarea>
       </div>
@@ -355,7 +396,7 @@ function pageHtml() {
         return '<div class="muted">Sin reservas activas registradas.</div>';
       }
 
-      return '<table><thead><tr><th>Fecha</th><th>King</th><th>Doble</th></tr></thead><tbody>' +
+      return '<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>King</th><th>Doble</th></tr></thead><tbody>' +
         rows.map(row => {
           const kingPct = Math.min((row.King / row.limits.King) * 100, 100);
           const doblePct = Math.min((row.Doble / row.limits.Doble) * 100, 100);
@@ -365,7 +406,7 @@ function pageHtml() {
             '<td>' + row.Doble + ' / ' + row.limits.Doble + '<div class="bar"><span style="width:' + doblePct + '%"></span></div></td>' +
           '</tr>';
         }).join('') +
-      '</tbody></table>';
+      '</tbody></table></div>';
     }
 
     function renderReservations(rows) {
@@ -373,7 +414,7 @@ function pageHtml() {
         return '<div class="muted">Sin reservas registradas.</div>';
       }
 
-      return '<table><thead><tr><th>Folio</th><th>Cliente</th><th>Habitacion</th><th>Fechas</th><th>Estado</th></tr></thead><tbody>' +
+      return '<div class="table-wrap"><table><thead><tr><th>Folio</th><th>Cliente</th><th>Habitacion</th><th>Fechas</th><th>Estado</th></tr></thead><tbody>' +
         rows.map(row => '<tr>' +
           '<td>#' + escapeHtml(row.folio || '') + '</td>' +
           '<td>' + escapeHtml(row.nombre || 'Sin nombre') + '<br><span class="muted">' + escapeHtml(row.telefono || '') + '</span></td>' +
@@ -381,7 +422,7 @@ function pageHtml() {
           '<td>' + escapeHtml((row.dates || [row.fecha]).join(', ')) + '<br><span class="muted">' + (row.noches || 1) + ' noche(s)</span></td>' +
           '<td><span class="pill ' + escapeHtml(row.status || '') + '">' + escapeHtml(row.status || 'activa') + '</span></td>' +
         '</tr>').join('') +
-      '</tbody></table>';
+      '</tbody></table></div>';
     }
 
     async function cancelFolio() {
@@ -418,33 +459,63 @@ function pageHtml() {
         return;
       }
 
-      rackResult.value = 'Leyendo rack...';
+      rackResult.value = 'Leyendo rack... puede tardar hasta 90 segundos.';
+      analyzeRackButton.disabled = true;
 
-      const dataUrl = await fileToDataUrl(file);
-      const imageBase64 = dataUrl.split(',')[1];
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 90000);
 
-      const response = await fetch('/api/rack/analyze', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          imageBase64,
-          mimeType: file.type || 'image/jpeg'
-        })
-      });
+      try {
+        const dataUrl = await fileToCompressedDataUrl(file);
+        const imageBase64 = dataUrl.split(',')[1];
 
-      const data = await response.json();
+        const response = await fetch('/api/rack/analyze', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            imageBase64,
+            mimeType: 'image/jpeg'
+          })
+        });
 
-      rackResult.value = data.ok
-        ? data.message + (data.ocrPreview ? '\\n\\n--- OCR detectado ---\\n' + data.ocrPreview : '')
-        : data.error || 'No se pudo analizar el rack.';
+        const data = await response.json();
+
+        rackResult.value = data.ok
+          ? data.message + (data.ocrPreview ? '\\n\\n--- OCR detectado ---\\n' + data.ocrPreview : '')
+          : data.error || 'No se pudo analizar el rack.';
+      } catch (error) {
+        rackResult.value = error.name === 'AbortError'
+          ? 'La lectura tardo demasiado. Intenta con una foto mas derecha, bien iluminada y tomada de frente.'
+          : 'No se pudo analizar el rack: ' + (error.message || 'error desconocido');
+      } finally {
+        clearTimeout(timeout);
+        analyzeRackButton.disabled = false;
+      }
     }
 
-    function fileToDataUrl(file) {
+    function fileToCompressedDataUrl(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
+        reader.onload = () => {
+          const image = new Image();
+          image.onload = () => {
+            const maxSide = 1800;
+            const ratio = Math.min(1, maxSide / Math.max(image.width, image.height));
+            const width = Math.max(1, Math.round(image.width * ratio));
+            const height = Math.max(1, Math.round(image.height * ratio));
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const context = canvas.getContext('2d');
+            context.drawImage(image, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', 0.86));
+          };
+          image.onerror = reject;
+          image.src = reader.result;
+        };
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
