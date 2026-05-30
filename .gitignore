@@ -1,4 +1,5 @@
 node_modules/
 package-lock.json
 data/reservas.json
+data/closedDates.json
 logs/*.log

@@ -1,3 +1,7 @@
+const {
+  isClosedDisplayDate
+} = require("../services/closedDatesService");
+
 const MONTHS = {
   enero: 1,
   ene: 1,
@@ -26,29 +30,6 @@ const MONTHS = {
   diciembre: 12,
   dic: 12
 };
-
-const CLOSED_RESERVATION_DATES = [
-  {
-    year: 2026,
-    month: 7,
-    day: 1
-  },
-  {
-    year: 2026,
-    month: 7,
-    day: 2
-  },
-  {
-    year: 2026,
-    month: 7,
-    day: 3
-  },
-  {
-    year: 2026,
-    month: 7,
-    day: 4
-  }
-];
 
 function getMexicoToday() {
 
@@ -161,13 +142,9 @@ function pad(value) {
 }
 
 function isClosedReservationDate(dateParts) {
-  return CLOSED_RESERVATION_DATES
-    .some(closedDate =>
-      compareDateParts(
-        dateParts,
-        closedDate
-      ) === 0
-    );
+  return isClosedDisplayDate(
+    `${pad(dateParts.day)}/${pad(dateParts.month)}/${dateParts.year}`
+  );
 
 }
 

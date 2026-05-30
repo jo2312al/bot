@@ -8,6 +8,12 @@ const {
   cancelRoomReservationByFolio
 } = require("./services/roomInventoryService");
 const {
+  closeDateRange,
+  getMexicoTodayIso,
+  openDate,
+  readClosedDates
+} = require("./services/closedDatesService");
+const {
   analyzeRackImage
 } = require("./services/rackAnalysisService");
 
@@ -86,8 +92,26 @@ function buildOccupancy(reservations) {
 
   return Object.values(occupancy)
     .sort((left, right) =>
-      left.date.localeCompare(right.date)
+      dateValue(left.date) - dateValue(right.date)
     );
+}
+
+function dateValue(value) {
+  const [
+    day,
+    month,
+    year
+  ] =
+    String(value || "")
+      .split("/")
+      .map(Number);
+
+  return new Date(
+    year,
+    month - 1,
+    day
+  )
+    .getTime();
 }
 
 function getSummary() {
@@ -109,6 +133,10 @@ function getSummary() {
       new Date().toISOString(),
     limits:
       getRoomLimits(),
+    today:
+      getMexicoTodayIso(),
+    closedDates:
+      readClosedDates(),
     totals: {
       reservations:
         reservations.length,
@@ -284,6 +312,77 @@ function pageHtml() {
       align-items: center;
       flex-wrap: wrap;
     }
+    .date-controls {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      align-items: end;
+    }
+    label {
+      display: grid;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .calendar-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 14px 0 10px;
+    }
+    .calendar-title {
+      font-weight: 700;
+      text-transform: capitalize;
+    }
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 6px;
+    }
+    .weekday {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-align: center;
+      text-transform: uppercase;
+    }
+    .day {
+      min-height: 74px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #ffffff;
+      padding: 7px;
+      display: grid;
+      align-content: start;
+      gap: 4px;
+      text-align: left;
+    }
+    .day.empty {
+      background: transparent;
+      border-color: transparent;
+    }
+    .day.closed {
+      background: #fee2e2;
+      border-color: #fecaca;
+    }
+    .day.today {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+    .day-number {
+      font-weight: 700;
+    }
+    .day-meta {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.25;
+    }
+    .day.closed .day-meta {
+      color: #991b1b;
+      font-weight: 700;
+    }
     @media (max-width: 800px) {
       .grid { grid-template-columns: 1fr; }
       table { font-size: 13px; }
@@ -300,6 +399,20 @@ function pageHtml() {
       .rack-controls {
         display: grid;
         grid-template-columns: 1fr;
+      }
+      .date-controls {
+        grid-template-columns: 1fr;
+      }
+      .calendar-grid {
+        gap: 4px;
+      }
+      .day {
+        min-height: 58px;
+        padding: 5px;
+      }
+      .weekday,
+      .day-meta {
+        font-size: 11px;
       }
       input,
       button {
@@ -350,6 +463,34 @@ function pageHtml() {
     <section class="panel">
       <div class="toolbar">
         <div>
+          <strong>Calendario de disponibilidad</strong>
+          <div class="muted">Cierra hoy, un dia especifico o un rango completo para que el bot deje de vender esas fechas.</div>
+        </div>
+        <button class="primary" onclick="closeToday()">Cerrar hoy</button>
+      </div>
+      <div class="date-controls">
+        <label>
+          Desde
+          <input id="closeStart" type="date">
+        </label>
+        <label>
+          Hasta
+          <input id="closeEnd" type="date">
+        </label>
+        <button class="primary" onclick="closeRange()">Cerrar rango</button>
+        <button onclick="openSelectedDate()">Abrir fecha inicial</button>
+      </div>
+      <div class="calendar-head">
+        <button onclick="changeCalendarMonth(-1)">Anterior</button>
+        <div id="calendarTitle" class="calendar-title"></div>
+        <button onclick="changeCalendarMonth(1)">Siguiente</button>
+      </div>
+      <div id="calendar" class="calendar-grid"></div>
+    </section>
+
+    <section class="panel">
+      <div class="toolbar">
+        <div>
           <strong>Lector de rack por foto</strong>
           <div class="muted">Sube una foto del rack. El dashboard usa Tesseract OCR local para leer habitaciones disponibles y suites.</div>
         </div>
@@ -378,9 +519,19 @@ function pageHtml() {
     </section>
   </main>
   <script>
+    let dashboardData = null;
+    let calendarDate = new Date();
+
     async function loadDashboard() {
       const response = await fetch('/api/summary');
       const data = await response.json();
+      dashboardData = data;
+
+      if (!closeStart.value) {
+        closeStart.value = data.today;
+        closeEnd.value = data.today;
+        calendarDate = isoToDate(data.today);
+      }
 
       activeCount.textContent = data.totals.active;
       canceledCount.textContent = data.totals.canceled;
@@ -389,6 +540,7 @@ function pageHtml() {
 
       occupancy.innerHTML = renderOccupancy(data.occupancy);
       reservations.innerHTML = renderReservations(data.reservations);
+      renderCalendar();
     }
 
     function renderOccupancy(rows) {
@@ -449,6 +601,135 @@ function pageHtml() {
 
       folioInput.value = '';
       await loadDashboard();
+    }
+
+    async function closeToday() {
+      if (!dashboardData) return;
+
+      closeStart.value = dashboardData.today;
+      closeEnd.value = dashboardData.today;
+      await closeRange();
+    }
+
+    async function closeRange() {
+      const start = closeStart.value;
+      const end = closeEnd.value || start;
+
+      if (!start) {
+        alert('Selecciona la fecha inicial.');
+        return;
+      }
+
+      const response = await fetch('/api/close-dates', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          start,
+          end
+        })
+      });
+      const data = await response.json();
+
+      if (!data.ok) {
+        alert(data.error || 'No se pudo cerrar la fecha.');
+        return;
+      }
+
+      await loadDashboard();
+    }
+
+    async function openSelectedDate() {
+      const date = closeStart.value;
+
+      if (!date) {
+        alert('Selecciona la fecha que deseas abrir.');
+        return;
+      }
+
+      const response = await fetch('/api/open-date', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          date
+        })
+      });
+      const data = await response.json();
+
+      if (!data.ok) {
+        alert(data.error || 'No se pudo abrir la fecha.');
+        return;
+      }
+
+      await loadDashboard();
+    }
+
+    function changeCalendarMonth(direction) {
+      calendarDate = new Date(
+        calendarDate.getFullYear(),
+        calendarDate.getMonth() + direction,
+        1
+      );
+      renderCalendar();
+    }
+
+    function renderCalendar() {
+      if (!dashboardData) return;
+
+      const year = calendarDate.getFullYear();
+      const month = calendarDate.getMonth();
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      const startOffset = firstDay.getDay();
+      const closed = new Set(dashboardData.closedDates);
+      const occupancyByDate = Object.fromEntries(
+        dashboardData.occupancy.map(row => [
+          row.date,
+          row
+        ])
+      );
+      const todayDisplay = isoToDisplay(dashboardData.today);
+
+      calendarTitle.textContent = firstDay.toLocaleDateString('es-MX', {
+        month: 'long',
+        year: 'numeric'
+      });
+
+      const weekdays = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
+      const cells = weekdays.map(day => '<div class="weekday">' + day + '</div>');
+
+      for (let index = 0; index < startOffset; index++) {
+        cells.push('<div class="day empty"></div>');
+      }
+
+      for (let day = 1; day <= lastDay.getDate(); day++) {
+        const date = new Date(year, month, day);
+        const display = dateToDisplay(date);
+        const iso = dateToIso(date);
+        const row = occupancyByDate[display] || { King: 0, Doble: 0, limits: dashboardData.limits };
+        const isClosed = closed.has(display);
+        const className = 'day' + (isClosed ? ' closed' : '') + (display === todayDisplay ? ' today' : '');
+        const meta = isClosed
+          ? 'Cerrado'
+          : 'K ' + row.King + '/' + row.limits.King + '<br>D ' + row.Doble + '/' + row.limits.Doble;
+
+        cells.push(
+          '<button class="' + className + '" onclick="selectCalendarDate(\\'' + iso + '\\')">' +
+            '<span class="day-number">' + day + '</span>' +
+            '<span class="day-meta">' + meta + '</span>' +
+          '</button>'
+        );
+      }
+
+      calendar.innerHTML = cells.join('');
+    }
+
+    function selectCalendarDate(isoDate) {
+      closeStart.value = isoDate;
+      closeEnd.value = isoDate;
     }
 
     async function analyzeRack() {
@@ -519,6 +800,27 @@ function pageHtml() {
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
+    }
+
+    function isoToDate(value) {
+      const parts = value.split('-').map(Number);
+      return new Date(parts[0], parts[1] - 1, parts[2]);
+    }
+
+    function isoToDisplay(value) {
+      return dateToDisplay(isoToDate(value));
+    }
+
+    function dateToIso(date) {
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return date.getFullYear() + '-' + month + '-' + day;
+    }
+
+    function dateToDisplay(date) {
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      return day + '/' + month + '/' + date.getFullYear();
     }
 
     function escapeHtml(value) {
@@ -630,6 +932,65 @@ const server =
         sendJson(res, 400, {
           ok: false,
           error: "Solicitud invalida"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/close-dates"
+    ) {
+      try {
+        const body =
+          await readBody(req);
+
+        const closedDates =
+          closeDateRange({
+            start:
+              body.start,
+            end:
+              body.end || body.start
+          });
+
+        sendJson(res, 200, {
+          ok: true,
+          closedDates
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok: false,
+          error:
+            error.message || "No se pudo cerrar la fecha"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/open-date"
+    ) {
+      try {
+        const body =
+          await readBody(req);
+
+        const closedDates =
+          openDate(body.date);
+
+        sendJson(res, 200, {
+          ok: true,
+          closedDates
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok: false,
+          error:
+            error.message || "No se pudo abrir la fecha"
         });
       }
 

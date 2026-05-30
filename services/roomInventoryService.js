@@ -1,5 +1,8 @@
 const fs = require("fs");
 const path = require("path");
+const {
+  isClosedDisplayDate
+} = require("./closedDatesService");
 
 const DATA_FILE =
   path.join(
@@ -167,6 +170,8 @@ function checkRoomAvailability({
 
   const fullDates =
     dates.filter(date =>
+      isClosedDisplayDate(date)
+      ||
       countRoomsForDate({
         reservations,
         habitacion,
@@ -179,6 +184,8 @@ function checkRoomAvailability({
       fullDates.length === 0,
     dates,
     fullDates,
+    closedDates:
+      fullDates.filter(isClosedDisplayDate),
     limit
   };
 }

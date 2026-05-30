@@ -45,6 +45,7 @@ jobs:
           --exclude=node_modules \
           --exclude=auth \
           --exclude=data/reservas.json \
+          --exclude=data/closedDates.json \
           --exclude=logs \
           ./ jose@48.202.58.124:/home/jose/bot2/
 
