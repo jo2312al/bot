@@ -437,7 +437,7 @@ function pageHtml() {
       const data = await response.json();
 
       rackResult.value = data.ok
-        ? data.message
+        ? data.message + (data.ocrPreview ? '\\n\\n--- OCR detectado ---\\n' + data.ocrPreview : '')
         : data.error || 'No se pudo analizar el rack.';
     }
 

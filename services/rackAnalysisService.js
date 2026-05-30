@@ -67,7 +67,7 @@ function extensionFromMime(mimeType) {
   return ".jpg";
 }
 
-function runTesseract(imagePath) {
+function runTesseract(imagePath, options = []) {
   return new Promise((resolve, reject) => {
     execFile(
       TESSERACT_COMMAND,
@@ -76,8 +76,7 @@ function runTesseract(imagePath) {
         "stdout",
         "-l",
         "eng",
-        "--psm",
-        "6"
+        ...options
       ],
       {
         windowsHide: true,
@@ -101,7 +100,155 @@ function runTesseract(imagePath) {
   });
 }
 
-function parseRackText(text) {
+async function runTesseractPasses(imagePath) {
+  const passes = [
+    [
+      "--psm",
+      "6",
+      "-c",
+      "preserve_interword_spaces=1"
+    ],
+    [
+      "--psm",
+      "11",
+      "-c",
+      "preserve_interword_spaces=1"
+    ],
+    [
+      "--psm",
+      "12",
+      "-c",
+      "preserve_interword_spaces=1"
+    ]
+  ];
+
+  const outputs = [];
+  let firstError = null;
+
+  for (const pass of passes) {
+    try {
+      outputs.push(
+        await runTesseract(
+          imagePath,
+          pass
+        )
+      );
+    } catch (error) {
+      firstError =
+        firstError || error;
+    }
+  }
+
+  if (!outputs.length && firstError) {
+    throw firstError;
+  }
+
+  return outputs.join("\n");
+}
+
+function normalizeOcrToken(value) {
+  return String(value || "")
+    .toUpperCase()
+    .replace(/[()[\]{}*#|:;,.]/g, "")
+    .replace(/0S\b/g, "OS")
+    .replace(/\bV1\b/g, "VL")
+    .replace(/\bVI\b/g, "VL")
+    .replace(/\bVLJ\b/g, "VL")
+    .replace(/\bVLI\b/g, "VL")
+    .replace(/\bBL0\b/g, "BLO")
+    .replace(/\bD0BL\b/g, "DOBL")
+    .replace(/\bD0BLE\b/g, "DOBLE")
+    .trim();
+}
+
+function getRackTokens(text) {
+  return String(text || "")
+    .replace(/\r/g, "\n")
+    .split(/[\s]+/)
+    .map(normalizeOcrToken)
+    .filter(Boolean);
+}
+
+function normalizeRoomCandidate(token) {
+  const cleaned =
+    String(token || "")
+      .replace(/[^\d]/g, "");
+
+  if (/^[1-4]\d{2}$/.test(cleaned)) {
+    return cleaned;
+  }
+
+  return null;
+}
+
+function normalizeTypeToken(token) {
+  const clean =
+    normalizeOcrToken(token);
+
+  if (clean.includes("KING") || clean === "KNG") return "KING";
+  if (clean.includes("DOBL") || clean.includes("DOBLE") || clean === "DBL") return "DOBL";
+
+  return "";
+}
+
+function parseRackTextBySequence(text) {
+  const tokens =
+    getRackTokens(text);
+
+  const roomsByNumber =
+    new Map();
+
+  for (let index = 0; index < tokens.length; index++) {
+    const room =
+      normalizeRoomCandidate(tokens[index]);
+
+    if (!room) {
+      continue;
+    }
+
+    let status = "";
+    let type = "";
+
+    for (
+      let offset = 1;
+      offset <= 5 && index + offset < tokens.length;
+      offset++
+    ) {
+      const candidate =
+        normalizeOcrToken(tokens[index + offset]);
+
+      if (!status && RACK_STATUSES[candidate]) {
+        status = candidate;
+        continue;
+      }
+
+      const typeCandidate =
+        normalizeTypeToken(candidate);
+
+      if (!type && typeCandidate) {
+        type = typeCandidate;
+      }
+
+      if (status && type) {
+        break;
+      }
+    }
+
+    if (status) {
+      roomsByNumber.set(room, {
+        room,
+        status,
+        type
+      });
+    }
+  }
+
+  return Array.from(
+    roomsByNumber.values()
+  );
+}
+
+function parseRackTextByRegex(text) {
   const normalized =
     String(text || "")
       .replace(/\r/g, "\n")
@@ -123,14 +270,14 @@ function parseRackText(text) {
       match[1];
 
     const status =
-      normalizeStatus(match[2]);
+      normalizeOcrToken(match[2]);
 
     if (!RACK_STATUSES[status]) {
       continue;
     }
 
     const type =
-      match[3] || "";
+      normalizeTypeToken(match[3] || "");
 
     roomsByNumber.set(room, {
       room,
@@ -141,6 +288,46 @@ function parseRackText(text) {
 
   return Array.from(
     roomsByNumber.values()
+  );
+}
+
+function mergeRackEntries(...entryLists) {
+  const roomsByNumber =
+    new Map();
+
+  entryLists
+    .flat()
+    .forEach(entry => {
+      if (!entry || !entry.room || !entry.status) return;
+
+      const previous =
+        roomsByNumber.get(entry.room);
+
+      if (
+        !previous
+        ||
+        (
+          previous.type === ""
+          &&
+          entry.type
+        )
+      ) {
+        roomsByNumber.set(
+          entry.room,
+          entry
+        );
+      }
+    });
+
+  return Array.from(
+    roomsByNumber.values()
+  );
+}
+
+function parseRackText(text) {
+  return mergeRackEntries(
+    parseRackTextByRegex(text),
+    parseRackTextBySequence(text)
   );
 }
 
@@ -284,7 +471,7 @@ async function analyzeRackImage({
 
   try {
     const text =
-      await runTesseract(imagePath);
+      await runTesseractPasses(imagePath);
 
     const rooms =
       parseRackText(text);
@@ -298,7 +485,12 @@ async function analyzeRackImage({
         text,
       summary,
       message:
-        formatRackSummary(summary)
+        formatRackSummary(summary),
+      ocrPreview:
+        text
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 1200)
     };
   } catch (error) {
     return {
@@ -320,5 +512,6 @@ module.exports = {
   summarizeRack,
   formatRackSummary,
   parseRackText,
+  parseRackTextBySequence,
   isSuite
 };
