@@ -111,6 +111,15 @@ const MENU_ALIASES = {
     "decorada",
     "decoracion",
     "san valentin"
+  ],
+  "13": [
+    "13",
+    "agente",
+    "persona",
+    "humano",
+    "atencion humana",
+    "atencion con agente",
+    "asesor humano"
   ]
 };
 

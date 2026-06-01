@@ -105,7 +105,7 @@ async function sendTransferImage({ sock, from }) {
 
   if (!transferImage) {
     return sock.sendMessage(from, {
-      text: "Por el momento no encuentro la imagen de datos de transferencia. Favor de solicitarla al 9932054701."
+      text: "Por el momento no encuentro la imagen de datos de transferencia. Favor de solicitarla al 9934684830."
     });
   }
 

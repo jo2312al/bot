@@ -6,7 +6,7 @@ const HOTEL_NAME =
   "Hotel Villa Margaritas";
 
 const CALL_CENTER =
-  "9932054701";
+  "9934684830";
 
 const ADDRESS =
   "Andrés Sánchez Magallanes 910 Col Centro";

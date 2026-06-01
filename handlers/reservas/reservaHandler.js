@@ -379,7 +379,7 @@ menu`;
 
     return send(
 
-      "Por el momento no encuentro la imagen de datos de transferencia. Favor de solicitarla al 9932054701."
+      "Por el momento no encuentro la imagen de datos de transferencia. Favor de solicitarla al 9934684830."
 
     );
 

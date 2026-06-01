@@ -15,12 +15,14 @@ async function handleCallcenter({
 
 }) {
 
-  return send(withMenuFooter(`📞 CALL CENTER
+  return send(withMenuFooter(`📞 AGENTE / CALL CENTER
+
+Si aplica tu solicitud, el bot dejara de contestarte y te atendera una persona.
 
 Horario:
 9 AM a 5 PM
 
-Teléfono:
+Telefono / WhatsApp:
 ${CALL_CENTER}`));
 
 }
