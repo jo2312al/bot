@@ -256,6 +256,26 @@ function openDate(value) {
   return next;
 }
 
+function openDateRange({
+  start,
+  end
+}) {
+  const datesToOpen =
+    new Set(
+      getDateRange(start, end)
+    );
+
+  const next =
+    readClosedDates()
+      .filter(closedDate =>
+        !datesToOpen.has(closedDate)
+      );
+
+  writeClosedDates(next);
+
+  return next;
+}
+
 function isClosedDisplayDate(value) {
   const date =
     normalizeDate(value);
@@ -301,6 +321,7 @@ module.exports = {
   isClosedDisplayDate,
   normalizeDate,
   openDate,
+  openDateRange,
   parseDisplayDate,
   readClosedDates
 };

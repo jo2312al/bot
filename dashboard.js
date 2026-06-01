@@ -11,6 +11,7 @@ const {
   closeDateRange,
   getMexicoTodayIso,
   openDate,
+  openDateRange,
   readClosedDates
 } = require("./services/closedDatesService");
 const {
@@ -383,6 +384,21 @@ function pageHtml() {
       color: #991b1b;
       font-weight: 700;
     }
+    .day.in-range {
+      background: #ecfdf5;
+      border-color: #99f6e4;
+    }
+    .day.selected {
+      background: #ccfbf1;
+      border-color: var(--accent);
+      box-shadow: inset 0 0 0 2px var(--accent);
+    }
+    .selection-summary {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 600;
+    }
     @media (max-width: 800px) {
       .grid { grid-template-columns: 1fr; }
       table { font-size: 13px; }
@@ -464,22 +480,23 @@ function pageHtml() {
       <div class="toolbar">
         <div>
           <strong>Calendario de disponibilidad</strong>
-          <div class="muted">Cierra hoy, un dia especifico o un rango completo para que el bot deje de vender esas fechas.</div>
+          <div class="muted">Da clic en una fecha de inicio y luego en una fecha final. Puedes cerrar o abrir todo el rango seleccionado.</div>
         </div>
         <button class="primary" onclick="closeToday()">Cerrar hoy</button>
       </div>
       <div class="date-controls">
         <label>
           Desde
-          <input id="closeStart" type="date">
+          <input id="closeStart" type="date" onchange="syncSelectionFromInputs()">
         </label>
         <label>
           Hasta
-          <input id="closeEnd" type="date">
+          <input id="closeEnd" type="date" onchange="syncSelectionFromInputs()">
         </label>
         <button class="primary" onclick="closeRange()">Cerrar rango</button>
-        <button onclick="openSelectedDate()">Abrir fecha inicial</button>
+        <button onclick="openRange()">Abrir rango</button>
       </div>
+      <div id="selectionSummary" class="selection-summary"></div>
       <div class="calendar-head">
         <button onclick="changeCalendarMonth(-1)">Anterior</button>
         <div id="calendarTitle" class="calendar-title"></div>
@@ -521,6 +538,8 @@ function pageHtml() {
   <script>
     let dashboardData = null;
     let calendarDate = new Date();
+    let selectedStart = "";
+    let selectedEnd = "";
 
     async function loadDashboard() {
       const response = await fetch('/api/summary');
@@ -530,6 +549,8 @@ function pageHtml() {
       if (!closeStart.value) {
         closeStart.value = data.today;
         closeEnd.value = data.today;
+        selectedStart = data.today;
+        selectedEnd = data.today;
         calendarDate = isoToDate(data.today);
       }
 
@@ -540,6 +561,7 @@ function pageHtml() {
 
       occupancy.innerHTML = renderOccupancy(data.occupancy);
       reservations.innerHTML = renderReservations(data.reservations);
+      updateSelectionSummary();
       renderCalendar();
     }
 
@@ -612,6 +634,8 @@ function pageHtml() {
     }
 
     async function closeRange() {
+      syncSelectionFromInputs();
+
       const start = closeStart.value;
       const end = closeEnd.value || start;
 
@@ -640,27 +664,31 @@ function pageHtml() {
       await loadDashboard();
     }
 
-    async function openSelectedDate() {
-      const date = closeStart.value;
+    async function openRange() {
+      syncSelectionFromInputs();
 
-      if (!date) {
-        alert('Selecciona la fecha que deseas abrir.');
+      const start = closeStart.value;
+      const end = closeEnd.value || start;
+
+      if (!start) {
+        alert('Selecciona la fecha inicial.');
         return;
       }
 
-      const response = await fetch('/api/open-date', {
+      const response = await fetch('/api/open-dates', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          date
+          start,
+          end
         })
       });
       const data = await response.json();
 
       if (!data.ok) {
-        alert(data.error || 'No se pudo abrir la fecha.');
+        alert(data.error || 'No se pudo abrir el rango.');
         return;
       }
 
@@ -673,6 +701,28 @@ function pageHtml() {
         calendarDate.getMonth() + direction,
         1
       );
+      renderCalendar();
+    }
+
+    function syncSelectionFromInputs() {
+      selectedStart = closeStart.value;
+      selectedEnd = closeEnd.value || selectedStart;
+
+      if (
+        selectedStart
+        &&
+        selectedEnd
+        &&
+        selectedEnd < selectedStart
+      ) {
+        const previousStart = selectedStart;
+        selectedStart = selectedEnd;
+        selectedEnd = previousStart;
+        closeStart.value = selectedStart;
+        closeEnd.value = selectedEnd;
+      }
+
+      updateSelectionSummary();
       renderCalendar();
     }
 
@@ -711,7 +761,13 @@ function pageHtml() {
         const iso = dateToIso(date);
         const row = occupancyByDate[display] || { King: 0, Doble: 0, limits: dashboardData.limits };
         const isClosed = closed.has(display);
-        const className = 'day' + (isClosed ? ' closed' : '') + (display === todayDisplay ? ' today' : '');
+        const isSelected = iso === closeStart.value || iso === closeEnd.value;
+        const isInRange = isIsoWithinSelection(iso);
+        const className = 'day'
+          + (isClosed ? ' closed' : '')
+          + (isInRange ? ' in-range' : '')
+          + (isSelected ? ' selected' : '')
+          + (display === todayDisplay ? ' today' : '');
         const meta = isClosed
           ? 'Cerrado'
           : 'K ' + row.King + '/' + row.limits.King + '<br>D ' + row.Doble + '/' + row.limits.Doble;
@@ -728,8 +784,59 @@ function pageHtml() {
     }
 
     function selectCalendarDate(isoDate) {
-      closeStart.value = isoDate;
-      closeEnd.value = isoDate;
+      if (
+        !selectedStart
+        ||
+        (
+          selectedStart
+          &&
+          selectedEnd
+        )
+      ) {
+        selectedStart = isoDate;
+        selectedEnd = "";
+        closeStart.value = isoDate;
+        closeEnd.value = isoDate;
+      } else {
+        selectedEnd = isoDate;
+
+        if (selectedEnd < selectedStart) {
+          const previousStart = selectedStart;
+          selectedStart = selectedEnd;
+          selectedEnd = previousStart;
+        }
+
+        closeStart.value = selectedStart;
+        closeEnd.value = selectedEnd;
+      }
+
+      updateSelectionSummary();
+      renderCalendar();
+    }
+
+    function isIsoWithinSelection(isoDate) {
+      const start = closeStart.value;
+      const end = closeEnd.value || start;
+
+      if (!start) {
+        return false;
+      }
+
+      return isoDate >= start && isoDate <= end;
+    }
+
+    function updateSelectionSummary() {
+      const start = closeStart.value;
+      const end = closeEnd.value || start;
+
+      if (!start) {
+        selectionSummary.textContent = 'Selecciona una fecha en el calendario.';
+        return;
+      }
+
+      selectionSummary.textContent = start === end
+        ? 'Seleccionado: ' + isoToDisplay(start)
+        : 'Rango seleccionado: ' + isoToDisplay(start) + ' al ' + isoToDisplay(end);
     }
 
     async function analyzeRack() {
@@ -991,6 +1098,38 @@ const server =
           ok: false,
           error:
             error.message || "No se pudo abrir la fecha"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/open-dates"
+    ) {
+      try {
+        const body =
+          await readBody(req);
+
+        const closedDates =
+          openDateRange({
+            start:
+              body.start,
+            end:
+              body.end || body.start
+          });
+
+        sendJson(res, 200, {
+          ok: true,
+          closedDates
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok: false,
+          error:
+            error.message || "No se pudo abrir el rango"
         });
       }
 
