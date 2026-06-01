@@ -60,7 +60,9 @@ async function handleMessage({
 
       history: [],
 
-      lastMenu: null
+      lastMenu: null,
+
+      agentMode: false
 
     };
 
@@ -68,6 +70,14 @@ async function handleMessage({
 
   const state =
     userState[from];
+
+  if (
+    state.agentMode
+  ) {
+
+    return;
+
+  }
 
   // ==========================================
   // SEND

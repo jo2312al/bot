@@ -201,7 +201,7 @@ const routes = {
   },
 
   "13": {
-    module: "callcenter",
+    module: "agente",
     handler: handleCallcenter
   }
 
