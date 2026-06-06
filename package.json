@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "check": "node scripts/check-js.js",
-    "dashboard": "node dashboard.js"
+    "dashboard": "node dashboard.js",
+    "analyze:users": "node scripts/analyze-user-logs.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.16",

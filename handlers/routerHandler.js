@@ -260,7 +260,16 @@ menu`);
   // EJECUTAR HANDLER
   // ========================================
 
-  log({usuario: from, modulo: state.module, accion: text});
+  log({
+    usuario: from,
+    modulo: state.module,
+    accion: text,
+    paso:
+      state.step === null
+        ? "inicio"
+        : state.step
+  });
+
   return currentRoute
     .handler({
 

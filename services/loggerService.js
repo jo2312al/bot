@@ -11,9 +11,32 @@ function log(data) {
     line = `[${time}] ${data}\n`;
     console.log(data);
   } else if (typeof data === "object" && data !== null) {
-    const { usuario, modulo, accion } = data;
-    line = `[${time}] User: ${usuario || 'Unknown'} | Modulo: ${modulo || 'Unknown'} | Action: ${accion || 'Unknown'}\n`;
-    console.log(`[LOG] User: ${usuario} | Mod: ${modulo} | Act: ${accion}`);
+    const {
+      usuario,
+      modulo,
+      accion,
+      paso,
+      estado
+    } = data;
+
+    const details = [
+      paso !== undefined
+        ? `Paso: ${paso}`
+        : null,
+      estado
+        ? `Estado: ${estado}`
+        : null
+    ]
+      .filter(Boolean)
+      .join(" | ");
+
+    const suffix =
+      details
+        ? ` | ${details}`
+        : "";
+
+    line = `[${time}] User: ${usuario || 'Unknown'} | Modulo: ${modulo || 'Unknown'} | Action: ${accion || 'Unknown'}${suffix}\n`;
+    console.log(`[LOG] User: ${usuario} | Mod: ${modulo} | Act: ${accion}${suffix}`);
   } else {
     line = `[${time}] ${JSON.stringify(data)}\n`;
     console.log(data);
