@@ -1,3 +1,16 @@
+const {
+  formatReservationDate
+} = require("../../utils/dateUtils");
+
+function firstNumber(value) {
+
+  return parseInt(
+    String(value).match(/\d+/)?.[0],
+    10
+  );
+
+}
+
 module.exports = [
   {
     key: "tipo_evento",
@@ -15,12 +28,13 @@ Desayuno, curso o reunion`,
     key: "fecha",
     question: `Fecha estimada
 
-Formato:
-dd/mm
-
-Ejemplo:
-25/12`,
-    validator: "fecha"
+Puedes escribir:
+25/12
+25/12/26
+25 de diciembre`,
+    validator: "fecha",
+    transform: value =>
+      formatReservationDate(value)
   },
   {
     key: "personas",
@@ -28,9 +42,12 @@ Ejemplo:
 
 Nuestros salones son para maximo 15 o 50 personas.
 
-Ejemplo:
-15`,
-    validator: "numero"
+Ejemplos:
+15
+serian 20 personas`,
+    validator: "numero",
+    transform: value =>
+      firstNumber(value)
   },
   {
     key: "telefono",
@@ -38,6 +55,9 @@ Ejemplo:
 
 Ejemplo:
 9931234567`,
-    validator: "telefono"
+    validator: "telefono",
+    transform: value =>
+      String(value)
+        .replace(/\D/g, "")
   }
 ];

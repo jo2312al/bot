@@ -13,6 +13,17 @@ function firstNumber(value) {
 
 }
 
+function normalize(value) {
+
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+}
+
 const validators = {
 
   nombre(value) {
@@ -69,10 +80,21 @@ const validators = {
 
   habitacion(value) {
 
+    const limpio =
+      normalize(value);
+
     return (
-      value === "1"
+      limpio === "1"
       ||
-      value === "2"
+      limpio === "2"
+      ||
+      limpio.includes("king")
+      ||
+      limpio.includes("doble")
+      ||
+      limpio.includes("matrimonial")
+      ||
+      limpio.includes("suite")
     );
 
   },

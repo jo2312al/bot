@@ -13,6 +13,11 @@ async function handleCotizacion({ input, text, state, send, sock, from }) {
   }
 
   const currentStep = flow[state.step];
+
+  if (input === "") {
+    return send(withMenuFooter(currentStep.question));
+  }
+
   const validator = validators[currentStep.validator];
 
   if (!validator(input)) {

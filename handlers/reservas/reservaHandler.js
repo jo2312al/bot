@@ -131,6 +131,18 @@ ${flow[0].question}`)
   const currentStep =
     flow[state.step];
 
+  if (input === "") {
+
+    return send(
+
+      withMenuFooter(
+        currentStep.question
+      )
+
+    );
+
+  }
+
   const validator =
     validators[
       currentStep.validator

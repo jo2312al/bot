@@ -17,17 +17,55 @@ function firstNumber(value) {
 
 }
 
+function normalize(value) {
+
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+}
+
+function parseRoomType(value) {
+
+  const limpio =
+    normalize(value);
+
+  if (
+    limpio === "1"
+    ||
+    limpio.includes("king")
+  ) {
+
+    return "King";
+
+  }
+
+  if (
+    limpio.includes("suite")
+  ) {
+
+    return "Suite";
+
+  }
+
+  return "Doble";
+
+}
+
 module.exports = [
 
   {
 
     key: "nombre",
 
-    question: `📝 Paso 1 de 9: Nombre completo
+    question: `Paso 1 de 9: Nombre completo
 
-Por favor escribe el nombre y apellido de la persona que quedara registrada en la reservacion.
+Escribe nombre y apellido de quien quedara registrado.
 
-✅ Ejemplo:
+Ejemplo:
 Juan Perez`,
 
     validator: "nombre"
@@ -38,15 +76,16 @@ Juan Perez`,
 
     key: "adultos",
 
-    question: `🧑 Paso 2 de 9: Adultos
+    question: `Paso 2 de 9: Adultos
 
-¿Cuantos adultos se hospedaran en la habitacion?
+Cuantos adultos se hospedaran?
 
-✅ Responde solo con numero.
-Ejemplo:
+Puedes responder con numero o frase.
+Ejemplos:
 2
+somos 2 adultos
 
-ℹ️ Maximo 4 personas por habitacion, contando adultos y niños.`,
+Maximo 4 personas por habitacion, contando ninos.`,
 
     validator: "personas",
 
@@ -81,25 +120,28 @@ El maximo es de 4 personas por habitacion, contando adultos y niños.`,
 
     key: "habitacion",
 
-    question: `🛏️ Paso 4 de 9: Tipo de habitacion
+    question: `Paso 4 de 9: Tipo de habitacion
 
-Elige una opcion:
+Elige una opcion o escribe el tipo:
 
-1️⃣ King
-Una cama king. Sujeta a disponibilidad.
+1. King
+Una cama king.
 
-2️⃣ Doble
+2. Doble
 Dos camas matrimoniales.
 
-✅ Responde solo:
-1 o 2`,
+3. Suite
+Sujeta a disponibilidad.
+
+Ejemplos:
+king
+doble
+mini suite`,
 
     validator: "habitacion",
 
     transform: value =>
-      value === "1"
-        ? "King"
-        : "Doble"
+      parseRoomType(value)
 
   },
 

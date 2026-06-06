@@ -23,6 +23,72 @@ const {
 // HANDLER
 // ==========================================
 
+function getCurrentQuestion(state) {
+
+  if (state.step === 0) {
+
+    return `ðŸ“ QUEJAS
+
+Selecciona tipo de reporte:
+
+1ï¸âƒ£ FacturaciÃ³n
+
+2ï¸âƒ£ Servicio`;
+
+  }
+
+  if (state.step === 1) {
+
+    return `Selecciona area:
+
+1. Recepcion
+
+2. Restaurant`;
+
+  }
+
+  if (state.step === 2) {
+
+    return "Escribe tu nombre completo";
+
+  }
+
+  if (state.step === 3) {
+
+    if (state.data.tipo === "facturacion") {
+
+      return state.data.area === "recepcion"
+        ? "Numero habitacion"
+        : "Fecha de consumo";
+
+    }
+
+    return state.data.area === "recepcion"
+      ? "Numero habitacion"
+      : "Turno de llegada";
+
+  }
+
+  if (state.step === 4) {
+
+    if (state.data.tipo === "facturacion") {
+
+      return state.data.area === "recepcion"
+        ? "Fecha check in"
+        : "Numero telefono";
+
+    }
+
+    return state.data.area === "recepcion"
+      ? "Fecha ingreso"
+      : "Fecha consumo";
+
+  }
+
+  return "Observaciones";
+
+}
+
 async function handleQuejas({
 
   input,
@@ -56,6 +122,18 @@ Selecciona tipo de reporte:
 1️⃣ Facturación
 
 2️⃣ Servicio`)
+
+    );
+
+  }
+
+  if (input === "") {
+
+    return send(
+
+      withMenuFooter(
+        getCurrentQuestion(state)
+      )
 
     );
 
