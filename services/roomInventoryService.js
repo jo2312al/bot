@@ -12,8 +12,7 @@ const DATA_FILE =
 
 const ROOM_LIMITS = {
   King: 5,
-  Doble: 20,
-  Suite: 12
+  Doble: 20
 };
 
 function getRoomLimits() {

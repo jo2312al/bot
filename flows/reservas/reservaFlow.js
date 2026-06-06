@@ -130,13 +130,9 @@ Una cama king.
 2. Doble
 Dos camas matrimoniales.
 
-3. Suite
-Sujeta a disponibilidad.
-
 Ejemplos:
 king
-doble
-mini suite`,
+doble`,
 
     validator: "habitacion",
 

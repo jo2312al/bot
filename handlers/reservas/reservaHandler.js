@@ -171,6 +171,25 @@ ${currentStep.question}`)
       : text;
 
   if (
+    currentStep.key === "habitacion"
+    &&
+    transformedValue === "Suite"
+  ) {
+
+    return send(
+
+      withMenuFooter(`Por el momento no tenemos inventario de suites disponible para reservar por este bot.
+
+Puedes continuar con una de estas opciones:
+
+1. King
+2. Doble`)
+
+    );
+
+  }
+
+  if (
     currentStep.key === "ninos"
     &&
     state.data.adultos + transformedValue > 4
