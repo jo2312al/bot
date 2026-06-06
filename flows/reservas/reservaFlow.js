@@ -28,6 +28,61 @@ function normalize(value) {
 
 }
 
+function numberBefore(text, pattern) {
+
+  const match =
+    text.match(pattern);
+
+  return match
+    ? parseInt(match[1], 10)
+    : null;
+
+}
+
+function parseGuests(value) {
+
+  const limpio =
+    normalize(value);
+
+  const adultos =
+    numberBefore(
+      limpio,
+      /(\d+)\s*(adulto|adultos|persona|personas|huesped|huespedes)/
+    );
+
+  const ninos =
+    numberBefore(
+      limpio,
+      /(\d+)\s*(nino|ninos|menor|menores)/
+    );
+
+  if (
+    adultos !== null
+    ||
+    ninos !== null
+  ) {
+
+    return {
+      adultos:
+        adultos !== null
+          ? adultos
+          : 0,
+      ninos:
+        ninos !== null
+          ? ninos
+          : 0
+    };
+
+  }
+
+  return {
+    adultos:
+      firstNumber(value),
+    ninos: 0
+  };
+
+}
+
 function parseRoomType(value) {
 
   const limpio =
@@ -59,122 +114,13 @@ module.exports = [
 
   {
 
-    key: "nombre",
-
-    question: `Paso 1 de 9: Nombre completo
-
-Escribe nombre y apellido de quien quedara registrado.
-
-Ejemplo:
-Juan Perez`,
-
-    validator: "nombre"
-
-  },
-
-  {
-
-    key: "adultos",
-
-    question: `Paso 2 de 9: Adultos
-
-Cuantos adultos se hospedaran?
-
-Puedes responder con numero o frase.
-Ejemplos:
-2
-somos 2 adultos
-
-Maximo 4 personas por habitacion, contando ninos.`,
-
-    validator: "personas",
-
-    transform: value =>
-      firstNumber(value)
-
-  },
-
-  {
-
-    key: "ninos",
-
-    question: `🧒 Paso 3 de 9: Niños
-
-¿Cuantos niños se hospedaran?
-
-✅ Responde solo con numero.
-Ejemplo:
-0
-
-ℹ️ Si no hay niños, escribe 0.
-El maximo es de 4 personas por habitacion, contando adultos y niños.`,
-
-    validator: "ninos",
-
-    transform: value =>
-      firstNumber(value)
-
-  },
-
-  {
-
-    key: "habitacion",
-
-    question: `Paso 4 de 9: Tipo de habitacion
-
-Elige una opcion o escribe el tipo:
-
-1. King
-Una cama king.
-
-2. Doble
-Dos camas matrimoniales.
-
-Ejemplos:
-king
-doble`,
-
-    validator: "habitacion",
-
-    transform: value =>
-      parseRoomType(value)
-
-  },
-
-  {
-
-    key: "telefono",
-
-    question: `📞 Paso 5 de 9: Numero celular
-
-Escribe un numero de contacto a 10 digitos.
-
-✅ Ejemplo:
-9931234567`,
-
-    validator: "telefono",
-
-    transform: value =>
-      String(value)
-        .replace(/\D/g, "")
-
-  },
-
-  {
-
     key: "fecha",
 
-    question: `📅 Paso 6 de 9: Fecha de ingreso
+    question: `📅 Paso 1 de 6: Fecha de ingreso
 
-Indica la fecha en la que deseas llegar al hotel.
-
-Puedes escribirla de cualquiera de estas formas:
+Ejemplos:
 25/12
-25/12/26
-25 de diciembre
-25 diciembre 2026
-
-ℹ️ Despues te preguntare cuantas noches deseas reservar.`,
+25 de diciembre`,
 
     validator: "fecha",
 
@@ -187,13 +133,11 @@ Puedes escribirla de cualquiera de estas formas:
 
     key: "noches",
 
-    question: `🌙 Paso 7 de 9: Noches de hospedaje
+    question: `🌙 Paso 2 de 6: Numero de noches
 
-¿Cuantas noches deseas reservar?
-
-✅ Responde solo con numero.
-Ejemplo:
-1`,
+Ejemplos:
+1
+2 noches`,
 
     validator: "noches",
 
@@ -204,39 +148,57 @@ Ejemplo:
 
   {
 
-    key: "promocion",
+    key: "huespedes",
 
-    question: `🎟️ Paso 8 de 9: Tarifa promocional
+    question: `👥 Paso 3 de 6: Numero de huespedes
 
-Contamos con tarifa promocional de $650 por noche para:
+Ejemplos:
+2 adultos
+2 adultos y 1 nino
 
-• PEMEX
-• INAPAM
-• ADO
-• Centenario
+ℹ️ Maximo 4 personas por habitacion.`,
 
-La promocion solo sera valida presentando:
-• Credencial de PEMEX o INAPAM
-• Boleto de ADO o Centenario
-
-ℹ️ Aplica para 1 o 2 personas. A partir de la tercera persona se agregan $100 por persona adicional, con maximo 4 personas por habitacion.
-
-Por favor escribe cual opcion aplica:
-pemex
-inapam
-ado
-centenario
-
-Si no cuentas con promocion, escribe:
-no`,
-
-    validator: "promocion",
+    validator: "huespedes",
 
     transform: value =>
-      value
-        .trim()
-        .toLowerCase()
-        .replace(/^(ninguna|no tengo)$/, "no")
+      parseGuests(value)
+
+  },
+
+  {
+
+    key: "habitacion",
+
+    question: `🛏️ Paso 4 de 6: Tipo de habitacion
+
+1️⃣ King
+2️⃣ Doble
+
+Escriba 1, 2, king o doble.`,
+
+    validator: "habitacion",
+
+    transform: value =>
+      parseRoomType(value)
+
+  },
+
+  {
+
+    key: "telefono",
+
+    question: `📞 Paso 5 de 6: Numero de contacto
+
+Ingrese un telefono a 10 digitos.
+
+Ejemplo:
+9931234567`,
+
+    validator: "telefono",
+
+    transform: value =>
+      String(value)
+        .replace(/\D/g, "")
 
   },
 
@@ -244,16 +206,13 @@ no`,
 
     key: "hora",
 
-    question: `⏰ Paso 9 de 9: Hora estimada de llegada
+    question: `⏰ Paso 6 de 6: Hora estimada de llegada
 
-Indica aproximadamente a que hora llegaras.
-
-✅ Ejemplos:
+Ejemplos:
+4 pm
 10 am
-8 pm
-9pm
 
-ℹ️ Llegadas antes de la 1:00 PM tienen tarifa mañanera de +$200.`,
+ℹ️ Llegadas antes de la 1:00 PM generan tarifa mañanera.`,
 
     validator: "hora",
 

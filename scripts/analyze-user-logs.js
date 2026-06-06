@@ -15,18 +15,17 @@ const LOG_FILE =
 const MODULES = {
   reservas: {
     label: "Reservas",
-    completeAt: 10,
+    completeAt: 9,
     steps: [
       "selecciono reservas",
-      "nombre",
-      "adultos",
-      "ninos",
-      "habitacion",
-      "telefono",
       "fecha",
       "noches",
-      "promocion",
-      "hora"
+      "huespedes",
+      "habitacion",
+      "telefono",
+      "hora",
+      "confirmacion",
+      "nombre"
     ]
   },
   cotizaciones: {

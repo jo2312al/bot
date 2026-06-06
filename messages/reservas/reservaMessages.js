@@ -1,9 +1,10 @@
 // messages/reservaMessages.js
 
-function getPromocionLabel(data) {
-  return data.promocion && data.promocion !== "no"
-    ? data.promocion.toUpperCase()
-    : "No aplica";
+function formatMoney(value) {
+  return Number(value || 0)
+    .toLocaleString(
+      "es-MX"
+    );
 }
 
 function reservaConfirmada({
@@ -15,45 +16,29 @@ function reservaConfirmada({
   const requiereAnticipo =
     data.servicioEspecial === "Habitacion decorada";
 
-  const promocion =
-    getPromocionLabel(data);
+  const tarifaDetalle =
+    mensajeTarifa
+      ? `\n${mensajeTarifa}`
+      : "";
 
-  return `✅ RESERVA RECIBIDA
+  return `✅ Solicitud de reservacion registrada.
 
-Gracias, hemos recibido tu solicitud de reservacion con estos datos:
-
-👤 Nombre: ${data.nombre}
-
-🧑 Adultos: ${data.adultos}
-
-🧒 Niños: ${data.ninos}
-
-🛏️ Habitacion: ${data.habitacion}
-${data.servicioEspecial ? `🎈 Servicio especial: ${data.servicioEspecial}\n` : ""}
-📅 Fecha de ingreso: ${data.fecha}
-
+🎟️ Folio: #${folio}
+📝 Nombre: ${data.nombre}
+📅 Fecha: ${data.fecha}
 🌙 Noches: ${data.noches}
-
-🎟️ Promocion: ${promocion}
-
-⏰ Hora estimada de llegada: ${data.hora}
-
+👥 Huespedes: ${data.adultos} adulto(s), ${data.ninos} niño(s)
+🛏️ Habitacion: ${data.habitacion}
 📞 Telefono: ${data.telefono}
-
-💰 Total estimado: $${precio}
-${mensajeTarifa}
-
-🔢 Folio: #${folio}
-
+⏰ Llegada: ${data.hora}
+💰 Tarifa estimada: $${formatMoney(precio)}
+${tarifaDetalle}
 ${requiereAnticipo
-  ? `🤝 Para garantizar tu reservacion se requiere un anticipo por transferencia.
-Te enviaremos los datos de transferencia en imagen.
+  ? `
+🤝 Para garantizar la reservacion se requiere anticipo por transferencia.
 
-⚠️ Importante: si no recibimos el anticipo o comprobante dentro de 24 horas, la reservacion se cancela automaticamente.`
-  : `✅ Tu solicitud de reservacion fue enviada correctamente.
-
-💳 El pago puede realizarse con tarjeta o efectivo.
-🧾 El total incluye IVA.`}`;
+⚠️ Si no se recibe anticipo o comprobante dentro de 24 horas, la reservacion se cancela automaticamente.`
+  : ""}`;
 }
 
 function reservaGrupo({
@@ -65,33 +50,23 @@ function reservaGrupo({
   const requiereAnticipo =
     data.servicioEspecial === "Habitacion decorada";
 
-  const promocion =
-    getPromocionLabel(data);
+  const tarifaDetalle =
+    mensajeTarifa
+      ? `\n${mensajeTarifa}`
+      : "";
 
   return `${requiereAnticipo ? "🏨 NUEVA RESERVA PENDIENTE DE ANTICIPO" : "🏨 NUEVA RESERVA"}
 
-👤 ${data.nombre}
-
-🧑 Adultos: ${data.adultos}
-
-🧒 Niños: ${data.ninos}
-
-🛏️ ${data.habitacion}
-${data.servicioEspecial ? `🎈 Servicio especial: ${data.servicioEspecial}\n` : ""}
+🎟️ #${folio}
+📝 ${data.nombre}
 📅 ${data.fecha}
-
 🌙 Noches: ${data.noches}
-
-🎟️ Promocion: ${promocion}
-
+👥 Huespedes: ${data.adultos} adulto(s), ${data.ninos} niño(s)
+🛏️ ${data.habitacion}
+${data.servicioEspecial ? `🎈 Servicio especial: ${data.servicioEspecial}\n` : ""}📞 ${data.telefono}
 ⏰ ${data.hora}
-
-📞 ${data.telefono}
-
-💰 $${precio}
-${mensajeTarifa}
-
-🔢 #${folio}`;
+💰 $${formatMoney(precio)}
+${tarifaDetalle}`;
 }
 
 module.exports = {

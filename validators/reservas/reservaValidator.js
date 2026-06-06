@@ -24,6 +24,17 @@ function normalize(value) {
 
 }
 
+function numberBefore(text, pattern) {
+
+  const match =
+    text.match(pattern);
+
+  return match
+    ? parseInt(match[1], 10)
+    : null;
+
+}
+
 const validators = {
 
   nombre(value) {
@@ -74,6 +85,46 @@ const validators = {
       num >= 0
       &&
       num <= 4
+    );
+
+  },
+
+  huespedes(value) {
+
+    const limpio =
+      normalize(value);
+
+    const adultos =
+      numberBefore(
+        limpio,
+        /(\d+)\s*(adulto|adultos|persona|personas|huesped|huespedes)/
+      );
+
+    const ninos =
+      numberBefore(
+        limpio,
+        /(\d+)\s*(nino|ninos|menor|menores)/
+      );
+
+    const total =
+      adultos !== null
+      ||
+      ninos !== null
+        ? (adultos || 0) + (ninos || 0)
+        : firstNumber(value);
+
+    return (
+      (
+        adultos !== null
+        ||
+        ninos === null
+      )
+      &&
+      !isNaN(total)
+      &&
+      total >= 1
+      &&
+      total <= 4
     );
 
   },
