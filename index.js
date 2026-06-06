@@ -9,6 +9,12 @@ const {
 const pino =
   require("pino");
 
+const fs =
+  require("fs");
+
+const path =
+  require("path");
+
 const qrcode =
   require("qrcode-terminal");
 
@@ -40,6 +46,18 @@ const {
   "./services/rackAnalysisService"
 );
 
+let reconnectTimer =
+  null;
+
+let reconnectAttempts =
+  0;
+
+let isStarting =
+  false;
+
+let authResetDone =
+  false;
+
 // ==========================================
 // DELAY
 // ==========================================
@@ -53,7 +71,163 @@ function delay(ms) {
 
 }
 
+function getErrorMessage(error) {
+
+  return error?.stack || error?.message || String(error);
+
+}
+
+function shouldReconnect(statusCode) {
+
+  return ![
+    DisconnectReason.connectionReplaced,
+    440
+  ].includes(statusCode);
+
+}
+
+function resetAuthSession() {
+
+  if (authResetDone) {
+
+    return false;
+
+  }
+
+  const authDir =
+    path.join(
+      __dirname,
+      "auth"
+    );
+
+  if (
+    !fs.existsSync(authDir)
+  ) {
+
+    return false;
+
+  }
+
+  const backupDir =
+    path.join(
+      __dirname,
+      `auth-invalid-${Date.now()}`
+    );
+
+  fs.renameSync(
+    authDir,
+    backupDir
+  );
+
+  authResetDone =
+    true;
+
+  log({
+    usuario: "Sistema",
+    modulo: "Core",
+    accion: `Sesion WhatsApp 401 respaldada en ${path.basename(backupDir)}. Se generara un QR nuevo.`
+  });
+
+  return true;
+
+}
+
+function scheduleReconnect() {
+
+  if (reconnectTimer) {
+
+    return;
+
+  }
+
+  reconnectAttempts++;
+
+  const waitMs =
+    Math.min(
+      30000,
+      3000 * reconnectAttempts
+    );
+
+  log({
+    usuario: "Sistema",
+    modulo: "Core",
+    accion: `Reconectando en ${Math.round(waitMs / 1000)}s`
+  });
+
+  reconnectTimer =
+    setTimeout(() => {
+
+      reconnectTimer = null;
+
+      startBot().catch(err => {
+
+        isStarting = false;
+
+        log({
+          usuario: "Sistema",
+          modulo: "Error",
+          accion: getErrorMessage(err)
+        });
+
+        scheduleReconnect();
+
+      });
+
+    }, waitMs);
+
+}
+
+function extractMessageText(message = {}) {
+
+  const interactiveParams =
+    message
+      .interactiveResponseMessage
+      ?.nativeFlowResponseMessage
+      ?.paramsJson;
+
+  if (interactiveParams) {
+
+    try {
+
+      const parsed =
+        JSON.parse(interactiveParams);
+
+      return parsed.id || parsed.title || "";
+
+    } catch {
+
+      return "";
+
+    }
+
+  }
+
+  return (
+    message.conversation ||
+    message.extendedTextMessage?.text ||
+    message.imageMessage?.caption ||
+    message.videoMessage?.caption ||
+    message.documentMessage?.caption ||
+    message.buttonsResponseMessage?.selectedButtonId ||
+    message.buttonsResponseMessage?.selectedDisplayText ||
+    message.listResponseMessage?.singleSelectReply?.selectedRowId ||
+    message.listResponseMessage?.title ||
+    message.templateButtonReplyMessage?.selectedId ||
+    message.templateButtonReplyMessage?.selectedDisplayText ||
+    ""
+  );
+
+}
+
 async function startBot() {
+
+  if (isStarting) {
+
+    return;
+
+  }
+
+  isStarting = true;
 
   const {
     state,
@@ -86,6 +260,9 @@ async function startBot() {
       ]
 
     });
+
+  isStarting =
+    false;
 
   // ==========================================
   // DELAY GLOBAL MENSAJES
@@ -158,6 +335,9 @@ async function startBot() {
         "open"
       ) {
 
+        reconnectAttempts =
+          0;
+
         log({usuario: "Sistema", modulo: "Core", accion: "✅ BOT CONECTADO"});
 
       }
@@ -173,23 +353,54 @@ async function startBot() {
 
         log({usuario: "Sistema", modulo: "Core", accion: "❌ DESCONECTADO"});
 
-        const reconnect =
+        const statusCode =
 
           lastDisconnect
             ?.error
             ?.output
-            ?.statusCode
+            ?.statusCode;
 
-          !==
+        const detail =
 
-          DisconnectReason
-            .loggedOut;
+          lastDisconnect
+            ?.error
+            ?.message
+
+          ||
+
+          "sin detalle";
+
+        log({
+          usuario: "Sistema",
+          modulo: "Core",
+          accion: `Desconexion status=${statusCode || "unknown"} detalle=${detail}`
+        });
+
+        const reconnect =
+
+          shouldReconnect(statusCode);
 
         if (reconnect) {
 
-          log({usuario: "Sistema", modulo: "Core", accion: "🔄 RECONECTANDO..."});
+          if (
+            statusCode === DisconnectReason.loggedOut
+            ||
+            statusCode === 401
+          ) {
 
-          startBot();
+            resetAuthSession();
+
+          }
+
+          scheduleReconnect();
+
+        } else {
+
+          log({
+            usuario: "Sistema",
+            modulo: "Core",
+            accion: "Sesion cerrada o reemplazada. Escanea QR o cierra otras sesiones antes de reiniciar."
+          });
 
         }
 
@@ -251,22 +462,9 @@ async function startBot() {
 
         const text =
 
-          msg.message
-            .conversation ||
-
-          msg.message
-            .extendedTextMessage
-            ?.text ||
-
-          msg.message
-            .imageMessage
-            ?.caption ||
-
-          msg.message
-            .documentMessage
-            ?.caption ||
-
-          "";
+          extractMessageText(
+            msg.message
+          );
 
         const hasPaymentProof =
 
@@ -410,7 +608,7 @@ Gracias. Enviaremos tu comprobante al equipo para validacion.`
 
       } catch (err) {
 
-        log({usuario: "Sistema", modulo: "Error", accion: err.toString()});
+        log({usuario: "Sistema", modulo: "Error", accion: getErrorMessage(err)});
 
       }
 
@@ -423,4 +621,54 @@ Gracias. Enviaremos tu comprobante al equipo para validacion.`
 // START
 // ==========================================
 
-startBot();
+process.on(
+  "unhandledRejection",
+  err => {
+
+    log({
+      usuario: "Sistema",
+      modulo: "Error",
+      accion: `UnhandledRejection: ${getErrorMessage(err)}`
+    });
+
+  }
+);
+
+process.on(
+  "uncaughtException",
+  err => {
+
+    log({
+      usuario: "Sistema",
+      modulo: "Error",
+      accion: `UncaughtException: ${getErrorMessage(err)}`
+    });
+
+    if (
+      !String(err?.message || err)
+        .includes("Bad MAC")
+    ) {
+
+      process.exitCode =
+        1;
+
+    }
+
+  }
+);
+
+startBot()
+  .catch(err => {
+
+    isStarting =
+      false;
+
+    log({
+      usuario: "Sistema",
+      modulo: "Error",
+      accion: getErrorMessage(err)
+    });
+
+    scheduleReconnect();
+
+  });

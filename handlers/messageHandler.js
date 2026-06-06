@@ -7,6 +7,12 @@ const {
 );
 
 const {
+  HOTEL_SERVICES
+} = require(
+  "../constants/services"
+);
+
+const {
   resolveMenuOption
 } = require(
   "../constants/menuAliases"
@@ -25,6 +31,71 @@ const {
 
 const ONE_HOUR =
   60 * 60 * 1000;
+
+function getQuickReply(input) {
+
+  if (
+    /\b(menu|men[uú]|opciones|cual menu|cu[aá]l menu|0)\b/.test(input)
+  ) {
+
+    return MAIN_MENU;
+
+  }
+
+  if (
+    /\b(alberca|piscina)\b/.test(input)
+  ) {
+
+    return `Por el momento no contamos con alberca.
+
+Estos son nuestros servicios disponibles:
+
+${HOTEL_SERVICES}`;
+
+  }
+
+  if (
+    /\b(servicio|servicios|amenidad|amenidades|wifi|internet|estacionamiento|restaurante)\b/.test(input)
+  ) {
+
+    return HOTEL_SERVICES;
+
+  }
+
+  if (
+    /\b(ubicacion|ubicaci[oó]n|direccion|direcci[oó]n|donde estan|d[oó]nde est[aá]n)\b/.test(input)
+  ) {
+
+    return `Direccion:
+Andres Sanchez Magallanes 910 Col Centro, Villahermosa, Tabasco.
+
+Para ver mas opciones escribe:
+menu`;
+
+  }
+
+  if (
+    /\b(telefono|tel[eé]fono|llamar|contacto|whatsapp)\b/.test(input)
+  ) {
+
+    return `Puedes comunicarte con un asesor al 9934684830.
+
+Para ver mas opciones escribe:
+menu`;
+
+  }
+
+  if (
+    /^(hola|buenos dias|buenos d[ií]as|buenas tardes|buenas noches|hi|hello)$/.test(input)
+  ) {
+
+    return MAIN_MENU;
+
+  }
+
+  return null;
+
+}
 
 // ==========================================
 // MESSAGE HANDLER
@@ -98,6 +169,22 @@ async function handleMessage({
   // ==========================================
   // CONTROL MENÚ
   // ==========================================
+
+  if (!state.module) {
+
+    const quickReply =
+      getQuickReply(input);
+
+    if (quickReply) {
+
+      state.lastMenu =
+        Date.now();
+
+      return send(quickReply);
+
+    }
+
+  }
 
   const now =
     Date.now();

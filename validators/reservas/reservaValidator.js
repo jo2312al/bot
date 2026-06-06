@@ -4,12 +4,22 @@ const {
   parseReservationDate
 } = require("../../utils/dateUtils");
 
+function firstNumber(value) {
+
+  return parseInt(
+    String(value).match(/\d+/)?.[0],
+    10
+  );
+
+}
+
 const validators = {
 
   nombre(value) {
 
     const limpio =
-      value.trim();
+      String(value || "")
+        .trim();
 
     const palabras =
       limpio.split(/\s+/);
@@ -22,7 +32,7 @@ const validators = {
 
     }
 
-    return /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/
+    return /^[\p{L}\s.'-]+$/u
       .test(limpio);
 
   },
@@ -30,7 +40,7 @@ const validators = {
   personas(value) {
 
     const num =
-      parseInt(value);
+      firstNumber(value);
 
     return (
       !isNaN(num)
@@ -45,7 +55,7 @@ const validators = {
   ninos(value) {
 
     const num =
-      parseInt(value);
+      firstNumber(value);
 
     return (
       !isNaN(num)
@@ -70,7 +80,10 @@ const validators = {
   telefono(value) {
 
     return /^\d{10}$/
-      .test(value.trim());
+      .test(
+        String(value)
+          .replace(/\D/g, "")
+      );
 
   },
 
@@ -85,7 +98,7 @@ const validators = {
   noches(value) {
 
     const num =
-      parseInt(value);
+      firstNumber(value);
 
     return (
       !isNaN(num)
@@ -109,7 +122,9 @@ const validators = {
       "inapam",
       "ado",
       "centenario",
-      "no"
+      "no",
+      "ninguna",
+      "no tengo"
     ].includes(limpio);
 
   },

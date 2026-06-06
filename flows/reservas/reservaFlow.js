@@ -8,6 +8,15 @@ const {
   normalizarHoraLlegada
 } = require("../../services/reservationService");
 
+function firstNumber(value) {
+
+  return parseInt(
+    String(value).match(/\d+/)?.[0],
+    10
+  );
+
+}
+
 module.exports = [
 
   {
@@ -42,7 +51,7 @@ Ejemplo:
     validator: "personas",
 
     transform: value =>
-      parseInt(value)
+      firstNumber(value)
 
   },
 
@@ -64,7 +73,7 @@ El maximo es de 4 personas por habitacion, contando adultos y niños.`,
     validator: "ninos",
 
     transform: value =>
-      parseInt(value)
+      firstNumber(value)
 
   },
 
@@ -105,7 +114,11 @@ Escribe un numero de contacto a 10 digitos.
 ✅ Ejemplo:
 9931234567`,
 
-    validator: "telefono"
+    validator: "telefono",
+
+    transform: value =>
+      String(value)
+        .replace(/\D/g, "")
 
   },
 
@@ -147,7 +160,7 @@ Ejemplo:
     validator: "noches",
 
     transform: value =>
-      parseInt(value)
+      firstNumber(value)
 
   },
 
@@ -185,6 +198,7 @@ no`,
       value
         .trim()
         .toLowerCase()
+        .replace(/^(ninguna|no tengo)$/, "no")
 
   },
 
