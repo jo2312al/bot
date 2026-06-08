@@ -15,11 +15,12 @@ const LOG_FILE =
 const MODULES = {
   reservas: {
     label: "Reservas",
-    completeAt: 9,
+    completeAt: 10,
     steps: [
       "selecciono reservas",
       "fecha",
       "noches",
+      "habitaciones",
       "huespedes",
       "habitacion",
       "telefono",

@@ -27,6 +27,7 @@ function reservaConfirmada({
 📝 Nombre: ${data.nombre}
 📅 Fecha: ${data.fecha}
 🌙 Noches: ${data.noches}
+🏨 Habitaciones: ${data.habitaciones || 1}
 👥 Huespedes: ${data.adultos} adulto(s), ${data.ninos} niño(s)
 🛏️ Habitacion: ${data.habitacion}
 📞 Telefono: ${data.telefono}
@@ -61,6 +62,7 @@ function reservaGrupo({
 📝 ${data.nombre}
 📅 ${data.fecha}
 🌙 Noches: ${data.noches}
+🏨 Habitaciones: ${data.habitaciones || 1}
 👥 Huespedes: ${data.adultos} adulto(s), ${data.ninos} niño(s)
 🛏️ ${data.habitacion}
 ${data.servicioEspecial ? `🎈 Servicio especial: ${data.servicioEspecial}\n` : ""}📞 ${data.telefono}

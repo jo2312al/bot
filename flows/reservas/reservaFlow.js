@@ -116,7 +116,7 @@ module.exports = [
 
     key: "fecha",
 
-    question: `📅 Paso 1 de 6: Fecha de ingreso
+    question: `📅 Paso 1 de 7: Fecha de ingreso
 
 Ejemplos:
 25/12
@@ -133,7 +133,7 @@ Ejemplos:
 
     key: "noches",
 
-    question: `🌙 Paso 2 de 6: Numero de noches
+    question: `🌙 Paso 2 de 7: Numero de noches
 
 Ejemplos:
 1
@@ -148,9 +148,26 @@ Ejemplos:
 
   {
 
+    key: "habitaciones",
+
+    question: `🏨 Paso 3 de 7: Numero de habitaciones
+
+Ejemplos:
+1
+2 habitaciones`,
+
+    validator: "habitaciones",
+
+    transform: value =>
+      firstNumber(value)
+
+  },
+
+  {
+
     key: "huespedes",
 
-    question: `👥 Paso 3 de 6: Numero de huespedes
+    question: `👥 Paso 4 de 7: Numero de huespedes
 
 Ejemplos:
 2 adultos
@@ -169,7 +186,7 @@ Ejemplos:
 
     key: "habitacion",
 
-    question: `🛏️ Paso 4 de 6: Tipo de habitacion
+    question: `🛏️ Paso 5 de 7: Tipo de habitacion
 
 1️⃣ King
 2️⃣ Doble
@@ -187,7 +204,7 @@ Escriba 1, 2, king o doble.`,
 
     key: "telefono",
 
-    question: `📞 Paso 5 de 6: Numero de contacto
+    question: `📞 Paso 6 de 7: Numero de contacto
 
 Ingrese un telefono a 10 digitos.
 
@@ -206,7 +223,7 @@ Ejemplo:
 
     key: "hora",
 
-    question: `⏰ Paso 6 de 6: Hora estimada de llegada
+    question: `⏰ Paso 7 de 7: Hora estimada de llegada
 
 Ejemplos:
 4 pm

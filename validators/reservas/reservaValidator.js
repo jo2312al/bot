@@ -124,7 +124,7 @@ const validators = {
       &&
       total >= 1
       &&
-      total <= 4
+      total <= 40
     );
 
   },
@@ -179,6 +179,21 @@ const validators = {
       num >= 1
       &&
       num <= 30
+    );
+
+  },
+
+  habitaciones(value) {
+
+    const num =
+      firstNumber(value);
+
+    return (
+      !isNaN(num)
+      &&
+      num >= 1
+      &&
+      num <= 10
     );
 
   },

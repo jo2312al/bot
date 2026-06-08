@@ -116,6 +116,9 @@ function getPriceDetails(data) {
     noches:
       data.noches,
 
+    habitaciones:
+      data.habitaciones,
+
     servicioEspecial:
       data.servicioEspecial,
 
@@ -139,6 +142,7 @@ function buildSummary({
 
 📅 Fecha: ${data.fecha}
 🌙 Noches: ${data.noches}
+🏨 Habitaciones: ${data.habitaciones}
 👥 Huespedes: ${data.adultos} adulto(s), ${data.ninos} niño(s)
 🛏️ Habitacion: ${data.habitacion}
 📞 Telefono: ${data.telefono}
@@ -193,7 +197,10 @@ async function sendSummary({
         state.data.fecha,
 
       noches:
-        state.data.noches
+        state.data.noches,
+
+      habitaciones:
+        state.data.habitaciones
 
     });
 
@@ -610,6 +617,31 @@ Opciones disponibles:
   if (
     currentStep.key === "huespedes"
   ) {
+
+    const totalHuespedes =
+      transformedValue.adultos
+      +
+      transformedValue.ninos;
+
+    const capacidad =
+      (state.data.habitaciones || 1) * 4;
+
+    if (
+      totalHuespedes > capacidad
+    ) {
+
+      return send(
+
+        withMenuFooter(`⚠️ La capacidad maxima es de 4 personas por habitacion.
+
+Habitaciones solicitadas: ${state.data.habitaciones || 1}
+Capacidad maxima: ${capacidad} persona(s)
+
+Revise el numero de huespedes o escriba volver para cambiar la cantidad de habitaciones.`)
+
+      );
+
+    }
 
     state.data.adultos =
       transformedValue.adultos;

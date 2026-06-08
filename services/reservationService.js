@@ -57,6 +57,7 @@ function calcularPrecio({
   ninos,
   horaTexto,
   noches = 1,
+  habitaciones = 1,
   servicioEspecial = null,
   promocion = "no"
 
@@ -78,12 +79,19 @@ function calcularPrecio({
       )
       : 0;
 
+  const adultosPorHabitacion =
+    Math.ceil(
+      adultos / habitaciones
+    );
+
   const tarifaNoche =
     tienePromocion
-      ? 650 + (personasAdicionalesPromo * 100)
-      : adultos <= 2
-      ? 700
-      : 800;
+      ? habitaciones * 650 + (personasAdicionalesPromo * 100)
+      : habitaciones * (
+        adultosPorHabitacion <= 2
+          ? 700
+          : 800
+      );
 
   let precio =
     tarifaNoche * noches;

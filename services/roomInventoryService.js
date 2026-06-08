@@ -141,13 +141,18 @@ function countRoomsForDate({
       &&
       reservation.dates.includes(date)
     )
-    .length;
+    .reduce(
+      (total, reservation) =>
+        total + (reservation.habitaciones || 1),
+      0
+    );
 }
 
 function checkRoomAvailability({
   habitacion,
   fecha,
-  noches
+  noches,
+  habitaciones = 1
 }) {
   const limit =
     ROOM_LIMITS[habitacion];
@@ -176,7 +181,7 @@ function checkRoomAvailability({
         reservations,
         habitacion,
         date
-      }) >= limit
+      }) + habitaciones > limit
     );
 
   return {
@@ -205,6 +210,8 @@ function saveRoomReservation({
       data.telefono || "",
     habitacion:
       data.habitacion,
+    habitaciones:
+      data.habitaciones || 1,
     fecha:
       data.fecha,
     noches:
