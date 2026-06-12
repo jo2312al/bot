@@ -2,6 +2,8 @@ const http = require("http");
 const {
   URL
 } = require("url");
+const QRCode =
+  require("qrcode");
 const {
   readReservations,
   getRoomLimits,
@@ -17,6 +19,9 @@ const {
 const {
   analyzeRackImage
 } = require("./services/rackAnalysisService");
+const {
+  readBotStatus
+} = require("./services/botStatusService");
 
 const PORT =
   Number(process.env.DASHBOARD_PORT || 3333);
@@ -155,6 +160,27 @@ function getSummary() {
   };
 }
 
+async function getBotStatus() {
+  const status =
+    readBotStatus();
+
+  const qrDataUrl =
+    status.qr
+      ? await QRCode.toDataURL(
+        status.qr,
+        {
+          margin: 1,
+          width: 320
+        }
+      )
+      : null;
+
+  return {
+    ...status,
+    qrDataUrl
+  };
+}
+
 function pageHtml() {
   return `<!doctype html>
 <html lang="es">
@@ -215,6 +241,50 @@ function pageHtml() {
       font-size: 30px;
       font-weight: 700;
       margin-top: 8px;
+    }
+    .bot-status {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+    }
+    .status-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: #9ca3af;
+      display: inline-block;
+    }
+    .status-dot.open {
+      background: #0f766e;
+    }
+    .status-dot.qr,
+    .status-dot.close {
+      background: #b91c1c;
+    }
+    .qr-box {
+      display: grid;
+      gap: 8px;
+      justify-items: center;
+      min-width: 210px;
+    }
+    .qr-box img {
+      width: 210px;
+      height: 210px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #ffffff;
+      padding: 8px;
+    }
+    .hidden {
+      display: none !important;
     }
     .toolbar {
       display: flex;
@@ -401,6 +471,12 @@ function pageHtml() {
     }
     @media (max-width: 800px) {
       .grid { grid-template-columns: 1fr; }
+      .bot-status {
+        grid-template-columns: 1fr;
+      }
+      .qr-box {
+        justify-items: start;
+      }
       table { font-size: 13px; }
       header, main { padding-left: 14px; padding-right: 14px; }
       header { position: static; }
@@ -462,6 +538,24 @@ function pageHtml() {
       <div class="panel">
         <div class="muted">Limites</div>
         <div id="limits" class="metric">-</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="bot-status">
+        <div>
+          <strong>Estado de WhatsApp</strong>
+          <div class="status-row">
+            <span id="botStatusDot" class="status-dot"></span>
+            <span id="botStatusText">Cargando...</span>
+          </div>
+          <div id="botStatusDetail" class="muted"></div>
+          <div id="botStatusUpdated" class="muted"></div>
+        </div>
+        <div id="qrBox" class="qr-box hidden">
+          <img id="qrImage" alt="QR de WhatsApp">
+          <div class="muted">Escanea este codigo desde WhatsApp.</div>
+        </div>
       </div>
     </section>
 
@@ -540,6 +634,40 @@ function pageHtml() {
     let calendarDate = new Date();
     let selectedStart = "";
     let selectedEnd = "";
+
+    async function loadBotStatus() {
+      try {
+        const response = await fetch('/api/bot-status');
+        const status = await response.json();
+        const connection = status.connection || 'unknown';
+        const labels = {
+          open: 'Conectado',
+          qr: 'Esperando escaneo de QR',
+          close: 'Desconectado',
+          unknown: 'Sin estado'
+        };
+
+        botStatusDot.className = 'status-dot ' + connection;
+        botStatusText.textContent = labels[connection] || connection;
+        botStatusDetail.textContent = status.detail || '';
+        botStatusUpdated.textContent = status.updatedAt
+          ? 'Actualizado: ' + new Date(status.updatedAt).toLocaleString()
+          : '';
+
+        if (status.qrDataUrl) {
+          qrImage.src = status.qrDataUrl;
+          qrBox.classList.remove('hidden');
+        } else {
+          qrImage.removeAttribute('src');
+          qrBox.classList.add('hidden');
+        }
+      } catch (error) {
+        botStatusDot.className = 'status-dot close';
+        botStatusText.textContent = 'No se pudo leer el estado';
+        botStatusDetail.textContent = error.message || '';
+        qrBox.classList.add('hidden');
+      }
+    }
 
     async function loadDashboard() {
       const response = await fetch('/api/summary');
@@ -939,7 +1067,9 @@ function pageHtml() {
         .replace(/'/g, '&#039;');
     }
 
+    loadBotStatus();
     loadDashboard();
+    setInterval(loadBotStatus, 5000);
   </script>
 </body>
 </html>`;
@@ -969,6 +1099,29 @@ const server =
       url.pathname === "/api/summary"
     ) {
       sendJson(res, 200, getSummary());
+      return;
+    }
+
+    if (
+      req.method === "GET"
+      &&
+      url.pathname === "/api/bot-status"
+    ) {
+      try {
+        sendJson(
+          res,
+          200,
+          await getBotStatus()
+        );
+      } catch (error) {
+        sendJson(res, 500, {
+          connection: "unknown",
+          qrDataUrl: null,
+          detail:
+            error.message || "No se pudo generar el QR"
+        });
+      }
+
       return;
     }
 

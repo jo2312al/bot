@@ -46,6 +46,12 @@ const {
   "./services/rackAnalysisService"
 );
 
+const {
+  writeBotStatus
+} = require(
+  "./services/botStatusService"
+);
+
 let reconnectTimer =
   null;
 
@@ -313,6 +319,12 @@ async function startBot() {
 
       if (qr) {
 
+        writeBotStatus({
+          connection: "qr",
+          qr,
+          detail: "Escanea el QR para conectar WhatsApp"
+        });
+
         console.log(
           "\n📱 ESCANEA QR\n"
         );
@@ -337,6 +349,12 @@ async function startBot() {
 
         reconnectAttempts =
           0;
+
+        writeBotStatus({
+          connection: "open",
+          qr: null,
+          detail: "Bot conectado"
+        });
 
         log({usuario: "Sistema", modulo: "Core", accion: "✅ BOT CONECTADO"});
 
@@ -369,6 +387,12 @@ async function startBot() {
           ||
 
           "sin detalle";
+
+        writeBotStatus({
+          connection: "close",
+          detail:
+            `Desconectado status=${statusCode || "unknown"} detalle=${detail}`
+        });
 
         log({
           usuario: "Sistema",
