@@ -377,6 +377,33 @@ function readCalendarReservations() {
     );
 }
 
+function readCanceledCalendarReservationKeys() {
+  if (initSqlite()) {
+    return new Set(
+      querySql(`
+        SELECT source_key AS sourceKey
+        FROM calendar_reservations
+        WHERE status = 'cancelada';
+      `)
+        .map(row =>
+          row.sourceKey
+        )
+        .filter(Boolean)
+    );
+  }
+
+  return new Set(
+    readJsonFile(FALLBACK_RESERVATIONS_FILE)
+      .filter(row =>
+        row.status === "cancelada"
+      )
+      .map(row =>
+        row.sourceKey
+      )
+      .filter(Boolean)
+  );
+}
+
 function cancelCalendarReservationByFolio(folio) {
   if (!folio) {
     return;
@@ -397,6 +424,40 @@ function cancelCalendarReservationByFolio(folio) {
     readJsonFile(FALLBACK_RESERVATIONS_FILE)
       .map(row =>
         String(row.folio) === String(folio)
+          ? {
+            ...row,
+            status:
+              "cancelada"
+          }
+          : row
+      );
+
+  writeJsonFile(
+    FALLBACK_RESERVATIONS_FILE,
+    rows
+  );
+}
+
+function cancelCalendarReservationByKey(sourceKey) {
+  if (!sourceKey) {
+    return;
+  }
+
+  if (initSqlite()) {
+    runSql(`
+      UPDATE calendar_reservations
+      SET status = 'cancelada',
+          updated_at = CURRENT_TIMESTAMP
+      WHERE source_key = ${quote(sourceKey)};
+    `);
+
+    return;
+  }
+
+  const rows =
+    readJsonFile(FALLBACK_RESERVATIONS_FILE)
+      .map(row =>
+        row.sourceKey === sourceKey
           ? {
             ...row,
             status:
@@ -466,6 +527,8 @@ function saveGroupMessage({
 module.exports = {
   saveCalendarReservation,
   readCalendarReservations,
+  readCanceledCalendarReservationKeys,
   cancelCalendarReservationByFolio,
+  cancelCalendarReservationByKey,
   saveGroupMessage
 };

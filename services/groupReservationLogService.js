@@ -10,6 +10,7 @@ const {
 } = require("./roomInventoryService");
 const {
   readCalendarReservations,
+  readCanceledCalendarReservationKeys,
   saveCalendarReservation
 } = require("./reservationDatabaseService");
 
@@ -773,6 +774,9 @@ function getLogFiles() {
 }
 
 function readLogReservations() {
+  const canceledKeys =
+    readCanceledCalendarReservationKeys();
+
   return getLogFiles()
     .flatMap(file => {
       const logText =
@@ -784,6 +788,9 @@ function readLogReservations() {
       return parseGroupLogEvents(logText)
         .map(parseReservationEvent)
         .filter(Boolean)
+        .filter(reservation =>
+          !canceledKeys.has(reservation.sourceKey)
+        )
         .map(reservation => {
           saveCalendarReservation(reservation);
           return reservation;
@@ -810,6 +817,10 @@ function normalizeStoredReservation(reservation) {
   }
 
   return {
+    sourceKey:
+      reservation.folio
+        ? `folio:${reservation.folio}`
+        : undefined,
     source:
       "bot",
     folio:

@@ -29,6 +29,7 @@ const {
   buildGroupReservationCalendar
 } = require("./services/groupReservationLogService");
 const {
+  cancelCalendarReservationByKey,
   saveCalendarReservation
 } = require("./services/reservationDatabaseService");
 
@@ -1043,6 +1044,15 @@ function pageHtml() {
     .modal-body {
       padding: 16px;
     }
+    .confirm-modal {
+      width: min(460px, 100%);
+    }
+    .confirm-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 16px;
+    }
     .modal-kpis {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1320,11 +1330,30 @@ function pageHtml() {
       <div id="dayModalBody" class="modal-body"></div>
     </div>
   </div>
+  <div id="confirmDeleteBackdrop" class="modal-backdrop hidden" onclick="closeDeleteConfirm()">
+    <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirmDeleteTitle" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <strong id="confirmDeleteTitle">Eliminar reserva</strong>
+          <div class="muted">Esta accion libera el inventario del calendario.</div>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div id="confirmDeleteText"></div>
+        <div class="confirm-actions">
+          <button onclick="closeDeleteConfirm()">Cancelar</button>
+          <button class="danger" onclick="deleteSelectedReservation()">Eliminar</button>
+        </div>
+      </div>
+    </div>
+  </div>
   <script>
     let dashboardData = null;
     let calendarDate = new Date();
     let selectedStart = "";
     let selectedEnd = "";
+    let pendingDeleteReservation = null;
+    let activeModalIsoDate = "";
 
     async function loadBotStatus() {
       try {
@@ -1870,6 +1899,7 @@ function pageHtml() {
     function openDayModal(isoDate) {
       if (!dashboardData) return;
 
+      activeModalIsoDate = isoDate;
       const display = isoToDisplay(isoDate);
       const row = getCalendarRowForIso(isoDate) || {
         date: display,
@@ -1904,8 +1934,8 @@ function pageHtml() {
             '<span class="chip">Bot ' + totals.bot + '</span>' +
             '<span class="chip">Manual/Excel ' + totals.manual + '</span>' +
           '</div>' +
-          '<div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Fuente</th><th>Habs</th><th>Huespedes</th><th>Tipo</th><th>Hora</th><th>Telefono</th><th>Tarifa</th></tr></thead><tbody>' +
-          row.reservations.map(item =>
+          '<div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Fuente</th><th>Habs</th><th>Huespedes</th><th>Tipo</th><th>Hora</th><th>Telefono</th><th>Tarifa</th><th></th></tr></thead><tbody>' +
+          row.reservations.map((item, index) =>
             '<tr>' +
               '<td>' + escapeHtml(item.nombre || 'Sin nombre') + '<br><span class="muted">' + escapeHtml(item.timestamp || '') + '</span></td>' +
               '<td><span class="pill">' + escapeHtml(item.source || '-') + '</span></td>' +
@@ -1915,6 +1945,7 @@ function pageHtml() {
               '<td>' + escapeHtml(item.hora || '-') + '</td>' +
               '<td>' + escapeHtml(item.telefono || '-') + '</td>' +
               '<td>' + escapeHtml(item.tarifa || '-') + '</td>' +
+              '<td><button class="danger compact" onclick="confirmDeleteReservation(' + index + ')">Eliminar</button></td>' +
             '</tr>'
           ).join('') +
           '</tbody></table></div>';
@@ -1926,7 +1957,68 @@ function pageHtml() {
 
     function closeDayModal() {
       dayModalBackdrop.classList.add('hidden');
+      confirmDeleteBackdrop.classList.add('hidden');
+      pendingDeleteReservation = null;
       document.body.classList.remove('modal-open');
+    }
+
+    function confirmDeleteReservation(index) {
+      const row = getCalendarRowForIso(activeModalIsoDate);
+      const reservation = row?.reservations?.[index];
+
+      if (!reservation) {
+        return;
+      }
+
+      pendingDeleteReservation = reservation;
+      confirmDeleteText.innerHTML =
+        '<strong>' + escapeHtml(reservation.nombre || 'Sin nombre') + '</strong>' +
+        '<div class="muted">' +
+          escapeHtml((reservation.dates || [reservation.fecha]).join(', ')) +
+          ' / ' + escapeHtml(reservation.habitaciones || 1) + ' hab(s)' +
+          (reservation.tipo ? ' / ' + escapeHtml(reservation.tipo) : '') +
+        '</div>';
+      confirmDeleteBackdrop.classList.remove('hidden');
+      document.body.classList.add('modal-open');
+    }
+
+    function closeDeleteConfirm() {
+      confirmDeleteBackdrop.classList.add('hidden');
+      pendingDeleteReservation = null;
+
+      if (dayModalBackdrop.classList.contains('hidden')) {
+        document.body.classList.remove('modal-open');
+      }
+    }
+
+    async function deleteSelectedReservation() {
+      if (!pendingDeleteReservation) {
+        return;
+      }
+
+      const response = await fetch('/api/reservations/delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sourceKey: pendingDeleteReservation.sourceKey,
+          folio: pendingDeleteReservation.folio
+        })
+      });
+      const data = await response.json();
+
+      if (!data.ok) {
+        alert(data.error || 'No se pudo eliminar la reserva.');
+        return;
+      }
+
+      closeDeleteConfirm();
+      await loadDashboard();
+
+      if (activeModalIsoDate) {
+        openDayModal(activeModalIsoDate);
+      }
     }
 
     function isIsoWithinSelection(isoDate) {
@@ -2059,7 +2151,11 @@ function pageHtml() {
     setInterval(loadBotStatus, 5000);
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape') {
-        closeDayModal();
+        if (!confirmDeleteBackdrop.classList.contains('hidden')) {
+          closeDeleteConfirm();
+        } else {
+          closeDayModal();
+        }
       }
     });
   </script>
@@ -2195,6 +2291,53 @@ const server =
             false,
           error:
             error.message || "No se pudo importar el CSV"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/reservations/delete"
+    ) {
+      try {
+        const body =
+          await readBody(req);
+
+        if (!body.sourceKey && !body.folio) {
+          sendJson(res, 400, {
+            ok:
+              false,
+            error:
+              "Reserva requerida"
+          });
+          return;
+        }
+
+        if (body.sourceKey) {
+          cancelCalendarReservationByKey(
+            String(body.sourceKey)
+          );
+        }
+
+        if (body.folio) {
+          cancelRoomReservationByFolio(
+            String(body.folio)
+          );
+        }
+
+        sendJson(res, 200, {
+          ok:
+            true
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok:
+            false,
+          error:
+            error.message || "No se pudo eliminar la reserva"
         });
       }
 
