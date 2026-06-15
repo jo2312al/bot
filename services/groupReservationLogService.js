@@ -7,6 +7,10 @@ const {
 const {
   readReservations
 } = require("./roomInventoryService");
+const {
+  readCalendarReservations,
+  saveCalendarReservation
+} = require("./reservationDatabaseService");
 
 const DEFAULT_LOG_FILE =
   path.join(
@@ -631,7 +635,7 @@ function getHora(action) {
   "";
 }
 
-function parseReservationBlock(event) {
+function parseReservationEvent(event) {
   if (event.user !== GROUP_ID) {
     return null;
   }
@@ -727,6 +731,8 @@ function parseReservationBlock(event) {
     displayDates(dates);
 
   return {
+    sourceKey:
+      `group:${event.user}:${event.timestamp}:${getName(action)}:${display[0]}`,
     source:
       "grupo",
     groupId:
@@ -789,8 +795,12 @@ function readLogReservations() {
         );
 
       return parseGroupLogEvents(logText)
-        .map(parseReservationBlock)
-        .filter(Boolean);
+        .map(parseReservationEvent)
+        .filter(Boolean)
+        .map(reservation => {
+          saveCalendarReservation(reservation);
+          return reservation;
+        });
     });
 }
 
@@ -882,6 +892,7 @@ function readGroupReservations() {
       .filter(Boolean);
 
   return dedupeReservations([
+    ...readCalendarReservations(),
     ...stored,
     ...readLogReservations()
   ]);
@@ -949,6 +960,7 @@ function dateValue(value) {
 
 module.exports = {
   TOTAL_ROOMS,
+  parseReservationEvent,
   readGroupReservations,
   buildGroupReservationCalendar
 };

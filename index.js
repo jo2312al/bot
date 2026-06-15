@@ -51,6 +51,17 @@ const {
 } = require(
   "./services/botStatusService"
 );
+const {
+  saveCalendarReservation,
+  saveGroupMessage
+} = require(
+  "./services/reservationDatabaseService"
+);
+const {
+  parseReservationEvent
+} = require(
+  "./services/groupReservationLogService"
+);
 
 let reconnectTimer =
   null;
@@ -526,6 +537,34 @@ async function startBot() {
         ) {
 
           log({usuario: from, modulo: "Chat Grupal", accion: text});
+
+          const timestamp =
+            new Date()
+              .toLocaleString();
+
+          saveGroupMessage({
+            messageKey:
+              msg.key.id,
+            groupId:
+              from,
+            timestamp,
+            text
+          });
+
+          const reservation =
+            parseReservationEvent({
+              user:
+                from,
+              module:
+                "Chat Grupal",
+              timestamp,
+              action:
+                text
+            });
+
+          if (reservation) {
+            saveCalendarReservation(reservation);
+          }
 
           return;
 

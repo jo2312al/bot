@@ -46,6 +46,10 @@ jobs:
           --exclude=auth \
           --exclude=data/reservas.json \
           --exclude=data/closedDates.json \
+          --exclude=data/calendarReservations.json \
+          --exclude=data/groupMessages.json \
+          --exclude=data/*.db \
+          --exclude=data/*.db-* \
           --exclude=logs \
           ./ jose@48.202.58.124:/home/jose/bot2/
 
@@ -54,9 +58,9 @@ jobs:
 
           ssh jose@48.202.58.124 "
           cd /home/jose/bot2 &&
-          if ! command -v tesseract >/dev/null 2>&1 || ! command -v convert >/dev/null 2>&1; then
+          if ! command -v tesseract >/dev/null 2>&1 || ! command -v convert >/dev/null 2>&1 || ! command -v sqlite3 >/dev/null 2>&1; then
             sudo apt-get update &&
-            sudo apt-get install -y tesseract-ocr imagemagick
+            sudo apt-get install -y tesseract-ocr imagemagick sqlite3
           fi &&
           npm install &&
           pm2 restart bot2 &&

@@ -3,6 +3,10 @@ const path = require("path");
 const {
   isClosedDisplayDate
 } = require("./closedDatesService");
+const {
+  cancelCalendarReservationByFolio,
+  saveCalendarReservation
+} = require("./reservationDatabaseService");
 
 const DATA_FILE =
   path.join(
@@ -203,6 +207,8 @@ function saveRoomReservation({
     readReservations();
 
   reservations.push({
+    source:
+      "bot",
     folio,
     nombre:
       data.nombre || "",
@@ -234,6 +240,41 @@ function saveRoomReservation({
   });
 
   writeReservations(reservations);
+
+  saveCalendarReservation({
+    source:
+      "bot",
+    sourceKey:
+      `folio:${folio}`,
+    folio,
+    nombre:
+      data.nombre || "",
+    telefono:
+      data.telefono || "",
+    tipo:
+      data.habitacion,
+    habitacion:
+      data.habitacion,
+    habitaciones:
+      data.habitaciones || 1,
+    fecha:
+      data.fecha,
+    dates:
+      getStayDates({
+        fecha: data.fecha,
+        noches: data.noches
+      }),
+    adultos:
+      data.adultos,
+    ninos:
+      data.ninos,
+    hora:
+      data.hora || "",
+    raw:
+      `Folio #${folio}`,
+    status:
+      "activa"
+  });
 }
 
 function cancelRoomReservationByFolio(folio) {
@@ -266,6 +307,7 @@ function cancelRoomReservationByFolio(folio) {
 
   if (updated) {
     writeReservations(nextReservations);
+    cancelCalendarReservationByFolio(folio);
   }
 }
 
