@@ -553,7 +553,7 @@ function pageHtml() {
         <div id="activeCount" class="metric">0</div>
       </div>
       <div class="panel">
-        <div class="muted">Reservas detectadas en grupo</div>
+        <div class="muted">Reservas en calendario</div>
         <div id="groupReservationCount" class="metric">0</div>
       </div>
       <div class="panel">
@@ -599,7 +599,7 @@ function pageHtml() {
       <div class="toolbar">
         <div>
           <strong>Calendario de reservas</strong>
-          <div class="muted">Cada dia muestra reservas detectadas del grupo sobre 69 habitaciones. Da clic en un dia para ver el desglose.</div>
+          <div class="muted">Cada dia muestra reservas detectadas y guardadas sobre 69 habitaciones. Da clic en un dia para ver el desglose.</div>
         </div>
         <button class="primary" onclick="closeToday()">Cerrar hoy</button>
       </div>
@@ -989,16 +989,17 @@ function pageHtml() {
 
       if (!row || !row.reservations.length) {
         groupReservationDetail.innerHTML =
-          '<div class="muted">Sin reservas detectadas en el grupo para ' + display + '.</div>';
+          '<div class="muted">Sin reservas detectadas para ' + display + '.</div>';
         return;
       }
 
       groupReservationDetail.innerHTML =
-        '<strong>Reservas del grupo para ' + display + ': ' + row.occupied + '/' + row.total + '</strong>' +
-        '<div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>Cliente</th><th>Habs</th><th>Huespedes</th><th>Tipo</th><th>Hora</th><th>Telefono</th><th>Tarifa</th></tr></thead><tbody>' +
+        '<strong>Reservas para ' + display + ': ' + row.occupied + '/' + row.total + '</strong>' +
+        '<div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>Cliente</th><th>Fuente</th><th>Habs</th><th>Huespedes</th><th>Tipo</th><th>Hora</th><th>Telefono</th><th>Tarifa</th></tr></thead><tbody>' +
         row.reservations.map(item =>
           '<tr>' +
             '<td>' + escapeHtml(item.nombre || 'Sin nombre') + '<br><span class="muted">' + escapeHtml(item.timestamp || '') + '</span></td>' +
+            '<td>' + escapeHtml(item.source || '-') + '</td>' +
             '<td>' + escapeHtml(item.habitaciones || 1) + '</td>' +
             '<td>' + escapeHtml((item.adultos || 0) + ' adulto(s), ' + (item.ninos || 0) + ' menor(es)') + '</td>' +
             '<td>' + escapeHtml(item.tipo || '-') + '</td>' +
