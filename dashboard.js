@@ -22,6 +22,11 @@ const {
 const {
   readBotStatus
 } = require("./services/botStatusService");
+const {
+  TOTAL_ROOMS,
+  readGroupReservations,
+  buildGroupReservationCalendar
+} = require("./services/groupReservationLogService");
 
 const PORT =
   Number(process.env.DASHBOARD_PORT || 3333);
@@ -87,11 +92,13 @@ function buildOccupancy(reservations) {
         }
 
         if (reservation.habitacion === "King") {
-          occupancy[date].King++;
+          occupancy[date].King +=
+            reservation.habitaciones || 1;
         }
 
         if (reservation.habitacion === "Doble") {
-          occupancy[date].Doble++;
+          occupancy[date].Doble +=
+            reservation.habitaciones || 1;
         }
       });
     });
@@ -124,6 +131,14 @@ function getSummary() {
   const reservations =
     readReservations();
 
+  const groupReservations =
+    readGroupReservations();
+
+  const groupReservationCalendar =
+    buildGroupReservationCalendar(
+      groupReservations
+    );
+
   const active =
     reservations.filter(reservation =>
       reservation.status !== "cancelada"
@@ -146,6 +161,8 @@ function getSummary() {
     totals: {
       reservations:
         reservations.length,
+      groupReservations:
+        groupReservations.length,
       active:
         active.length,
       canceled:
@@ -153,6 +170,10 @@ function getSummary() {
     },
     occupancy:
       buildOccupancy(reservations),
+    groupReservationCalendar,
+    groupReservations,
+    totalRooms:
+      TOTAL_ROOMS,
     reservations:
       reservations
         .slice()
@@ -226,7 +247,7 @@ function pageHtml() {
     .muted { color: var(--muted); }
     .grid {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 14px;
       margin-bottom: 18px;
     }
@@ -532,6 +553,10 @@ function pageHtml() {
         <div id="activeCount" class="metric">0</div>
       </div>
       <div class="panel">
+        <div class="muted">Reservas detectadas en grupo</div>
+        <div id="groupReservationCount" class="metric">0</div>
+      </div>
+      <div class="panel">
         <div class="muted">Reservas canceladas</div>
         <div id="canceledCount" class="metric">0</div>
       </div>
@@ -573,8 +598,8 @@ function pageHtml() {
     <section class="panel">
       <div class="toolbar">
         <div>
-          <strong>Calendario de disponibilidad</strong>
-          <div class="muted">Da clic en una fecha de inicio y luego en una fecha final. Puedes cerrar o abrir todo el rango seleccionado.</div>
+          <strong>Calendario de reservas</strong>
+          <div class="muted">Cada dia muestra reservas detectadas del grupo sobre 69 habitaciones. Da clic en un dia para ver el desglose.</div>
         </div>
         <button class="primary" onclick="closeToday()">Cerrar hoy</button>
       </div>
@@ -597,6 +622,7 @@ function pageHtml() {
         <button onclick="changeCalendarMonth(1)">Siguiente</button>
       </div>
       <div id="calendar" class="calendar-grid"></div>
+      <div id="groupReservationDetail" style="margin-top:14px"></div>
     </section>
 
     <section class="panel">
@@ -683,6 +709,7 @@ function pageHtml() {
       }
 
       activeCount.textContent = data.totals.active;
+      groupReservationCount.textContent = data.totals.groupReservations;
       canceledCount.textContent = data.totals.canceled;
       limits.textContent = 'King ' + data.limits.King + ' / Doble ' + data.limits.Doble;
       updatedAt.textContent = 'Actualizado: ' + new Date(data.generatedAt).toLocaleString();
@@ -691,6 +718,7 @@ function pageHtml() {
       reservations.innerHTML = renderReservations(data.reservations);
       updateSelectionSummary();
       renderCalendar();
+      renderGroupReservationDetail(closeStart.value || data.today);
     }
 
     function renderOccupancy(rows) {
@@ -720,7 +748,7 @@ function pageHtml() {
         rows.map(row => '<tr>' +
           '<td>#' + escapeHtml(row.folio || '') + '</td>' +
           '<td>' + escapeHtml(row.nombre || 'Sin nombre') + '<br><span class="muted">' + escapeHtml(row.telefono || '') + '</span></td>' +
-          '<td>' + escapeHtml(row.habitacion || '') + (row.servicioEspecial ? '<br><span class="muted">' + escapeHtml(row.servicioEspecial) + '</span>' : '') + '</td>' +
+          '<td>' + escapeHtml(row.habitacion || '') + '<br><span class="muted">' + escapeHtml(row.habitaciones || 1) + ' hab(s)</span>' + (row.servicioEspecial ? '<br><span class="muted">' + escapeHtml(row.servicioEspecial) + '</span>' : '') + '</td>' +
           '<td>' + escapeHtml((row.dates || [row.fecha]).join(', ')) + '<br><span class="muted">' + (row.noches || 1) + ' noche(s)</span></td>' +
           '<td><span class="pill ' + escapeHtml(row.status || '') + '">' + escapeHtml(row.status || 'activa') + '</span></td>' +
         '</tr>').join('') +
@@ -869,6 +897,12 @@ function pageHtml() {
           row
         ])
       );
+      const groupByDate = Object.fromEntries(
+        dashboardData.groupReservationCalendar.map(row => [
+          row.date,
+          row
+        ])
+      );
       const todayDisplay = isoToDisplay(dashboardData.today);
 
       calendarTitle.textContent = firstDay.toLocaleDateString('es-MX', {
@@ -888,6 +922,7 @@ function pageHtml() {
         const display = dateToDisplay(date);
         const iso = dateToIso(date);
         const row = occupancyByDate[display] || { King: 0, Doble: 0, limits: dashboardData.limits };
+        const groupRow = groupByDate[display] || { occupied: 0, total: dashboardData.totalRooms || 69 };
         const isClosed = closed.has(display);
         const isSelected = iso === closeStart.value || iso === closeEnd.value;
         const isInRange = isIsoWithinSelection(iso);
@@ -898,7 +933,7 @@ function pageHtml() {
           + (display === todayDisplay ? ' today' : '');
         const meta = isClosed
           ? 'Cerrado'
-          : 'K ' + row.King + '/' + row.limits.King + '<br>D ' + row.Doble + '/' + row.limits.Doble;
+          : groupRow.occupied + '/' + groupRow.total + ' reservas<br>K ' + row.King + '/' + row.limits.King + ' / D ' + row.Doble + '/' + row.limits.Doble;
 
         cells.push(
           '<button class="' + className + '" onclick="selectCalendarDate(\\'' + iso + '\\')">' +
@@ -939,7 +974,40 @@ function pageHtml() {
       }
 
       updateSelectionSummary();
+      renderGroupReservationDetail(selectedStart);
       renderCalendar();
+    }
+
+    function renderGroupReservationDetail(isoDate) {
+      if (!dashboardData || !isoDate) {
+        groupReservationDetail.innerHTML = '';
+        return;
+      }
+
+      const display = isoToDisplay(isoDate);
+      const row = dashboardData.groupReservationCalendar.find(item => item.date === display);
+
+      if (!row || !row.reservations.length) {
+        groupReservationDetail.innerHTML =
+          '<div class="muted">Sin reservas detectadas en el grupo para ' + display + '.</div>';
+        return;
+      }
+
+      groupReservationDetail.innerHTML =
+        '<strong>Reservas del grupo para ' + display + ': ' + row.occupied + '/' + row.total + '</strong>' +
+        '<div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>Cliente</th><th>Habs</th><th>Huespedes</th><th>Tipo</th><th>Hora</th><th>Telefono</th><th>Tarifa</th></tr></thead><tbody>' +
+        row.reservations.map(item =>
+          '<tr>' +
+            '<td>' + escapeHtml(item.nombre || 'Sin nombre') + '<br><span class="muted">' + escapeHtml(item.timestamp || '') + '</span></td>' +
+            '<td>' + escapeHtml(item.habitaciones || 1) + '</td>' +
+            '<td>' + escapeHtml((item.adultos || 0) + ' adulto(s), ' + (item.ninos || 0) + ' menor(es)') + '</td>' +
+            '<td>' + escapeHtml(item.tipo || '-') + '</td>' +
+            '<td>' + escapeHtml(item.hora || '-') + '</td>' +
+            '<td>' + escapeHtml(item.telefono || '-') + '</td>' +
+            '<td>' + escapeHtml(item.tarifa || '-') + '</td>' +
+          '</tr>'
+        ).join('') +
+        '</tbody></table></div>';
     }
 
     function isIsoWithinSelection(isoDate) {
