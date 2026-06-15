@@ -27,6 +27,9 @@ const {
   readGroupReservations,
   buildGroupReservationCalendar
 } = require("./services/groupReservationLogService");
+const {
+  saveCalendarReservation
+} = require("./services/reservationDatabaseService");
 
 const PORT =
   Number(process.env.DASHBOARD_PORT || 3333);
@@ -125,6 +128,387 @@ function dateValue(value) {
     day
   )
     .getTime();
+}
+
+function isoToDisplayDate(value) {
+  const [
+    year,
+    month,
+    day
+  ] =
+    String(value || "")
+      .split("-")
+      .map(Number);
+
+  if (!day || !month || !year) {
+    return "";
+  }
+
+  return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`;
+}
+
+function getDatesBetween(startDisplay, endDisplay) {
+  const start =
+    dateValue(startDisplay);
+  const end =
+    dateValue(endDisplay || startDisplay);
+
+  if (
+    Number.isNaN(start)
+    ||
+    Number.isNaN(end)
+    ||
+    end < start
+  ) {
+    return [];
+  }
+
+  const dates =
+    [];
+
+  const current =
+    new Date(start);
+
+  const final =
+    new Date(end);
+
+  while (current <= final) {
+    dates.push(
+      `${String(current.getDate()).padStart(2, "0")}/${String(current.getMonth() + 1).padStart(2, "0")}/${current.getFullYear()}`
+    );
+
+    current.setDate(
+      current.getDate() + 1
+    );
+  }
+
+  return dates;
+}
+
+function normalizeManualReservation(input) {
+  const fecha =
+    String(input.fecha || "").includes("-")
+      ? isoToDisplayDate(input.fecha)
+      : String(input.fecha || "").trim();
+
+  const fechaSalida =
+    input.fechaSalida
+      ? (
+        String(input.fechaSalida).includes("-")
+          ? isoToDisplayDate(input.fechaSalida)
+          : String(input.fechaSalida).trim()
+      )
+      : fecha;
+
+  const dates =
+    getDatesBetween(
+      fecha,
+      fechaSalida
+    );
+
+  if (!input.nombre || !fecha || !dates.length) {
+    throw new Error("Nombre y fecha valida son requeridos");
+  }
+
+  const sourceKey =
+    input.sourceKey
+    ||
+    `manual:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+
+  return {
+    source:
+      input.source || "manual",
+    sourceKey,
+    folio:
+      input.folio || sourceKey.replace("manual:", "M-").slice(0, 18),
+    timestamp:
+      new Date().toISOString(),
+    nombre:
+      String(input.nombre || "").trim(),
+    telefono:
+      String(input.telefono || "").trim(),
+    fecha:
+      dates[0],
+    dates,
+    habitaciones:
+      Math.max(Number(input.habitaciones || 1), 1),
+    adultos:
+      Math.max(Number(input.adultos || 0), 0),
+    ninos:
+      Math.max(Number(input.ninos || 0), 0),
+    tipo:
+      String(input.tipo || input.habitacion || "").trim(),
+    tarifa:
+      String(input.tarifa || "").trim(),
+    hora:
+      String(input.hora || "").trim(),
+    raw:
+      input.raw || "Captura manual",
+    status:
+      "activa"
+  };
+}
+
+function parseCsv(text) {
+  const rows =
+    [];
+
+  let row =
+    [];
+  let value =
+    "";
+  let quoted =
+    false;
+
+  for (let index = 0; index < String(text || "").length; index++) {
+    const char =
+      text[index];
+    const next =
+      text[index + 1];
+
+    if (
+      char === "\""
+      &&
+      quoted
+      &&
+      next === "\""
+    ) {
+      value += "\"";
+      index++;
+      continue;
+    }
+
+    if (char === "\"") {
+      quoted =
+        !quoted;
+      continue;
+    }
+
+    if (
+      char === ","
+      &&
+      !quoted
+    ) {
+      row.push(value);
+      value = "";
+      continue;
+    }
+
+    if (
+      (char === "\n" || char === "\r")
+      &&
+      !quoted
+    ) {
+      if (
+        char === "\r"
+        &&
+        next === "\n"
+      ) {
+        index++;
+      }
+
+      row.push(value);
+      rows.push(row);
+      row = [];
+      value = "";
+      continue;
+    }
+
+    value += char;
+  }
+
+  row.push(value);
+  rows.push(row);
+
+  return rows.filter(items =>
+    items.some(item =>
+      String(item).trim()
+    )
+  );
+}
+
+function csvValue(value) {
+  const text =
+    String(value || "");
+
+  return /[",\n\r]/.test(text)
+    ? `"${text.replace(/"/g, "\"\"")}"`
+    : text;
+}
+
+function reservationsToCsv(reservations) {
+  const headers = [
+    "nombre",
+    "telefono",
+    "fecha",
+    "fechaSalida",
+    "habitaciones",
+    "adultos",
+    "ninos",
+    "tipo",
+    "hora",
+    "tarifa",
+    "folio",
+    "fuente"
+  ];
+
+  const rows =
+    reservations.map(reservation => {
+      const dates =
+        Array.isArray(reservation.dates)
+          ? reservation.dates
+          : [reservation.fecha];
+
+      return [
+        reservation.nombre,
+        reservation.telefono,
+        reservation.fecha,
+        dates[dates.length - 1] || reservation.fecha,
+        reservation.habitaciones || 1,
+        reservation.adultos || 0,
+        reservation.ninos || 0,
+        reservation.tipo || reservation.habitacion || "",
+        reservation.hora || "",
+        reservation.tarifa || "",
+        reservation.folio || "",
+        reservation.source || ""
+      ];
+    });
+
+  return [
+    headers,
+    ...rows
+  ]
+    .map(row =>
+      row.map(csvValue).join(",")
+    )
+    .join("\n");
+}
+
+function importReservationsFromCsv(csv) {
+  const rows =
+    parseCsv(csv);
+
+  if (rows.length < 2) {
+    throw new Error("El CSV debe incluir encabezados y al menos una reserva");
+  }
+
+  const headers =
+    rows[0].map(normalizeCsvHeader);
+
+  const imported =
+    [];
+
+  const errors =
+    [];
+
+  rows
+    .slice(1)
+    .forEach((row, index) => {
+      const data =
+        {};
+
+      headers.forEach((header, columnIndex) => {
+        data[header] =
+          row[columnIndex] || "";
+      });
+
+      try {
+        const reservation =
+          normalizeManualReservation({
+            source:
+              "excel",
+            sourceKey:
+              data.folio
+                ? `excel:${data.folio}`
+                : `excel:${data.nombre}:${data.fecha}:${data.telefono}`,
+            folio:
+              data.folio,
+            nombre:
+              data.nombre,
+            telefono:
+              data.telefono,
+            fecha:
+              data.fecha,
+            fechaSalida:
+              data.fechasalida || data.salida || data.fecha,
+            habitaciones:
+              data.habitaciones || data.habs || data.hab,
+            adultos:
+              data.adultos,
+            ninos:
+              data.ninos || data.menores,
+            tipo:
+              data.tipo || data.habitacion,
+            hora:
+              data.hora,
+            tarifa:
+              data.tarifa,
+            raw:
+              "Importado desde CSV"
+          });
+
+        saveCalendarReservation(reservation);
+        imported.push(reservation);
+      } catch (error) {
+        errors.push(
+          `Fila ${index + 2}: ${error.message}`
+        );
+      }
+    });
+
+  return {
+    imported,
+    errors
+  };
+}
+
+function normalizeCsvHeader(header) {
+  const key =
+    String(header || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]/g, "");
+
+  const aliases = {
+    huesped:
+      "nombre",
+    cliente:
+      "nombre",
+    celular:
+      "telefono",
+    tel:
+      "telefono",
+    entrada:
+      "fecha",
+    fechaentrada:
+      "fecha",
+    salida:
+      "fechasalida",
+    fechasalida:
+      "fechasalida",
+    hab:
+      "habitaciones",
+    habs:
+      "habitaciones",
+    habitacion:
+      "tipo",
+    tipohabitacion:
+      "tipo",
+    menores:
+      "ninos",
+    ninos:
+      "ninos",
+    llegada:
+      "hora",
+    preciotarifa:
+      "tarifa",
+    precio:
+      "tarifa"
+  };
+
+  return aliases[key] || key;
 }
 
 function getSummary() {
@@ -335,7 +719,8 @@ function pageHtml() {
     button.danger {
       color: var(--danger);
     }
-    input {
+    input,
+    select {
       border: 1px solid var(--line);
       border-radius: 6px;
       padding: 9px 10px;
@@ -628,6 +1013,70 @@ function pageHtml() {
     <section class="panel">
       <div class="toolbar">
         <div>
+          <strong>Agregar reservas</strong>
+          <div class="muted">Captura manual o importa un CSV que puedas editar en Excel.</div>
+        </div>
+        <button onclick="downloadReservationsCsv()">Descargar CSV</button>
+      </div>
+      <div class="date-controls">
+        <label>
+          Nombre
+          <input id="manualNombre" placeholder="Nombre del huesped">
+        </label>
+        <label>
+          Telefono
+          <input id="manualTelefono" placeholder="10 digitos">
+        </label>
+        <label>
+          Entrada
+          <input id="manualFecha" type="date">
+        </label>
+        <label>
+          Salida
+          <input id="manualFechaSalida" type="date">
+        </label>
+        <label>
+          Habs
+          <input id="manualHabitaciones" type="number" min="1" value="1">
+        </label>
+        <label>
+          Adultos
+          <input id="manualAdultos" type="number" min="0" value="2">
+        </label>
+        <label>
+          Menores
+          <input id="manualNinos" type="number" min="0" value="0">
+        </label>
+        <label>
+          Tipo
+          <select id="manualTipo">
+            <option value="">Sin tipo</option>
+            <option value="Doble">Doble</option>
+            <option value="King">King</option>
+            <option value="Suite">Suite</option>
+          </select>
+        </label>
+        <label>
+          Hora
+          <input id="manualHora" placeholder="3 pm">
+        </label>
+        <label>
+          Tarifa
+          <input id="manualTarifa" placeholder="$700">
+        </label>
+        <button class="primary" onclick="saveManualReservation()">Guardar reserva</button>
+      </div>
+      <div class="rack-controls" style="margin-top:12px">
+        <input id="csvFile" type="file" accept=".csv,text/csv">
+        <button class="primary" onclick="importReservationsCsv()">Importar CSV</button>
+        <button onclick="downloadTemplateCsv()">Plantilla CSV</button>
+      </div>
+      <div id="manualReservationStatus" class="muted" style="margin-top:10px"></div>
+    </section>
+
+    <section class="panel">
+      <div class="toolbar">
+        <div>
           <strong>Lector de rack por foto</strong>
           <div class="muted">Sube una foto del rack. El dashboard usa Tesseract OCR local para leer habitaciones disponibles y suites.</div>
         </div>
@@ -779,6 +1228,99 @@ function pageHtml() {
 
       folioInput.value = '';
       await loadDashboard();
+    }
+
+    async function saveManualReservation() {
+      const payload = {
+        nombre: manualNombre.value.trim(),
+        telefono: manualTelefono.value.trim(),
+        fecha: manualFecha.value,
+        fechaSalida: manualFechaSalida.value || manualFecha.value,
+        habitaciones: Number(manualHabitaciones.value || 1),
+        adultos: Number(manualAdultos.value || 0),
+        ninos: Number(manualNinos.value || 0),
+        tipo: manualTipo.value,
+        hora: manualHora.value.trim(),
+        tarifa: manualTarifa.value.trim()
+      };
+
+      if (!payload.nombre || !payload.fecha) {
+        alert('Nombre y fecha de entrada son requeridos.');
+        return;
+      }
+
+      manualReservationStatus.textContent = 'Guardando reserva...';
+
+      const response = await fetch('/api/reservations/manual', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+
+      if (!data.ok) {
+        manualReservationStatus.textContent = data.error || 'No se pudo guardar.';
+        return;
+      }
+
+      manualNombre.value = '';
+      manualTelefono.value = '';
+      manualHabitaciones.value = '1';
+      manualAdultos.value = '2';
+      manualNinos.value = '0';
+      manualHora.value = '';
+      manualTarifa.value = '';
+      manualReservationStatus.textContent = 'Reserva guardada: #' + data.reservation.folio;
+      await loadDashboard();
+    }
+
+    async function importReservationsCsv() {
+      const file = csvFile.files[0];
+
+      if (!file) {
+        alert('Selecciona un archivo CSV.');
+        return;
+      }
+
+      manualReservationStatus.textContent = 'Importando CSV...';
+      const csv = await file.text();
+
+      const response = await fetch('/api/reservations/import-csv', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ csv })
+      });
+      const data = await response.json();
+
+      if (!data.ok) {
+        manualReservationStatus.textContent = data.error || 'No se pudo importar.';
+        return;
+      }
+
+      csvFile.value = '';
+      manualReservationStatus.textContent =
+        'Importadas: ' + data.imported + (data.errors.length ? ' / Errores: ' + data.errors.join(' | ') : '');
+      await loadDashboard();
+    }
+
+    function downloadReservationsCsv() {
+      window.location.href = '/api/reservations/export-csv';
+    }
+
+    function downloadTemplateCsv() {
+      const csv =
+        'nombre,telefono,fecha,fechaSalida,habitaciones,adultos,ninos,tipo,hora,tarifa\\n' +
+        'Juan Perez,9931234567,25/12/2026,25/12/2026,1,2,0,Doble,3 pm,$700\\n';
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'plantilla-reservas.csv';
+      link.click();
+      URL.revokeObjectURL(link.href);
     }
 
     async function closeToday() {
@@ -1174,6 +1716,25 @@ const server =
     if (
       req.method === "GET"
       &&
+      url.pathname === "/api/reservations/export-csv"
+    ) {
+      const summary =
+        getSummary();
+
+      res.writeHead(200, {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": "attachment; filename=\"reservas-calendario.csv\"",
+        "Cache-Control": "no-store"
+      });
+      res.end(
+        reservationsToCsv(summary.groupReservations)
+      );
+      return;
+    }
+
+    if (
+      req.method === "GET"
+      &&
       url.pathname === "/api/bot-status"
     ) {
       try {
@@ -1188,6 +1749,71 @@ const server =
           qrDataUrl: null,
           detail:
             error.message || "No se pudo generar el QR"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/reservations/manual"
+    ) {
+      try {
+        const body =
+          await readBody(req);
+
+        const reservation =
+          normalizeManualReservation(body);
+
+        saveCalendarReservation(reservation);
+
+        sendJson(res, 200, {
+          ok:
+            true,
+          reservation
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok:
+            false,
+          error:
+            error.message || "No se pudo guardar la reserva"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/reservations/import-csv"
+    ) {
+      try {
+        const body =
+          await readBody(req);
+
+        const result =
+          importReservationsFromCsv(
+            body.csv
+          );
+
+        sendJson(res, 200, {
+          ok:
+            true,
+          imported:
+            result.imported.length,
+          errors:
+            result.errors
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok:
+            false,
+          error:
+            error.message || "No se pudo importar el CSV"
         });
       }
 
