@@ -791,27 +791,34 @@ function pageHtml() {
     }
     .occupancy-list {
       display: grid;
-      gap: 8px;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
     }
     .occupancy-card {
-      display: grid;
-      grid-template-columns: 150px minmax(0, 1fr);
-      gap: 12px;
-      align-items: center;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
       border: 1px solid var(--line);
       border-radius: 8px;
-      padding: 10px;
+      padding: 12px;
       background: #ffffff;
+      min-width: 0;
     }
     .occupancy-types {
       display: grid;
-      grid-template-columns: repeat(4, minmax(90px, 1fr));
-      gap: 8px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
     }
     .occupancy-type {
-      display: grid;
-      gap: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 5px 7px;
       min-width: 0;
+      background: #f8fafc;
     }
     .occupancy-type span {
       color: var(--muted);
@@ -820,7 +827,38 @@ function pageHtml() {
       text-transform: uppercase;
     }
     .occupancy-type strong {
-      font-size: 13px;
+      font-size: 12px;
+    }
+    .occupancy-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .occupancy-date strong {
+      display: block;
+      font-size: 15px;
+    }
+    .occupancy-ring {
+      --pct: 0;
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      background:
+        conic-gradient(var(--accent) calc(var(--pct) * 1%), #e5e7eb 0);
+    }
+    .occupancy-ring span {
+      display: grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: #ffffff;
+      font-size: 12px;
+      font-weight: 800;
     }
     textarea {
       width: 100%;
@@ -1048,11 +1086,8 @@ function pageHtml() {
         display: grid;
         grid-template-columns: 1fr;
       }
-      .occupancy-card {
+      .occupancy-list {
         grid-template-columns: 1fr;
-      }
-      .occupancy-types {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
       .date-controls {
         grid-template-columns: 1fr;
@@ -1357,7 +1392,7 @@ function pageHtml() {
       const today = isoToDisplay(dashboardData.today);
       const upcoming = rows
         .filter(row => compareDisplayDates(row.date, today) >= 0)
-        .slice(0, 12);
+        .slice(0, 5);
 
       if (!upcoming.length) {
         return '<div class="muted">Sin reservas proximas registradas.</div>';
@@ -1365,26 +1400,31 @@ function pageHtml() {
 
       const roomTypes = Object.keys(dashboardData.limits);
       return '<div class="occupancy-list">' +
-        upcoming.map(row =>
-          '<div class="occupancy-card">' +
-            '<div>' +
-              '<strong>' + escapeHtml(row.date) + '</strong>' +
-              '<div class="muted">' + getTotalUsed(row) + '/' + (dashboardData.totalRooms || 69) + ' habitaciones</div>' +
+        upcoming.map(row => {
+          const totalUsed = getTotalUsed(row);
+          const totalRooms = dashboardData.totalRooms || 69;
+          const pct = totalRooms ? Math.min(Math.round((totalUsed / totalRooms) * 100), 100) : 0;
+
+          return '<div class="occupancy-card">' +
+            '<div class="occupancy-top">' +
+              '<div class="occupancy-date">' +
+                '<strong>' + escapeHtml(row.date) + '</strong>' +
+                '<div class="muted">' + totalUsed + '/' + totalRooms + ' habitaciones</div>' +
+              '</div>' +
+              '<div class="occupancy-ring" style="--pct:' + pct + '"><span>' + pct + '%</span></div>' +
             '</div>' +
             '<div class="occupancy-types">' +
               roomTypes.map(type => {
               const used = row.counts?.[type] || 0;
               const limit = row.limits[type] || 0;
-              const pct = limit ? Math.min((used / limit) * 100, 100) : 0;
               return '<div class="occupancy-type">' +
                 '<span>' + escapeHtml(shortRoomLabel(type)) + '</span>' +
                 '<strong>' + used + '/' + limit + '</strong>' +
-                '<div class="bar"><span style="width:' + pct + '%"></span></div>' +
               '</div>';
             }).join('') +
             '</div>' +
-          '</div>'
-        ).join('') +
+          '</div>';
+        }).join('') +
       '</div>';
     }
 
