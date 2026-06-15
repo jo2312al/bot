@@ -50,13 +50,14 @@ function isSuite(room) {
 }
 
 function normalizeRoomType(room, type) {
-  if (isSuite(room)) {
-    return "Suite";
-  }
-
   const cleanType =
     String(type || "")
       .toUpperCase();
+
+  if (isSuite(room)) {
+    if (cleanType.includes("KING")) return "Suite King";
+    return "Doble Suite";
+  }
 
   if (cleanType.includes("KING")) return "King";
   if (cleanType.includes("DOB")) return "Doble";
@@ -503,7 +504,11 @@ function summarizeRack(entries) {
       Doble:
         availableClean.filter(room => room.type === "Doble").length,
       Suite:
-        availableClean.filter(room => room.type === "Suite").length
+        availableClean.filter(room =>
+          room.type === "Suite King"
+          ||
+          room.type === "Doble Suite"
+        ).length
     },
     availableDirty: {
       total:
@@ -513,7 +518,11 @@ function summarizeRack(entries) {
       Doble:
         availableDirty.filter(room => room.type === "Doble").length,
       Suite:
-        availableDirty.filter(room => room.type === "Suite").length
+        availableDirty.filter(room =>
+          room.type === "Suite King"
+          ||
+          room.type === "Doble Suite"
+        ).length
     }
   };
 
@@ -555,6 +564,137 @@ Habitaciones VS:
 ${availableDirty}
 
 ℹ️ Suites: pisos 1 al 3 que terminan en 01, 02, 12 y 14.`;
+}
+
+function countRackTypes(rooms) {
+  return {
+    total:
+      rooms.length,
+    King:
+      rooms.filter(room => room.type === "King").length,
+    "Suite King":
+      rooms.filter(room => room.type === "Suite King").length,
+    "Doble Suite":
+      rooms.filter(room => room.type === "Doble Suite").length,
+    Doble:
+      rooms.filter(room => room.type === "Doble").length
+  };
+}
+
+function formatRoomList(rooms) {
+  return rooms
+    .map(room =>
+      `${room.room} ${room.type} ${room.status}`
+    )
+    .join(", ")
+    ||
+    "Ninguna";
+}
+
+function summarizeRackFull(entries) {
+  const summary =
+    summarizeRack(entries);
+
+  const occupied =
+    summary.rooms.filter(room =>
+      [
+        "OC",
+        "OS",
+        "OL",
+        "OR",
+        "OSE",
+        "ND"
+      ].includes(room.status)
+    );
+
+  const blocked =
+    summary.rooms.filter(room =>
+      [
+        "BLO",
+        "FS"
+      ].includes(room.status)
+    );
+
+  return {
+    ...summary,
+    occupied,
+    blocked,
+    fullCounts: {
+      total:
+        summary.rooms.length,
+      occupied:
+        countRackTypes(occupied),
+      blocked:
+        countRackTypes(blocked),
+      availableClean:
+        countRackTypes(summary.availableClean),
+      availableDirty:
+        countRackTypes(summary.availableDirty)
+    }
+  };
+}
+
+function formatRackCsvSummary(summary) {
+  return `LECTURA DE RACK CSV
+
+Habitaciones leidas: ${summary.fullCounts.total}
+
+Ocupadas: ${summary.fullCounts.occupied.total}
+King: ${summary.fullCounts.occupied.King}
+Suite King: ${summary.fullCounts.occupied["Suite King"]}
+Doble Suite: ${summary.fullCounts.occupied["Doble Suite"]}
+Doble: ${summary.fullCounts.occupied.Doble}
+
+Habitaciones ocupadas:
+${formatRoomList(summary.occupied)}
+
+Bloqueadas / fuera de servicio: ${summary.fullCounts.blocked.total}
+${formatRoomList(summary.blocked)}
+
+Disponibles limpias (VL): ${summary.fullCounts.availableClean.total}
+King: ${summary.fullCounts.availableClean.King}
+Suite King: ${summary.fullCounts.availableClean["Suite King"]}
+Doble Suite: ${summary.fullCounts.availableClean["Doble Suite"]}
+Doble: ${summary.fullCounts.availableClean.Doble}
+
+Habitaciones VL:
+${formatRoomList(summary.availableClean)}
+
+Vacias sucias (VS): ${summary.fullCounts.availableDirty.total}
+King: ${summary.fullCounts.availableDirty.King}
+Suite King: ${summary.fullCounts.availableDirty["Suite King"]}
+Doble Suite: ${summary.fullCounts.availableDirty["Doble Suite"]}
+Doble: ${summary.fullCounts.availableDirty.Doble}
+
+Habitaciones VS:
+${formatRoomList(summary.availableDirty)}`;
+}
+
+function analyzeRackCsv({
+  csvText
+}) {
+  const entries =
+    parseRackText(csvText);
+
+  const summary =
+    summarizeRackFull(entries);
+
+  if (!summary.rooms.length) {
+    return {
+      ok:
+        false,
+      error:
+        "No pude detectar habitaciones en el CSV exportado."
+    };
+  }
+
+  return {
+    ok:
+      true,
+    message:
+      formatRackCsvSummary(summary),
+    summary
+  };
 }
 
 async function analyzeRackImage({
@@ -659,6 +799,7 @@ async function analyzeRackImage({
 }
 
 module.exports = {
+  analyzeRackCsv,
   analyzeRackImage,
   summarizeRack,
   formatRackSummary,

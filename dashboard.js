@@ -18,6 +18,7 @@ const {
   readClosedDates
 } = require("./services/closedDatesService");
 const {
+  analyzeRackCsv,
   analyzeRackImage
 } = require("./services/rackAnalysisService");
 const {
@@ -1291,13 +1292,15 @@ function pageHtml() {
     <section class="panel">
       <div class="toolbar">
         <div>
-          <strong>Lector de rack por foto</strong>
-          <div class="muted">Sube una foto del rack. El dashboard usa Tesseract OCR local para leer habitaciones disponibles y suites.</div>
+          <strong>Lector de rack</strong>
+          <div class="muted">Importa el CSV del sistema para leer ocupadas, disponibles y bloqueadas. La foto queda como respaldo.</div>
         </div>
       </div>
       <div class="rack-controls">
+        <input id="rackCsv" type="file" accept=".csv,text/csv">
+        <button id="analyzeRackCsvButton" class="primary" onclick="analyzeRackCsvFile()">Analizar CSV</button>
         <input id="rackImage" type="file" accept="image/*">
-        <button id="analyzeRackButton" class="primary" onclick="analyzeRack()">Analizar rack</button>
+        <button id="analyzeRackButton" onclick="analyzeRack()">Analizar foto</button>
       </div>
       <div style="margin-top:12px">
         <textarea id="rackResult" readonly placeholder="Aqui aparecera el resultado del rack."></textarea>
@@ -2091,6 +2094,42 @@ function pageHtml() {
       }
     }
 
+    async function analyzeRackCsvFile() {
+      const file = rackCsv.files[0];
+
+      if (!file) {
+        alert('Selecciona el CSV exportado del rack.');
+        return;
+      }
+
+      rackResult.value = 'Leyendo CSV del rack...';
+      analyzeRackCsvButton.disabled = true;
+
+      try {
+        const csvText = await file.text();
+
+        const response = await fetch('/api/rack/analyze-csv', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            csvText
+          })
+        });
+
+        const data = await response.json();
+
+        rackResult.value = data.ok
+          ? data.message
+          : data.error || 'No se pudo analizar el CSV.';
+      } catch (error) {
+        rackResult.value = 'No se pudo analizar el CSV: ' + (error.message || 'error desconocido');
+      } finally {
+        analyzeRackCsvButton.disabled = false;
+      }
+    }
+
     function fileToCompressedDataUrl(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -2379,6 +2418,45 @@ const server =
           ok: false,
           error:
             error.message || "No se pudo analizar el rack"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/rack/analyze-csv"
+    ) {
+      try {
+        const body =
+          await readBody(req);
+
+        if (!body.csvText) {
+          sendJson(res, 400, {
+            ok: false,
+            error: "CSV requerido"
+          });
+          return;
+        }
+
+        const result =
+          analyzeRackCsv({
+            csvText:
+              body.csvText
+          });
+
+        sendJson(
+          res,
+          result.ok ? 200 : 400,
+          result
+        );
+      } catch (error) {
+        sendJson(res, 500, {
+          ok: false,
+          error:
+            error.message || "No se pudo analizar el CSV del rack"
         });
       }
 
