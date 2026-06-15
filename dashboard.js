@@ -548,13 +548,24 @@ function getSummary() {
       reservation.status === "cancelada"
     );
 
+  const today =
+    getMexicoTodayIso();
+
+  const todayDisplay =
+    isoToDisplayDate(today);
+
+  const todayReservationSummary =
+    groupReservationCalendar.find(row =>
+      row.date === todayDisplay
+    );
+
   return {
     generatedAt:
       new Date().toISOString(),
     limits:
       getRoomLimits(),
     today:
-      getMexicoTodayIso(),
+      today,
     closedDates:
       readClosedDates(),
     totals: {
@@ -566,6 +577,14 @@ function getSummary() {
         active.length,
       canceled:
         canceled.length
+    },
+    todayReservations: {
+      date:
+        todayDisplay,
+      occupied:
+        todayReservationSummary?.occupied || 0,
+      reservations:
+        todayReservationSummary?.reservations?.length || 0
     },
     occupancy:
       buildOccupancy(groupReservations),
@@ -648,7 +667,7 @@ function pageHtml() {
     .muted { color: var(--muted); }
     .grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 14px;
       margin-bottom: 18px;
     }
@@ -677,6 +696,21 @@ function pageHtml() {
       font-size: 30px;
       font-weight: 700;
       margin-top: 8px;
+    }
+    .limit-list {
+      display: grid;
+      gap: 4px;
+      margin-top: 8px;
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+    .limit-list span {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      border-bottom: 1px solid #eef2f7;
+      padding-bottom: 3px;
     }
     .bot-status {
       display: grid;
@@ -912,13 +946,12 @@ function pageHtml() {
       margin-top: 12px;
     }
     .rack-room {
-      border: 2px solid var(--line);
+      border: 1px solid var(--line);
       border-radius: 8px;
       padding: 8px 6px;
       background: #ffffff;
       text-align: left;
       min-width: 0;
-      box-shadow: 0 1px 0 rgba(15, 23, 42, .08);
     }
     .rack-room strong {
       display: block;
@@ -926,25 +959,21 @@ function pageHtml() {
     }
     .rack-room span {
       display: block;
-      color: inherit;
+      color: var(--muted);
       font-size: 11px;
       margin-top: 2px;
-      opacity: .82;
     }
     .rack-room.occupied {
-      background: #dc2626;
-      border-color: #991b1b;
-      color: #ffffff;
+      background: #fee2e2;
+      border-color: #fecaca;
     }
     .rack-room.available {
-      background: #16a34a;
-      border-color: #166534;
-      color: #ffffff;
+      background: #ecfdf5;
+      border-color: #99f6e4;
     }
     .rack-room.blocked {
-      background: #475569;
-      border-color: #1e293b;
-      color: #ffffff;
+      background: #f3f4f6;
+      border-color: #cbd5e1;
     }
     textarea {
       width: 100%;
@@ -1251,12 +1280,17 @@ function pageHtml() {
         <div id="groupReservationCount" class="metric">0</div>
       </div>
       <div class="panel">
+        <div class="muted">Reservas hoy</div>
+        <div id="todayReservationCount" class="metric">0</div>
+        <div id="todayReservationRooms" class="muted">0/69 habitaciones</div>
+      </div>
+      <div class="panel">
         <div class="muted">Reservas canceladas</div>
         <div id="canceledCount" class="metric">0</div>
       </div>
       <div class="panel">
         <div class="muted">Limites</div>
-        <div id="limits" class="metric">-</div>
+        <div id="limits" class="limit-list">-</div>
       </div>
     </section>
 
@@ -1538,10 +1572,16 @@ function pageHtml() {
 
       activeCount.textContent = data.totals.active;
       groupReservationCount.textContent = data.totals.groupReservations;
+      todayReservationCount.textContent = data.todayReservations?.reservations || 0;
+      todayReservationRooms.textContent =
+        (data.todayReservations?.occupied || 0) +
+        '/' +
+        (data.totalRooms || 69) +
+        ' habitaciones';
       canceledCount.textContent = data.totals.canceled;
-      limits.textContent = Object.entries(data.limits)
-        .map(([type, limit]) => type + ' ' + limit)
-        .join(' / ');
+      limits.innerHTML = Object.entries(data.limits)
+        .map(([type, limit]) => '<span><b>' + escapeHtml(type) + '</b><b>' + limit + '</b></span>')
+        .join('');
       updatedAt.textContent = 'Actualizado: ' + new Date(data.generatedAt).toLocaleString();
 
       renderRackDashboard(data.rackStatus);
