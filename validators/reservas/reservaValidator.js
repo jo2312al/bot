@@ -139,10 +139,6 @@ const validators = {
       ||
       limpio === "2"
       ||
-      limpio === "3"
-      ||
-      limpio === "4"
-      ||
       limpio.includes("king")
       ||
       limpio.includes("doble")

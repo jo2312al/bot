@@ -5,6 +5,7 @@ const {
 } = require("./closedDatesService");
 const {
   cancelCalendarReservationByFolio,
+  readCalendarReservations,
   saveCalendarReservation
 } = require("./reservationDatabaseService");
 
@@ -191,7 +192,7 @@ function countRoomsForDate({
     .filter(reservation =>
       reservation.status !== "cancelada"
       &&
-      normalizeRoomType(reservation.habitacion) === normalizeRoomType(habitacion)
+      normalizeRoomType(reservation.habitacion || reservation.tipo) === normalizeRoomType(habitacion)
       &&
       Array.isArray(reservation.dates)
       &&
@@ -202,6 +203,43 @@ function countRoomsForDate({
         total + (reservation.habitaciones || 1),
       0
     );
+}
+
+function getAvailabilityReservations() {
+  const byKey =
+    new Map();
+
+  readReservations()
+    .forEach(reservation => {
+      const key =
+        reservation.folio
+          ? `folio:${reservation.folio}`
+          : `json:${reservation.nombre}:${reservation.fecha}:${reservation.telefono}`;
+
+      byKey.set(
+        key,
+        reservation
+      );
+    });
+
+  readCalendarReservations()
+    .forEach(reservation => {
+      const key =
+        reservation.folio
+          ? `folio:${reservation.folio}`
+          : reservation.sourceKey || `calendar:${reservation.nombre}:${reservation.fecha}:${reservation.telefono}`;
+
+      byKey.set(
+        key,
+        {
+          ...reservation,
+          habitacion:
+            reservation.habitacion || reservation.tipo
+        }
+      );
+    });
+
+  return [...byKey.values()];
 }
 
 function checkRoomAvailability({
@@ -221,7 +259,7 @@ function checkRoomAvailability({
   }
 
   const reservations =
-    readReservations();
+    getAvailabilityReservations();
 
   const dates =
     getStayDates({

@@ -97,35 +97,15 @@ function parseRoomType(value) {
   }
 
   if (
-    limpio === "2"
-    ||
-    (
-      limpio.includes("suite")
-      &&
-      limpio.includes("king")
-    )
-  ) {
-
-    return "Suite King";
-
-  }
-
-  if (
-    limpio === "3"
-    ||
-    limpio.includes("doble suite")
-    ||
-    limpio.includes("suite doble")
-    ||
     limpio.includes("suite")
   ) {
 
-    return "Doble Suite";
+    return "Suite";
 
   }
 
   if (
-    limpio === "4"
+    limpio === "2"
     ||
     limpio.includes("doble")
     ||
@@ -234,9 +214,7 @@ Escriba 1, 2, king o doble.`,
     question: `Paso 5 de 7: Tipo de habitacion
 
 1 King
-2 Suite King
-3 Doble Suite
-4 Doble
+2 Doble
 
 Escriba el numero o tipo de habitacion.`,
 

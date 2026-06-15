@@ -597,7 +597,8 @@ ${currentStep.question}`)
   if (
     currentStep.key === "habitacion"
     &&
-    transformedValue === "Suite"
+    String(transformedValue)
+      .includes("Suite")
   ) {
 
     return send(
