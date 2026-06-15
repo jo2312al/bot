@@ -7,6 +7,7 @@ const QRCode =
 const {
   readReservations,
   getRoomLimits,
+  normalizeRoomType,
   cancelRoomReservationByFolio
 } = require("./services/roomInventoryService");
 const {
@@ -74,6 +75,9 @@ function buildOccupancy(reservations) {
   const occupancy =
     {};
 
+  const roomTypes =
+    Object.keys(limits);
+
   reservations
     .filter(reservation =>
       reservation.status !== "cancelada"
@@ -88,19 +92,24 @@ function buildOccupancy(reservations) {
         if (!occupancy[date]) {
           occupancy[date] = {
             date,
-            King: 0,
-            Doble: 0,
+            counts:
+              Object.fromEntries(
+                roomTypes.map(type => [
+                  type,
+                  0
+                ])
+              ),
             limits
           };
         }
 
-        if (reservation.habitacion === "King") {
-          occupancy[date].King +=
-            reservation.habitaciones || 1;
-        }
+        const type =
+          normalizeRoomType(
+            reservation.habitacion || reservation.tipo
+          );
 
-        if (reservation.habitacion === "Doble") {
-          occupancy[date].Doble +=
+        if (occupancy[date].counts[type] !== undefined) {
+          occupancy[date].counts[type] +=
             reservation.habitaciones || 1;
         }
       });
@@ -237,7 +246,9 @@ function normalizeManualReservation(input) {
     ninos:
       Math.max(Number(input.ninos || 0), 0),
     tipo:
-      String(input.tipo || input.habitacion || "").trim(),
+      normalizeRoomType(
+        String(input.tipo || input.habitacion || "").trim()
+      ),
     tarifa:
       String(input.tarifa || "").trim(),
     hora:
@@ -830,7 +841,7 @@ function pageHtml() {
       text-transform: uppercase;
     }
     .day {
-      min-height: 74px;
+      min-height: 92px;
       border: 1px solid var(--line);
       border-radius: 6px;
       background: #ffffff;
@@ -1011,7 +1022,7 @@ function pageHtml() {
         gap: 4px;
       }
       .day {
-        min-height: 58px;
+        min-height: 76px;
         padding: 5px;
       }
       .weekday,
@@ -1171,7 +1182,8 @@ function pageHtml() {
             <option value="">Sin tipo</option>
             <option value="Doble">Doble</option>
             <option value="King">King</option>
-            <option value="Suite">Suite</option>
+            <option value="Suite King">Suite King</option>
+            <option value="Doble Suite">Doble Suite</option>
           </select>
         </label>
         <label>
@@ -1290,7 +1302,9 @@ function pageHtml() {
       activeCount.textContent = data.totals.active;
       groupReservationCount.textContent = data.totals.groupReservations;
       canceledCount.textContent = data.totals.canceled;
-      limits.textContent = 'King ' + data.limits.King + ' / Doble ' + data.limits.Doble;
+      limits.textContent = Object.entries(data.limits)
+        .map(([type, limit]) => type + ' ' + limit)
+        .join(' / ');
       updatedAt.textContent = 'Actualizado: ' + new Date(data.generatedAt).toLocaleString();
 
       occupancy.innerHTML = renderOccupancy(data.occupancy);
@@ -1305,14 +1319,19 @@ function pageHtml() {
         return '<div class="muted">Sin reservas activas registradas.</div>';
       }
 
-      return '<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>King</th><th>Doble</th></tr></thead><tbody>' +
+      const roomTypes = Object.keys(dashboardData.limits);
+      return '<div class="table-wrap"><table><thead><tr><th>Fecha</th>' +
+        roomTypes.map(type => '<th>' + escapeHtml(type) + '</th>').join('') +
+        '</tr></thead><tbody>' +
         rows.map(row => {
-          const kingPct = Math.min((row.King / row.limits.King) * 100, 100);
-          const doblePct = Math.min((row.Doble / row.limits.Doble) * 100, 100);
           return '<tr>' +
             '<td>' + row.date + '</td>' +
-            '<td>' + row.King + ' / ' + row.limits.King + '<div class="bar"><span style="width:' + kingPct + '%"></span></div></td>' +
-            '<td>' + row.Doble + ' / ' + row.limits.Doble + '<div class="bar"><span style="width:' + doblePct + '%"></span></div></td>' +
+            roomTypes.map(type => {
+              const used = row.counts?.[type] || 0;
+              const limit = row.limits[type] || 0;
+              const pct = limit ? Math.min((used / limit) * 100, 100) : 0;
+              return '<td>' + used + ' / ' + limit + '<div class="bar"><span style="width:' + pct + '%"></span></div></td>';
+            }).join('') +
           '</tr>';
         }).join('') +
       '</tbody></table></div>';
@@ -1593,7 +1612,7 @@ function pageHtml() {
         const date = new Date(year, month, day);
         const display = dateToDisplay(date);
         const iso = dateToIso(date);
-        const row = occupancyByDate[display] || { King: 0, Doble: 0, limits: dashboardData.limits };
+        const row = occupancyByDate[display] || { counts: {}, limits: dashboardData.limits };
         const groupRow = groupByDate[display] || { occupied: 0, total: dashboardData.totalRooms || 69 };
         const isClosed = closed.has(display);
         const isSelected = iso === closeStart.value || iso === closeEnd.value;
@@ -1605,7 +1624,7 @@ function pageHtml() {
           + (display === todayDisplay ? ' today' : '');
         const meta = isClosed
           ? 'Cerrado'
-          : groupRow.occupied + '/' + groupRow.total + ' reservas<br>K ' + row.King + '/' + row.limits.King + ' / D ' + row.Doble + '/' + row.limits.Doble;
+          : groupRow.occupied + '/' + groupRow.total + ' reservas<br>' + renderInventoryMini(row);
 
         cells.push(
           '<div class="' + className + '" onclick="selectCalendarDate(\\'' + iso + '\\')">' +
@@ -1619,6 +1638,23 @@ function pageHtml() {
       }
 
       calendar.innerHTML = cells.join('');
+    }
+
+    function renderInventoryMini(row) {
+      const labels = {
+        King: 'K',
+        'Suite King': 'SK',
+        'Doble Suite': 'DS',
+        Doble: 'D'
+      };
+
+      return Object.keys(dashboardData.limits)
+        .map(type => {
+          const used = row.counts?.[type] || 0;
+          const limit = row.limits?.[type] || dashboardData.limits[type] || 0;
+          return (labels[type] || type) + ' ' + used + '/' + limit;
+        })
+        .join(' / ');
     }
 
     function selectCalendarDate(isoDate) {

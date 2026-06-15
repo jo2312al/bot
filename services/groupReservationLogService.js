@@ -5,7 +5,8 @@ const {
   GROUP_ID
 } = require("../config/config");
 const {
-  readReservations
+  readReservations,
+  normalizeRoomType
 } = require("./roomInventoryService");
 const {
   readCalendarReservations,
@@ -563,21 +564,7 @@ function getTipo(action) {
   const text =
     normalize(action);
 
-  if (/suite/.test(text)) {
-    return "Suite";
-  }
-
-  if (/king/.test(text)) {
-    return "King";
-  }
-
-  if (
-    /doble|2 camas|dos camas|cama matrimonial|cama doble/.test(text)
-  ) {
-    return "Doble";
-  }
-
-  return "";
+  return normalizeRoomType(text);
 }
 
 function getTarifa(action) {
@@ -841,7 +828,9 @@ function normalizeStoredReservation(reservation) {
     ninos:
       reservation.ninos || 0,
     tipo:
-      reservation.habitacion || "",
+      normalizeRoomType(
+        reservation.habitacion || reservation.tipo || ""
+      ),
     tarifa:
       "",
     telefono:

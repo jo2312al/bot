@@ -15,14 +15,66 @@ const DATA_FILE =
   );
 
 const ROOM_LIMITS = {
-  King: 5,
-  Doble: 20
+  King: 9,
+  "Suite King": 1,
+  "Doble Suite": 11,
+  Doble: 48
 };
 
 function getRoomLimits() {
   return {
     ...ROOM_LIMITS
   };
+}
+
+function normalizeRoomType(value) {
+  const clean =
+    String(value || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+
+  if (
+    clean.includes("suite")
+    &&
+    clean.includes("king")
+  ) {
+    return "Suite King";
+  }
+
+  if (
+    clean.includes("suite")
+    &&
+    (
+      clean.includes("doble")
+      ||
+      clean.includes("matrimonial")
+      ||
+      clean.includes("2 camas")
+    )
+  ) {
+    return "Doble Suite";
+  }
+
+  if (clean.includes("suite")) {
+    return "Doble Suite";
+  }
+
+  if (clean.includes("king")) {
+    return "King";
+  }
+
+  if (
+    clean.includes("doble")
+    ||
+    clean.includes("matrimonial")
+    ||
+    clean.includes("2 camas")
+  ) {
+    return "Doble";
+  }
+
+  return value || "";
 }
 
 function ensureDataFile() {
@@ -139,7 +191,7 @@ function countRoomsForDate({
     .filter(reservation =>
       reservation.status !== "cancelada"
       &&
-      reservation.habitacion === habitacion
+      normalizeRoomType(reservation.habitacion) === normalizeRoomType(habitacion)
       &&
       Array.isArray(reservation.dates)
       &&
@@ -159,7 +211,7 @@ function checkRoomAvailability({
   habitaciones = 1
 }) {
   const limit =
-    ROOM_LIMITS[habitacion];
+    ROOM_LIMITS[normalizeRoomType(habitacion)];
 
   if (!limit) {
     return {
@@ -183,7 +235,8 @@ function checkRoomAvailability({
       ||
       countRoomsForDate({
         reservations,
-        habitacion,
+        habitacion:
+          normalizeRoomType(habitacion),
         date
       }) + habitaciones > limit
     );
@@ -215,7 +268,7 @@ function saveRoomReservation({
     telefono:
       data.telefono || "",
     habitacion:
-      data.habitacion,
+      normalizeRoomType(data.habitacion),
     habitaciones:
       data.habitaciones || 1,
     fecha:
@@ -252,9 +305,9 @@ function saveRoomReservation({
     telefono:
       data.telefono || "",
     tipo:
-      data.habitacion,
+      normalizeRoomType(data.habitacion),
     habitacion:
-      data.habitacion,
+      normalizeRoomType(data.habitacion),
     habitaciones:
       data.habitaciones || 1,
     fecha:
@@ -313,6 +366,7 @@ function cancelRoomReservationByFolio(folio) {
 
 module.exports = {
   getRoomLimits,
+  normalizeRoomType,
   readReservations,
   checkRoomAvailability,
   saveRoomReservation,

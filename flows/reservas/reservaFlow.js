@@ -90,8 +90,6 @@ function parseRoomType(value) {
 
   if (
     limpio === "1"
-    ||
-    limpio.includes("king")
   ) {
 
     return "King";
@@ -99,10 +97,50 @@ function parseRoomType(value) {
   }
 
   if (
+    limpio === "2"
+    ||
+    (
+      limpio.includes("suite")
+      &&
+      limpio.includes("king")
+    )
+  ) {
+
+    return "Suite King";
+
+  }
+
+  if (
+    limpio === "3"
+    ||
+    limpio.includes("doble suite")
+    ||
+    limpio.includes("suite doble")
+    ||
     limpio.includes("suite")
   ) {
 
-    return "Suite";
+    return "Doble Suite";
+
+  }
+
+  if (
+    limpio === "4"
+    ||
+    limpio.includes("doble")
+    ||
+    limpio.includes("matrimonial")
+  ) {
+
+    return "Doble";
+
+  }
+
+  if (
+    limpio.includes("king")
+  ) {
+
+    return "King";
 
   }
 
@@ -192,6 +230,15 @@ Ejemplos:
 2️⃣ Doble
 
 Escriba 1, 2, king o doble.`,
+
+    question: `Paso 5 de 7: Tipo de habitacion
+
+1 King
+2 Suite King
+3 Doble Suite
+4 Doble
+
+Escriba el numero o tipo de habitacion.`,
 
     validator: "habitacion",
 
