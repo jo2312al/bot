@@ -916,12 +916,13 @@ function pageHtml() {
     }
     .rack-dashboard {
       display: grid;
-      grid-template-columns: 1.2fr repeat(4, minmax(0, 1fr));
+      grid-template-columns: 1.25fr 1.35fr repeat(4, minmax(0, 1fr));
       gap: 10px;
       align-items: stretch;
     }
     .rack-meta-card,
-    .rack-kpi-card {
+    .rack-kpi-card,
+    .rack-pie-card {
       border: 1px solid var(--line);
       border-radius: 8px;
       padding: 12px;
@@ -939,6 +940,61 @@ function pageHtml() {
       line-height: 1.45;
       margin-top: 6px;
     }
+    .rack-pie-card {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 12px;
+      align-items: center;
+    }
+    .rack-pie {
+      --occupied: 0deg;
+      --available: 0deg;
+      width: 82px;
+      height: 82px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background:
+        conic-gradient(
+          #0f766e 0deg var(--occupied),
+          #d1fae5 var(--occupied) calc(var(--occupied) + var(--available)),
+          #e5e7eb calc(var(--occupied) + var(--available)) 360deg
+        );
+    }
+    .rack-pie span {
+      display: grid;
+      place-items: center;
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      background: #ffffff;
+      font-weight: 800;
+      font-size: 13px;
+    }
+    .rack-pie-legend {
+      display: grid;
+      gap: 6px;
+      font-size: 12px;
+    }
+    .rack-pie-legend div {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .rack-pie-legend i {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      display: inline-block;
+      margin-right: 6px;
+    }
+    .rack-pie-legend strong {
+      font-size: 13px;
+    }
+    .rack-pie-occupied { background: #0f766e; }
+    .rack-pie-available { background: #d1fae5; border: 1px solid #99f6e4; }
+    .rack-pie-blocked { background: #e5e7eb; border: 1px solid #cbd5e1; }
     .rack-room-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
@@ -1634,11 +1690,35 @@ function pageHtml() {
               ' / D ' + getRackTypeTotal(counts, 'Doble') +
             '</div>' +
           '</div>' +
+          renderRackPie(counts) +
           renderRackKpi('Ocupadas', counts.occupied) +
           renderRackKpi('Bloqueadas', counts.blocked) +
           renderRackKpi('VL limpias', counts.availableClean) +
           renderRackKpi('VS sucias', counts.availableDirty) +
         '</div>';
+    }
+
+    function renderRackPie(counts) {
+      const total = Number(counts?.total || 0);
+      const occupied = Number(counts?.occupied?.total || 0);
+      const blocked = Number(counts?.blocked?.total || 0);
+      const available = Number(counts?.availableClean?.total || 0) + Number(counts?.availableDirty?.total || 0);
+      const occupiedDegrees = total ? Math.round((occupied / total) * 360) : 0;
+      const availableDegrees = total ? Math.round((available / total) * 360) : 0;
+
+      return '<div class="rack-pie-card">' +
+        '<div class="rack-pie" style="--occupied:' + occupiedDegrees + 'deg; --available:' + availableDegrees + 'deg">' +
+          '<span>' + escapeHtml(total || 0) + '</span>' +
+        '</div>' +
+        '<div>' +
+          '<strong>Distribucion</strong>' +
+          '<div class="rack-pie-legend">' +
+            '<div><span><i class="rack-pie-occupied"></i>OC ocupadas</span><strong>' + occupied + '</strong></div>' +
+            '<div><span><i class="rack-pie-available"></i>Vacias</span><strong>' + available + '</strong></div>' +
+            '<div><span><i class="rack-pie-blocked"></i>Bloqueadas</span><strong>' + blocked + '</strong></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
     }
 
     function renderRackKpi(label, data) {
