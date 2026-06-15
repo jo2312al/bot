@@ -912,12 +912,13 @@ function pageHtml() {
       margin-top: 12px;
     }
     .rack-room {
-      border: 1px solid var(--line);
+      border: 2px solid var(--line);
       border-radius: 8px;
       padding: 8px 6px;
       background: #ffffff;
       text-align: left;
       min-width: 0;
+      box-shadow: 0 1px 0 rgba(15, 23, 42, .08);
     }
     .rack-room strong {
       display: block;
@@ -925,21 +926,25 @@ function pageHtml() {
     }
     .rack-room span {
       display: block;
-      color: var(--muted);
+      color: inherit;
       font-size: 11px;
       margin-top: 2px;
+      opacity: .82;
     }
     .rack-room.occupied {
-      background: #fee2e2;
-      border-color: #fecaca;
+      background: #dc2626;
+      border-color: #991b1b;
+      color: #ffffff;
     }
     .rack-room.available {
-      background: #ecfdf5;
-      border-color: #99f6e4;
+      background: #16a34a;
+      border-color: #166534;
+      color: #ffffff;
     }
     .rack-room.blocked {
-      background: #f3f4f6;
-      border-color: #cbd5e1;
+      background: #475569;
+      border-color: #1e293b;
+      color: #ffffff;
     }
     textarea {
       width: 100%;
@@ -1458,12 +1463,30 @@ function pageHtml() {
       </div>
     </div>
   </div>
+  <div id="confirmRackBackdrop" class="modal-backdrop hidden" onclick="closeRackConfirm()">
+    <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirmRackTitle" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <strong id="confirmRackTitle">Marcar habitacion ocupada</strong>
+          <div class="muted">Actualiza el ultimo rack guardado.</div>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div id="confirmRackText"></div>
+        <div class="confirm-actions">
+          <button onclick="closeRackConfirm()">Cancelar</button>
+          <button class="primary" onclick="confirmRackRoomOccupied()">Marcar ocupada</button>
+        </div>
+      </div>
+    </div>
+  </div>
   <script>
     let dashboardData = null;
     let calendarDate = new Date();
     let selectedStart = "";
     let selectedEnd = "";
     let pendingDeleteReservation = null;
+    let pendingRackRoom = null;
     let activeModalIsoDate = "";
 
     async function loadBotStatus() {
@@ -1629,13 +1652,33 @@ function pageHtml() {
       return 'blocked';
     }
 
-    async function setRackRoomOccupied(room) {
-      const ok = confirm('Marcar habitacion ' + room + ' como ocupada?');
+    function setRackRoomOccupied(room) {
+      const status = dashboardData?.rackStatus;
+      const rackRoom = status?.rooms?.find(item => item.room === room);
 
-      if (!ok) {
+      pendingRackRoom = room;
+      confirmRackText.innerHTML =
+        '<strong>Habitacion ' + escapeHtml(room) + '</strong>' +
+        '<div class="muted">' +
+          escapeHtml(rackRoom?.type || '-') +
+          ' / Estado actual: ' + escapeHtml(rackRoom?.status || '-') +
+        '</div>';
+      confirmRackBackdrop.classList.remove('hidden');
+      document.body.classList.add('modal-open');
+    }
+
+    function closeRackConfirm() {
+      confirmRackBackdrop.classList.add('hidden');
+      pendingRackRoom = null;
+      document.body.classList.remove('modal-open');
+    }
+
+    async function confirmRackRoomOccupied() {
+      if (!pendingRackRoom) {
         return;
       }
 
+      const room = pendingRackRoom;
       const response = await fetch('/api/rack/room-status', {
         method: 'POST',
         headers: {
@@ -1653,6 +1696,7 @@ function pageHtml() {
         return;
       }
 
+      closeRackConfirm();
       await loadDashboard();
       showView('rack');
     }
@@ -2432,7 +2476,9 @@ function pageHtml() {
     setInterval(loadBotStatus, 5000);
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape') {
-        if (!confirmDeleteBackdrop.classList.contains('hidden')) {
+        if (!confirmRackBackdrop.classList.contains('hidden')) {
+          closeRackConfirm();
+        } else if (!confirmDeleteBackdrop.classList.contains('hidden')) {
           closeDeleteConfirm();
         } else {
           closeDayModal();
