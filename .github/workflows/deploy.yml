@@ -48,6 +48,7 @@ jobs:
           --exclude=data/closedDates.json \
           --exclude=data/calendarReservations.json \
           --exclude=data/groupMessages.json \
+          --exclude=data/rackStatus.json \
           --exclude=data/*.db \
           --exclude=data/*.db-* \
           --exclude=logs \

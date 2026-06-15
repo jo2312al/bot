@@ -143,6 +143,109 @@ function parseCsvReportTimestamp(csvText) {
   };
 }
 
+function getMexicoParts(date = new Date()) {
+  const parts =
+    new Intl.DateTimeFormat(
+      "en-CA",
+      {
+        timeZone:
+          "America/Mexico_City",
+        year:
+          "numeric",
+        month:
+          "2-digit",
+        day:
+          "2-digit",
+        hour:
+          "2-digit",
+        hourCycle:
+          "h23"
+      }
+    )
+      .formatToParts(date)
+      .reduce((values, part) => {
+        values[part.type] =
+          part.value;
+
+        return values;
+      }, {});
+
+  return {
+    isoDate:
+      `${parts.year}-${parts.month}-${parts.day}`,
+    hour:
+      Number(parts.hour || 0)
+  };
+}
+
+function addDaysToIso(isoDate, days) {
+  const [
+    year,
+    month,
+    day
+  ] =
+    String(isoDate || "")
+      .split("-")
+      .map(Number);
+
+  const date =
+    new Date(
+      Date.UTC(
+        year,
+        month - 1,
+        day
+      )
+    );
+
+  date.setUTCDate(
+    date.getUTCDate() + days
+  );
+
+  return date
+    .toISOString()
+    .slice(0, 10);
+}
+
+function validateRackReportDate(reportDateTime) {
+  const reportIsoDate =
+    String(reportDateTime || "")
+      .slice(0, 10);
+
+  const mexico =
+    getMexicoParts();
+
+  const yesterday =
+    addDaysToIso(
+      mexico.isoDate,
+      -1
+    );
+
+  if (reportIsoDate === mexico.isoDate) {
+    return {
+      valid:
+        true
+    };
+  }
+
+  if (
+    reportIsoDate === yesterday
+    &&
+    mexico.hour < 7
+  ) {
+    return {
+      valid:
+        true
+    };
+  }
+
+  return {
+    valid:
+      false,
+    error:
+      "El rack CSV debe ser de hoy. Solo se acepta el de ayer antes de las 7:00 am."
+  };
+}
+
 function readLatestRackStatus() {
   ensureDataDir();
 
@@ -207,6 +310,98 @@ function saveLatestRackStatus(nextStatus) {
     latest:
       nextStatus
   };
+}
+
+function rebuildRackStatusFromRooms(status) {
+  const summary =
+    summarizeRackFull(
+      status.rooms || []
+    );
+
+  return {
+    ...status,
+    counts:
+      summary.fullCounts,
+    rooms:
+      summary.rooms,
+    occupied:
+      summary.occupied,
+    blocked:
+      summary.blocked,
+    availableClean:
+      summary.availableClean,
+    availableDirty:
+      summary.availableDirty,
+    updatedAt:
+      new Date()
+        .toISOString()
+  };
+}
+
+function updateRackRoomStatus({
+  room,
+  status
+}) {
+  const current =
+    readLatestRackStatus();
+
+  const normalizedRoom =
+    String(room || "")
+      .replace(/\D/g, "");
+
+  const normalizedStatus =
+    normalizeStatus(status || "OC");
+
+  if (!current || !Array.isArray(current.rooms)) {
+    throw new Error("No hay rack guardado para actualizar");
+  }
+
+  if (!RACK_STATUSES[normalizedStatus]) {
+    throw new Error("Estado de habitacion invalido");
+  }
+
+  let updated =
+    false;
+
+  const rooms =
+    current.rooms.map(item => {
+      if (item.room !== normalizedRoom) {
+        return item;
+      }
+
+      updated =
+        true;
+
+      return {
+        ...item,
+        status:
+          normalizedStatus,
+        statusLabel:
+          RACK_STATUSES[normalizedStatus]
+      };
+    });
+
+  if (!updated) {
+    throw new Error("Habitacion no encontrada en el rack");
+  }
+
+  const next =
+    rebuildRackStatusFromRooms({
+      ...current,
+      rooms
+    });
+
+  fs.writeFileSync(
+    RACK_STATUS_FILE,
+    JSON.stringify(
+      next,
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  return next;
 }
 
 function extensionFromMime(mimeType) {
@@ -822,6 +1017,20 @@ function analyzeRackCsv({
   const reportInfo =
     parseCsvReportTimestamp(csvText);
 
+  const dateValidation =
+    validateRackReportDate(
+      reportInfo.reportDateTime
+    );
+
+  if (!dateValidation.valid) {
+    return {
+      ok:
+        false,
+      error:
+        dateValidation.error
+    };
+  }
+
   if (!summary.rooms.length) {
     return {
       ok:
@@ -974,6 +1183,7 @@ module.exports = {
   analyzeRackCsv,
   analyzeRackImage,
   readLatestRackStatus,
+  updateRackRoomStatus,
   summarizeRack,
   formatRackSummary,
   parseRackText,

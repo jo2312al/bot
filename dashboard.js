@@ -20,7 +20,8 @@ const {
 const {
   analyzeRackCsv,
   analyzeRackImage,
-  readLatestRackStatus
+  readLatestRackStatus,
+  updateRackRoomStatus
 } = require("./services/rackAnalysisService");
 const {
   readBotStatus
@@ -658,6 +659,20 @@ function pageHtml() {
       padding: 16px;
       margin-bottom: 18px;
     }
+    .view-tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 0 0 16px;
+    }
+    .view-tabs button.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
+    .view-panel.hidden {
+      display: none;
+    }
     .metric {
       font-size: 30px;
       font-weight: 700;
@@ -889,6 +904,42 @@ function pageHtml() {
       font-size: 12px;
       line-height: 1.45;
       margin-top: 6px;
+    }
+    .rack-room-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .rack-room {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 6px;
+      background: #ffffff;
+      text-align: left;
+      min-width: 0;
+    }
+    .rack-room strong {
+      display: block;
+      font-size: 15px;
+    }
+    .rack-room span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 2px;
+    }
+    .rack-room.occupied {
+      background: #fee2e2;
+      border-color: #fecaca;
+    }
+    .rack-room.available {
+      background: #ecfdf5;
+      border-color: #99f6e4;
+    }
+    .rack-room.blocked {
+      background: #f3f4f6;
+      border-color: #cbd5e1;
     }
     textarea {
       width: 100%;
@@ -1177,6 +1228,14 @@ function pageHtml() {
     <div class="muted">Reservas, ocupacion por fecha y cancelacion de folios</div>
   </header>
   <main>
+    <nav class="view-tabs">
+      <button id="tab-main" class="active" onclick="showView('main')">Principal</button>
+      <button id="tab-calendar" onclick="showView('calendar')">Calendario</button>
+      <button id="tab-reservations" onclick="showView('reservations')">Reservas</button>
+      <button id="tab-rack" onclick="showView('rack')">Rack</button>
+    </nav>
+
+    <div id="view-main" class="view-panel">
     <section class="grid">
       <div class="panel">
         <div class="muted">Reservas activas</div>
@@ -1234,7 +1293,9 @@ function pageHtml() {
       </div>
       <div id="occupancy"></div>
     </section>
+    </div>
 
+    <div id="view-calendar" class="view-panel hidden">
     <section class="panel">
       <div class="toolbar">
         <div>
@@ -1264,7 +1325,9 @@ function pageHtml() {
       <div id="calendar" class="calendar-grid"></div>
       <div id="groupReservationDetail" style="margin-top:14px"></div>
     </section>
+    </div>
 
+    <div id="view-reservations" class="view-panel hidden">
     <section class="panel">
       <div class="toolbar">
         <div>
@@ -1333,6 +1396,22 @@ function pageHtml() {
     <section class="panel">
       <div class="toolbar">
         <div>
+          <strong>Reservas registradas</strong>
+          <div class="muted">Cancelar un folio libera inventario.</div>
+        </div>
+        <div>
+          <input id="folioInput" placeholder="Folio a cancelar">
+          <button class="danger" onclick="cancelFolio()">Cancelar folio</button>
+        </div>
+      </div>
+      <div id="reservations"></div>
+    </section>
+    </div>
+
+    <div id="view-rack" class="view-panel hidden">
+    <section class="panel">
+      <div class="toolbar">
+        <div>
           <strong>Lector de rack</strong>
           <div class="muted">Importa el CSV del sistema para leer ocupadas, disponibles y bloqueadas. La foto queda como respaldo.</div>
         </div>
@@ -1346,21 +1425,9 @@ function pageHtml() {
       <div style="margin-top:12px">
         <textarea id="rackResult" readonly placeholder="Aqui aparecera el resultado del rack."></textarea>
       </div>
+      <div id="rackRoomGrid"></div>
     </section>
-
-    <section class="panel">
-      <div class="toolbar">
-        <div>
-          <strong>Reservas registradas</strong>
-          <div class="muted">Cancelar un folio libera inventario.</div>
-        </div>
-        <div>
-          <input id="folioInput" placeholder="Folio a cancelar">
-          <button class="danger" onclick="cancelFolio()">Cancelar folio</button>
-        </div>
-      </div>
-      <div id="reservations"></div>
-    </section>
+    </div>
   </main>
   <div id="dayModalBackdrop" class="modal-backdrop hidden" onclick="closeDayModal()">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="dayModalTitle" onclick="event.stopPropagation()">
@@ -1455,11 +1522,27 @@ function pageHtml() {
       updatedAt.textContent = 'Actualizado: ' + new Date(data.generatedAt).toLocaleString();
 
       renderRackDashboard(data.rackStatus);
+      renderRackRoomGrid(data.rackStatus);
       occupancy.innerHTML = renderOccupancy(data.occupancy);
       reservations.innerHTML = renderReservations(data.reservations);
       updateSelectionSummary();
       renderCalendar();
       renderGroupReservationDetail(closeStart.value || data.today);
+    }
+
+    function showView(name) {
+      ['main', 'calendar', 'reservations', 'rack'].forEach(view => {
+        const panel = document.getElementById('view-' + view);
+        const tab = document.getElementById('tab-' + view);
+
+        if (panel) {
+          panel.classList.toggle('hidden', view !== name);
+        }
+
+        if (tab) {
+          tab.classList.toggle('active', view === name);
+        }
+      });
     }
 
     function renderRackDashboard(status) {
@@ -1512,6 +1595,66 @@ function pageHtml() {
     function getRackTypeTotal(counts, type) {
       return ['occupied', 'blocked', 'availableClean', 'availableDirty']
         .reduce((total, key) => total + Number(counts?.[key]?.[type] || 0), 0);
+    }
+
+    function renderRackRoomGrid(status) {
+      if (!status || !Array.isArray(status.rooms)) {
+        rackRoomGrid.innerHTML =
+          '<div class="muted" style="margin-top:12px">Importa un CSV del rack para ver habitaciones con botones.</div>';
+        return;
+      }
+
+      rackRoomGrid.innerHTML =
+        '<div class="rack-room-grid">' +
+        status.rooms.map(room => {
+          const category = getRackRoomCategory(room.status);
+          return '<button class="rack-room ' + category + '" onclick="setRackRoomOccupied(\\'' + escapeHtml(room.room) + '\\')">' +
+            '<strong>' + escapeHtml(room.room) + '</strong>' +
+            '<span>' + escapeHtml(room.type || '-') + '</span>' +
+            '<span>' + escapeHtml(room.status || '-') + '</span>' +
+          '</button>';
+        }).join('') +
+        '</div>';
+    }
+
+    function getRackRoomCategory(status) {
+      if (['OC', 'OS', 'OL', 'OR', 'OSE', 'ND'].includes(status)) {
+        return 'occupied';
+      }
+
+      if (['VL', 'VS'].includes(status)) {
+        return 'available';
+      }
+
+      return 'blocked';
+    }
+
+    async function setRackRoomOccupied(room) {
+      const ok = confirm('Marcar habitacion ' + room + ' como ocupada?');
+
+      if (!ok) {
+        return;
+      }
+
+      const response = await fetch('/api/rack/room-status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          room,
+          status: 'OC'
+        })
+      });
+      const data = await response.json();
+
+      if (!data.ok) {
+        alert(data.error || 'No se pudo actualizar la habitacion.');
+        return;
+      }
+
+      await loadDashboard();
+      showView('rack');
     }
 
     function renderOccupancy(rows) {
@@ -2560,6 +2703,40 @@ const server =
           ok: false,
           error:
             error.message || "No se pudo analizar el CSV del rack"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/rack/room-status"
+    ) {
+      try {
+        const body =
+          await readBody(req);
+
+        const rackStatus =
+          updateRackRoomStatus({
+            room:
+              body.room,
+            status:
+              body.status || "OC"
+          });
+
+        sendJson(res, 200, {
+          ok:
+            true,
+          rackStatus
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok:
+            false,
+          error:
+            error.message || "No se pudo actualizar la habitacion"
         });
       }
 
