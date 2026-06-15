@@ -564,7 +564,7 @@ function getSummary() {
         canceled.length
     },
     occupancy:
-      buildOccupancy(reservations),
+      buildOccupancy(groupReservations),
     groupReservationCalendar,
     groupReservations,
     totalRooms:
@@ -788,6 +788,39 @@ function pageHtml() {
       display: block;
       height: 100%;
       background: var(--accent);
+    }
+    .occupancy-list {
+      display: grid;
+      gap: 8px;
+    }
+    .occupancy-card {
+      display: grid;
+      grid-template-columns: 150px minmax(0, 1fr);
+      gap: 12px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: #ffffff;
+    }
+    .occupancy-types {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(90px, 1fr));
+      gap: 8px;
+    }
+    .occupancy-type {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+    .occupancy-type span {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .occupancy-type strong {
+      font-size: 13px;
     }
     textarea {
       width: 100%;
@@ -1015,6 +1048,12 @@ function pageHtml() {
         display: grid;
         grid-template-columns: 1fr;
       }
+      .occupancy-card {
+        grid-template-columns: 1fr;
+      }
+      .occupancy-types {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
       .date-controls {
         grid-template-columns: 1fr;
       }
@@ -1101,7 +1140,7 @@ function pageHtml() {
     <section class="panel">
       <div class="toolbar">
         <div>
-          <strong>Ocupacion por fecha</strong>
+          <strong>Proximas reservas por fecha</strong>
           <div id="updatedAt" class="muted"></div>
         </div>
         <button class="primary" onclick="loadDashboard()">Actualizar</button>
@@ -1315,26 +1354,38 @@ function pageHtml() {
     }
 
     function renderOccupancy(rows) {
-      if (!rows.length) {
-        return '<div class="muted">Sin reservas activas registradas.</div>';
+      const today = isoToDisplay(dashboardData.today);
+      const upcoming = rows
+        .filter(row => compareDisplayDates(row.date, today) >= 0)
+        .slice(0, 12);
+
+      if (!upcoming.length) {
+        return '<div class="muted">Sin reservas proximas registradas.</div>';
       }
 
       const roomTypes = Object.keys(dashboardData.limits);
-      return '<div class="table-wrap"><table><thead><tr><th>Fecha</th>' +
-        roomTypes.map(type => '<th>' + escapeHtml(type) + '</th>').join('') +
-        '</tr></thead><tbody>' +
-        rows.map(row => {
-          return '<tr>' +
-            '<td>' + row.date + '</td>' +
-            roomTypes.map(type => {
+      return '<div class="occupancy-list">' +
+        upcoming.map(row =>
+          '<div class="occupancy-card">' +
+            '<div>' +
+              '<strong>' + escapeHtml(row.date) + '</strong>' +
+              '<div class="muted">' + getTotalUsed(row) + '/' + (dashboardData.totalRooms || 69) + ' habitaciones</div>' +
+            '</div>' +
+            '<div class="occupancy-types">' +
+              roomTypes.map(type => {
               const used = row.counts?.[type] || 0;
               const limit = row.limits[type] || 0;
               const pct = limit ? Math.min((used / limit) * 100, 100) : 0;
-              return '<td>' + used + ' / ' + limit + '<div class="bar"><span style="width:' + pct + '%"></span></div></td>';
+              return '<div class="occupancy-type">' +
+                '<span>' + escapeHtml(shortRoomLabel(type)) + '</span>' +
+                '<strong>' + used + '/' + limit + '</strong>' +
+                '<div class="bar"><span style="width:' + pct + '%"></span></div>' +
+              '</div>';
             }).join('') +
-          '</tr>';
-        }).join('') +
-      '</tbody></table></div>';
+            '</div>' +
+          '</div>'
+        ).join('') +
+      '</div>';
     }
 
     function renderReservations(rows) {
@@ -1655,6 +1706,31 @@ function pageHtml() {
           return (labels[type] || type) + ' ' + used + '/' + limit;
         })
         .join(' / ');
+    }
+
+    function shortRoomLabel(type) {
+      const labels = {
+        King: 'K',
+        'Suite King': 'SK',
+        'Doble Suite': 'DS',
+        Doble: 'D'
+      };
+
+      return labels[type] || type;
+    }
+
+    function getTotalUsed(row) {
+      return Object.values(row.counts || {})
+        .reduce((total, value) => total + Number(value || 0), 0);
+    }
+
+    function compareDisplayDates(left, right) {
+      return displayDateValue(left) - displayDateValue(right);
+    }
+
+    function displayDateValue(value) {
+      const parts = String(value || '').split('/').map(Number);
+      return new Date(parts[2], parts[1] - 1, parts[0]).getTime();
     }
 
     function selectCalendarDate(isoDate) {
