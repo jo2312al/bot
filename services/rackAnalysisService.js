@@ -5,6 +5,12 @@ const {
   execFile
 } = require("child_process");
 
+const RACK_STATUS_FILE =
+  path.join(
+    __dirname,
+    "../data/rackStatus.json"
+  );
+
 const TESSERACT_COMMAND =
   process.env.TESSERACT_PATH || "tesseract";
 
@@ -69,6 +75,138 @@ function normalizeStatus(status) {
   return String(status || "")
     .toUpperCase()
     .replace(/[^A-Z]/g, "");
+}
+
+function ensureDataDir() {
+  const dir =
+    path.dirname(RACK_STATUS_FILE);
+
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(
+      dir,
+      {
+        recursive: true
+      }
+    );
+  }
+}
+
+function parseCsvReportTimestamp(csvText) {
+  const text =
+    String(csvText || "");
+
+  const dateMatch =
+    text.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/);
+
+  const timeMatch =
+    text.match(/\b(\d{1,2}):(\d{2})(?::(\d{2}))?\b/);
+
+  if (!dateMatch) {
+    return {
+      reportDate:
+        "",
+      reportTime:
+        "",
+      reportDateTime:
+        ""
+    };
+  }
+
+  const day =
+    String(dateMatch[1])
+      .padStart(2, "0");
+  const month =
+    String(dateMatch[2])
+      .padStart(2, "0");
+  const year =
+    dateMatch[3];
+  const hour =
+    timeMatch
+      ? String(timeMatch[1]).padStart(2, "0")
+      : "00";
+  const minute =
+    timeMatch
+      ? timeMatch[2]
+      : "00";
+  const second =
+    timeMatch
+      ? String(timeMatch[3] || "00").padStart(2, "0")
+      : "00";
+
+  return {
+    reportDate:
+      `${day}/${month}/${year}`,
+    reportTime:
+      `${hour}:${minute}:${second}`,
+    reportDateTime:
+      `${year}-${month}-${day}T${hour}:${minute}:${second}`
+  };
+}
+
+function readLatestRackStatus() {
+  ensureDataDir();
+
+  if (!fs.existsSync(RACK_STATUS_FILE)) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(
+      fs.readFileSync(
+        RACK_STATUS_FILE,
+        "utf8"
+      )
+    );
+  } catch (error) {
+    return null;
+  }
+}
+
+function saveLatestRackStatus(nextStatus) {
+  ensureDataDir();
+
+  const current =
+    readLatestRackStatus();
+
+  const currentTime =
+    current?.reportDateTime
+      ? new Date(current.reportDateTime).getTime()
+      : 0;
+
+  const nextTime =
+    nextStatus?.reportDateTime
+      ? new Date(nextStatus.reportDateTime).getTime()
+      : Date.now();
+
+  if (
+    current
+    &&
+    currentTime > nextTime
+  ) {
+    return {
+      saved:
+        false,
+      latest:
+        current
+    };
+  }
+
+  fs.writeFileSync(
+    RACK_STATUS_FILE,
+    JSON.stringify(
+      nextStatus,
+      null,
+      2
+    ),
+    "utf8"
+  );
+
+  return {
+    saved:
+      true,
+    latest:
+      nextStatus
+  };
 }
 
 function extensionFromMime(mimeType) {
@@ -671,13 +809,18 @@ ${formatRoomList(summary.availableDirty)}`;
 }
 
 function analyzeRackCsv({
-  csvText
+  csvText,
+  fileName = "",
+  uploadedBy = ""
 }) {
   const entries =
     parseRackText(csvText);
 
   const summary =
     summarizeRackFull(entries);
+
+  const reportInfo =
+    parseCsvReportTimestamp(csvText);
 
   if (!summary.rooms.length) {
     return {
@@ -688,12 +831,41 @@ function analyzeRackCsv({
     };
   }
 
+  const rackStatus = {
+    ...reportInfo,
+    uploadedAt:
+      new Date()
+        .toISOString(),
+    uploadedBy,
+    fileName,
+    counts:
+      summary.fullCounts,
+    rooms:
+      summary.rooms,
+    occupied:
+      summary.occupied,
+    blocked:
+      summary.blocked,
+    availableClean:
+      summary.availableClean,
+    availableDirty:
+      summary.availableDirty
+  };
+
+  const saveResult =
+    saveLatestRackStatus(rackStatus);
+
   return {
     ok:
       true,
     message:
       formatRackCsvSummary(summary),
-    summary
+    summary,
+    rackStatus,
+    saved:
+      saveResult.saved,
+    latest:
+      saveResult.latest
   };
 }
 
@@ -801,6 +973,7 @@ async function analyzeRackImage({
 module.exports = {
   analyzeRackCsv,
   analyzeRackImage,
+  readLatestRackStatus,
   summarizeRack,
   formatRackSummary,
   parseRackText,

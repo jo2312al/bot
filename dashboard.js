@@ -19,7 +19,8 @@ const {
 } = require("./services/closedDatesService");
 const {
   analyzeRackCsv,
-  analyzeRackImage
+  analyzeRackImage,
+  readLatestRackStatus
 } = require("./services/rackAnalysisService");
 const {
   readBotStatus
@@ -571,6 +572,8 @@ function getSummary() {
     groupReservations,
     totalRooms:
       TOTAL_ROOMS,
+    rackStatus:
+      readLatestRackStatus(),
     reservations:
       reservations
         .slice()
@@ -862,6 +865,31 @@ function pageHtml() {
       font-size: 12px;
       font-weight: 800;
     }
+    .rack-dashboard {
+      display: grid;
+      grid-template-columns: 1.2fr repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      align-items: stretch;
+    }
+    .rack-meta-card,
+    .rack-kpi-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #ffffff;
+      min-width: 0;
+    }
+    .rack-kpi-card strong {
+      display: block;
+      font-size: 26px;
+      margin-top: 4px;
+    }
+    .rack-type-line {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      margin-top: 6px;
+    }
     textarea {
       width: 100%;
       min-height: 220px;
@@ -1100,6 +1128,9 @@ function pageHtml() {
       .occupancy-list {
         grid-template-columns: 1fr;
       }
+      .rack-dashboard {
+        grid-template-columns: 1fr;
+      }
       .date-controls {
         grid-template-columns: 1fr;
       }
@@ -1181,6 +1212,16 @@ function pageHtml() {
           <div class="muted">Escanea este codigo desde WhatsApp.</div>
         </div>
       </div>
+    </section>
+
+    <section class="panel">
+      <div class="toolbar">
+        <div>
+          <strong>Rack global</strong>
+          <div id="rackGlobalUpdated" class="muted">Sin rack CSV guardado.</div>
+        </div>
+      </div>
+      <div id="rackDashboard"></div>
     </section>
 
     <section class="panel">
@@ -1413,11 +1454,64 @@ function pageHtml() {
         .join(' / ');
       updatedAt.textContent = 'Actualizado: ' + new Date(data.generatedAt).toLocaleString();
 
+      renderRackDashboard(data.rackStatus);
       occupancy.innerHTML = renderOccupancy(data.occupancy);
       reservations.innerHTML = renderReservations(data.reservations);
       updateSelectionSummary();
       renderCalendar();
       renderGroupReservationDetail(closeStart.value || data.today);
+    }
+
+    function renderRackDashboard(status) {
+      if (!status || !status.counts) {
+        rackGlobalUpdated.textContent = 'Sin rack CSV guardado.';
+        rackDashboard.innerHTML =
+          '<div class="muted">Importa un CSV del rack para ver el estado global aqui.</div>';
+        return;
+      }
+
+      const counts = status.counts;
+      rackGlobalUpdated.textContent =
+        'Rack CSV: ' + (status.reportDate || '-') + ' ' + (status.reportTime || '') +
+        ' / Guardado: ' + new Date(status.uploadedAt).toLocaleString() +
+        (status.fileName ? ' / Archivo: ' + status.fileName : '');
+
+      rackDashboard.innerHTML =
+        '<div class="rack-dashboard">' +
+          '<div class="rack-meta-card">' +
+            '<strong>' + escapeHtml(counts.total || 0) + ' habitaciones</strong>' +
+            '<div class="muted">Ultimo rack analizado</div>' +
+            '<div class="rack-type-line">' +
+              'K ' + getRackTypeTotal(counts, 'King') +
+              ' / SK ' + getRackTypeTotal(counts, 'Suite King') +
+              ' / DS ' + getRackTypeTotal(counts, 'Doble Suite') +
+              ' / D ' + getRackTypeTotal(counts, 'Doble') +
+            '</div>' +
+          '</div>' +
+          renderRackKpi('Ocupadas', counts.occupied) +
+          renderRackKpi('Bloqueadas', counts.blocked) +
+          renderRackKpi('VL limpias', counts.availableClean) +
+          renderRackKpi('VS sucias', counts.availableDirty) +
+        '</div>';
+    }
+
+    function renderRackKpi(label, data) {
+      const row = data || {};
+      return '<div class="rack-kpi-card">' +
+        '<span class="muted">' + escapeHtml(label) + '</span>' +
+        '<strong>' + escapeHtml(row.total || 0) + '</strong>' +
+        '<div class="rack-type-line">' +
+          'K ' + (row.King || 0) +
+          ' / SK ' + (row['Suite King'] || 0) +
+          ' / DS ' + (row['Doble Suite'] || 0) +
+          ' / D ' + (row.Doble || 0) +
+        '</div>' +
+      '</div>';
+    }
+
+    function getRackTypeTotal(counts, type) {
+      return ['occupied', 'blocked', 'availableClean', 'availableDirty']
+        .reduce((total, key) => total + Number(counts?.[key]?.[type] || 0), 0);
     }
 
     function renderOccupancy(rows) {
@@ -2114,15 +2208,20 @@ function pageHtml() {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            csvText
+            csvText,
+            fileName: file.name
           })
         });
 
         const data = await response.json();
 
         rackResult.value = data.ok
-          ? data.message
+          ? data.message + (data.saved ? '\\n\\nGuardado como ultimo rack.' : '\\n\\nNo se guardo porque ya existe un rack mas reciente.')
           : data.error || 'No se pudo analizar el CSV.';
+
+        if (data.ok) {
+          await loadDashboard();
+        }
       } catch (error) {
         rackResult.value = 'No se pudo analizar el CSV: ' + (error.message || 'error desconocido');
       } finally {
@@ -2444,7 +2543,11 @@ const server =
         const result =
           analyzeRackCsv({
             csvText:
-              body.csvText
+              body.csvText,
+            fileName:
+              body.fileName || "",
+            uploadedBy:
+              req.socket.remoteAddress || ""
           });
 
         sendJson(

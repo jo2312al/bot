@@ -4,6 +4,7 @@ data/reservas.json
 data/closedDates.json
 data/calendarReservations.json
 data/groupMessages.json
+data/rackStatus.json
 data/*.db
 data/*.db-*
 logs/*.log
