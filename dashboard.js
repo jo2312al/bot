@@ -719,6 +719,10 @@ function pageHtml() {
     button.danger {
       color: var(--danger);
     }
+    button.compact {
+      padding: 6px 8px;
+      font-size: 12px;
+    }
     input,
     select {
       border: 1px solid var(--line);
@@ -832,9 +836,10 @@ function pageHtml() {
       background: #ffffff;
       padding: 7px;
       display: grid;
-      align-content: start;
+      grid-template-rows: auto 1fr auto;
       gap: 4px;
       text-align: left;
+      cursor: pointer;
     }
     .day.empty {
       background: transparent;
@@ -856,6 +861,24 @@ function pageHtml() {
       font-size: 12px;
       line-height: 1.25;
     }
+    .day-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .day-view {
+      border-color: #b8c2d6;
+      padding: 3px 6px;
+      min-width: auto;
+      font-size: 11px;
+      line-height: 1.1;
+    }
+    .day-view.has-reservations {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
     .day.closed .day-meta {
       color: #991b1b;
       font-weight: 700;
@@ -874,6 +897,89 @@ function pageHtml() {
       color: var(--muted);
       font-size: 14px;
       font-weight: 600;
+    }
+    .day-summary-card {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      margin-top: 14px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fafc;
+    }
+    .summary-chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .chip {
+      display: inline-flex;
+      gap: 5px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #ffffff;
+      padding: 4px 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      background: rgba(15, 23, 42, .52);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal {
+      width: min(980px, 100%);
+      max-height: min(760px, 92vh);
+      overflow: auto;
+      background: #ffffff;
+      border-radius: 8px;
+      box-shadow: 0 24px 70px rgba(15, 23, 42, .28);
+      border: 1px solid var(--line);
+    }
+    .modal-head {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #ffffff;
+      border-bottom: 1px solid var(--line);
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .modal-body {
+      padding: 16px;
+    }
+    .modal-kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .modal-kpi {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: #f8fafc;
+    }
+    .modal-kpi strong {
+      display: block;
+      font-size: 20px;
+      margin-top: 4px;
+    }
+    body.modal-open {
+      overflow: hidden;
     }
     @media (max-width: 800px) {
       .grid { grid-template-columns: 1fr; }
@@ -913,9 +1019,21 @@ function pageHtml() {
         font-size: 11px;
       }
       input,
+      select,
       button {
         width: 100%;
         min-width: 0;
+      }
+      .day-view {
+        width: auto;
+      }
+      .day-summary-card,
+      .modal-head {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+      }
+      .modal-kpis {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
       textarea {
         min-height: 280px;
@@ -1104,6 +1222,18 @@ function pageHtml() {
       <div id="reservations"></div>
     </section>
   </main>
+  <div id="dayModalBackdrop" class="modal-backdrop hidden" onclick="closeDayModal()">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="dayModalTitle" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <strong id="dayModalTitle">Reservas del dia</strong>
+          <div id="dayModalSubtitle" class="muted"></div>
+        </div>
+        <button onclick="closeDayModal()">Cerrar</button>
+      </div>
+      <div id="dayModalBody" class="modal-body"></div>
+    </div>
+  </div>
   <script>
     let dashboardData = null;
     let calendarDate = new Date();
@@ -1478,10 +1608,13 @@ function pageHtml() {
           : groupRow.occupied + '/' + groupRow.total + ' reservas<br>K ' + row.King + '/' + row.limits.King + ' / D ' + row.Doble + '/' + row.limits.Doble;
 
         cells.push(
-          '<button class="' + className + '" onclick="selectCalendarDate(\\'' + iso + '\\')">' +
-            '<span class="day-number">' + day + '</span>' +
+          '<div class="' + className + '" onclick="selectCalendarDate(\\'' + iso + '\\')">' +
+            '<span class="day-top">' +
+              '<span class="day-number">' + day + '</span>' +
+              '<button class="day-view ' + (groupRow.occupied ? 'has-reservations' : '') + '" onclick="openDayModal(\\'' + iso + '\\'); event.stopPropagation();">Ver</button>' +
+            '</span>' +
             '<span class="day-meta">' + meta + '</span>' +
-          '</button>'
+          '</div>'
         );
       }
 
@@ -1527,30 +1660,121 @@ function pageHtml() {
       }
 
       const display = isoToDisplay(isoDate);
-      const row = dashboardData.groupReservationCalendar.find(item => item.date === display);
+      const row = getCalendarRowForIso(isoDate);
 
       if (!row || !row.reservations.length) {
         groupReservationDetail.innerHTML =
-          '<div class="muted">Sin reservas detectadas para ' + display + '.</div>';
+          '<div class="day-summary-card">' +
+            '<div><strong>' + display + '</strong><div class="muted">Sin reservas detectadas para este dia.</div></div>' +
+            '<button onclick="openDayModal(\\'' + isoDate + '\\')">Ver dia</button>' +
+          '</div>';
         return;
       }
 
+      const totals = getDayTotals(row);
       groupReservationDetail.innerHTML =
-        '<strong>Reservas para ' + display + ': ' + row.occupied + '/' + row.total + '</strong>' +
-        '<div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>Cliente</th><th>Fuente</th><th>Habs</th><th>Huespedes</th><th>Tipo</th><th>Hora</th><th>Telefono</th><th>Tarifa</th></tr></thead><tbody>' +
-        row.reservations.map(item =>
-          '<tr>' +
-            '<td>' + escapeHtml(item.nombre || 'Sin nombre') + '<br><span class="muted">' + escapeHtml(item.timestamp || '') + '</span></td>' +
-            '<td>' + escapeHtml(item.source || '-') + '</td>' +
-            '<td>' + escapeHtml(item.habitaciones || 1) + '</td>' +
-            '<td>' + escapeHtml((item.adultos || 0) + ' adulto(s), ' + (item.ninos || 0) + ' menor(es)') + '</td>' +
-            '<td>' + escapeHtml(item.tipo || '-') + '</td>' +
-            '<td>' + escapeHtml(item.hora || '-') + '</td>' +
-            '<td>' + escapeHtml(item.telefono || '-') + '</td>' +
-            '<td>' + escapeHtml(item.tarifa || '-') + '</td>' +
-          '</tr>'
-        ).join('') +
-        '</tbody></table></div>';
+        '<div class="day-summary-card">' +
+          '<div>' +
+            '<strong>' + display + ': ' + row.occupied + '/' + row.total + ' habitaciones</strong>' +
+            '<div class="summary-chips">' +
+              '<span class="chip">' + row.reservations.length + ' reserva(s)</span>' +
+              '<span class="chip">' + totals.adultos + ' adulto(s)</span>' +
+              '<span class="chip">' + totals.ninos + ' menor(es)</span>' +
+              '<span class="chip">' + totals.manual + ' manual/excel</span>' +
+            '</div>' +
+          '</div>' +
+          '<button class="primary" onclick="openDayModal(\\'' + isoDate + '\\')">Ver desglose</button>' +
+        '</div>';
+    }
+
+    function getCalendarRowForIso(isoDate) {
+      const display = isoToDisplay(isoDate);
+      return dashboardData.groupReservationCalendar.find(item => item.date === display);
+    }
+
+    function getDayTotals(row) {
+      return row.reservations.reduce((totals, item) => {
+        totals.adultos += Number(item.adultos || 0);
+        totals.ninos += Number(item.ninos || 0);
+        if (item.source === 'manual' || item.source === 'excel') {
+          totals.manual++;
+        }
+        if (item.source === 'grupo') {
+          totals.grupo++;
+        }
+        if (item.source === 'bot') {
+          totals.bot++;
+        }
+        return totals;
+      }, {
+        adultos: 0,
+        ninos: 0,
+        manual: 0,
+        grupo: 0,
+        bot: 0
+      });
+    }
+
+    function openDayModal(isoDate) {
+      if (!dashboardData) return;
+
+      const display = isoToDisplay(isoDate);
+      const row = getCalendarRowForIso(isoDate) || {
+        date: display,
+        occupied: 0,
+        total: dashboardData.totalRooms || 69,
+        reservations: []
+      };
+      const totals = getDayTotals(row);
+
+      dayModalTitle.textContent = 'Reservas para ' + display;
+      dayModalSubtitle.textContent = row.occupied + '/' + row.total + ' habitaciones ocupadas en calendario';
+
+      if (!row.reservations.length) {
+        dayModalBody.innerHTML =
+          '<div class="modal-kpis">' +
+            '<div class="modal-kpi"><span class="muted">Reservas</span><strong>0</strong></div>' +
+            '<div class="modal-kpi"><span class="muted">Habitaciones</span><strong>0/' + row.total + '</strong></div>' +
+            '<div class="modal-kpi"><span class="muted">Adultos</span><strong>0</strong></div>' +
+            '<div class="modal-kpi"><span class="muted">Menores</span><strong>0</strong></div>' +
+          '</div>' +
+          '<div class="muted">No hay reservas detectadas para este dia.</div>';
+      } else {
+        dayModalBody.innerHTML =
+          '<div class="modal-kpis">' +
+            '<div class="modal-kpi"><span class="muted">Reservas</span><strong>' + row.reservations.length + '</strong></div>' +
+            '<div class="modal-kpi"><span class="muted">Habitaciones</span><strong>' + row.occupied + '/' + row.total + '</strong></div>' +
+            '<div class="modal-kpi"><span class="muted">Adultos</span><strong>' + totals.adultos + '</strong></div>' +
+            '<div class="modal-kpi"><span class="muted">Menores</span><strong>' + totals.ninos + '</strong></div>' +
+          '</div>' +
+          '<div class="summary-chips" style="margin-bottom:12px">' +
+            '<span class="chip">Grupo ' + totals.grupo + '</span>' +
+            '<span class="chip">Bot ' + totals.bot + '</span>' +
+            '<span class="chip">Manual/Excel ' + totals.manual + '</span>' +
+          '</div>' +
+          '<div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Fuente</th><th>Habs</th><th>Huespedes</th><th>Tipo</th><th>Hora</th><th>Telefono</th><th>Tarifa</th></tr></thead><tbody>' +
+          row.reservations.map(item =>
+            '<tr>' +
+              '<td>' + escapeHtml(item.nombre || 'Sin nombre') + '<br><span class="muted">' + escapeHtml(item.timestamp || '') + '</span></td>' +
+              '<td><span class="pill">' + escapeHtml(item.source || '-') + '</span></td>' +
+              '<td>' + escapeHtml(item.habitaciones || 1) + '</td>' +
+              '<td>' + escapeHtml((item.adultos || 0) + ' adulto(s), ' + (item.ninos || 0) + ' menor(es)') + '</td>' +
+              '<td>' + escapeHtml(item.tipo || '-') + '</td>' +
+              '<td>' + escapeHtml(item.hora || '-') + '</td>' +
+              '<td>' + escapeHtml(item.telefono || '-') + '</td>' +
+              '<td>' + escapeHtml(item.tarifa || '-') + '</td>' +
+            '</tr>'
+          ).join('') +
+          '</tbody></table></div>';
+      }
+
+      dayModalBackdrop.classList.remove('hidden');
+      document.body.classList.add('modal-open');
+    }
+
+    function closeDayModal() {
+      dayModalBackdrop.classList.add('hidden');
+      document.body.classList.remove('modal-open');
     }
 
     function isIsoWithinSelection(isoDate) {
@@ -1681,6 +1905,11 @@ function pageHtml() {
     loadBotStatus();
     loadDashboard();
     setInterval(loadBotStatus, 5000);
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        closeDayModal();
+      }
+    });
   </script>
 </body>
 </html>`;
