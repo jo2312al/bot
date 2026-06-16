@@ -796,6 +796,68 @@ function pageHtml() {
       min-width: 220px;
       max-width: 100%;
     }
+    .file-input {
+      display: none;
+    }
+    .file-dropzone {
+      border: 1px dashed #99bdb8;
+      border-radius: 8px;
+      background: #f8fffd;
+      padding: 10px 12px;
+      min-height: 48px;
+      min-width: 250px;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      cursor: pointer;
+      transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+    }
+    .file-dropzone:hover,
+    .file-dropzone:focus-within,
+    .file-dropzone.active {
+      border-color: var(--accent);
+      background: #eefdf9;
+      box-shadow: 0 0 0 3px rgba(15, 118, 110, .12);
+      outline: none;
+    }
+    .file-dropzone.dragging {
+      border-color: var(--accent);
+      background: #ccfbf1;
+    }
+    .file-badge {
+      width: 38px;
+      height: 38px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      background: var(--accent);
+      color: #ffffff;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .02em;
+    }
+    .file-copy {
+      min-width: 0;
+    }
+    .file-copy strong,
+    .file-copy span {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .file-copy span {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 2px;
+    }
+    .file-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: stretch;
+    }
     .table-wrap {
       width: 100%;
       overflow-x: auto;
@@ -1480,8 +1542,15 @@ function pageHtml() {
         </label>
         <button class="primary" onclick="saveManualReservation()">Guardar reserva</button>
       </div>
-      <div class="rack-controls" style="margin-top:12px">
-        <input id="csvFile" type="file" accept=".csv,text/csv">
+      <div class="file-actions" style="margin-top:12px">
+        <label class="file-dropzone" data-file-zone="csvFile" tabindex="0">
+          <input id="csvFile" class="file-input" type="file" accept=".csv,text/csv">
+          <span class="file-badge">CSV</span>
+          <span class="file-copy">
+            <strong>Reservas CSV</strong>
+            <span id="csvFileName">Arrastra, pega o elige archivo</span>
+          </span>
+        </label>
         <button class="primary" onclick="importReservationsCsv()">Importar CSV</button>
         <button onclick="downloadTemplateCsv()">Plantilla CSV</button>
       </div>
@@ -1512,9 +1581,23 @@ function pageHtml() {
         </div>
       </div>
       <div class="rack-controls">
-        <input id="rackCsv" type="file" accept=".csv,text/csv">
+        <label class="file-dropzone" data-file-zone="rackCsv" tabindex="0">
+          <input id="rackCsv" class="file-input" type="file" accept=".csv,text/csv">
+          <span class="file-badge">CSV</span>
+          <span class="file-copy">
+            <strong>Rack CSV</strong>
+            <span id="rackCsvName">Arrastra, pega o elige archivo</span>
+          </span>
+        </label>
         <button id="analyzeRackCsvButton" class="primary" onclick="analyzeRackCsvFile()">Analizar CSV</button>
-        <input id="rackImage" type="file" accept="image/*">
+        <label class="file-dropzone" data-file-zone="rackImage" tabindex="0">
+          <input id="rackImage" class="file-input" type="file" accept="image/*">
+          <span class="file-badge">IMG</span>
+          <span class="file-copy">
+            <strong>Foto rack</strong>
+            <span id="rackImageName">Arrastra, pega o elige imagen</span>
+          </span>
+        </label>
         <button id="analyzeRackButton" onclick="analyzeRack()">Analizar foto</button>
       </div>
       <div style="margin-top:12px">
@@ -1975,6 +2058,7 @@ function pageHtml() {
       }
 
       csvFile.value = '';
+      updateFileZone(csvFile);
       manualReservationStatus.textContent =
         'Importadas: ' + data.imported + (data.errors.length ? ' / Errores: ' + data.errors.join(' | ') : '');
       await loadDashboard();
@@ -2536,6 +2620,149 @@ function pageHtml() {
       }
     }
 
+    let activeFileInputId = '';
+
+    function setupFileDropzones() {
+      document.querySelectorAll('[data-file-zone]').forEach(zone => {
+        const input = document.getElementById(zone.dataset.fileZone);
+
+        if (!input) {
+          return;
+        }
+
+        zone.addEventListener('focusin', () => setActiveFileZone(zone));
+        zone.addEventListener('mouseenter', () => setActiveFileZone(zone));
+        zone.addEventListener('click', () => setActiveFileZone(zone));
+        zone.addEventListener('keydown', event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            input.click();
+          }
+        });
+
+        input.addEventListener('change', () => updateFileZone(input));
+
+        ['dragenter', 'dragover'].forEach(type => {
+          zone.addEventListener(type, event => {
+            event.preventDefault();
+            setActiveFileZone(zone);
+            zone.classList.add('dragging');
+          });
+        });
+
+        ['dragleave', 'drop'].forEach(type => {
+          zone.addEventListener(type, () => {
+            zone.classList.remove('dragging');
+          });
+        });
+
+        zone.addEventListener('drop', event => {
+          event.preventDefault();
+          setFileInputFiles(input, event.dataTransfer.files);
+        });
+      });
+
+      document.addEventListener('paste', event => {
+        const files = Array.from(event.clipboardData?.files || []);
+
+        if (!files.length) {
+          return;
+        }
+
+        const zone = findPasteTarget(files);
+
+        if (!zone) {
+          return;
+        }
+
+        const input = document.getElementById(zone.dataset.fileZone);
+
+        if (input && setFileInputFiles(input, files)) {
+          event.preventDefault();
+          setActiveFileZone(zone);
+        }
+      });
+    }
+
+    function setActiveFileZone(zone) {
+      activeFileInputId = zone.dataset.fileZone || activeFileInputId;
+      document.querySelectorAll('[data-file-zone]').forEach(item => {
+        item.classList.toggle('active', item === zone);
+      });
+    }
+
+    function findPasteTarget(files) {
+      const zones = Array.from(document.querySelectorAll('[data-file-zone]'));
+      const activeZone = zones.find(zone => zone.dataset.fileZone === activeFileInputId);
+
+      if (activeZone && files.some(file => fileMatchesInput(file, document.getElementById(activeZone.dataset.fileZone)))) {
+        return activeZone;
+      }
+
+      return zones.find(zone => {
+        const input = document.getElementById(zone.dataset.fileZone);
+        const isVisible = zone.offsetParent !== null;
+        return isVisible && files.some(file => fileMatchesInput(file, input));
+      });
+    }
+
+    function setFileInputFiles(input, files) {
+      const compatible = Array.from(files || [])
+        .filter(file => fileMatchesInput(file, input));
+
+      if (!compatible.length) {
+        return false;
+      }
+
+      const transfer = new DataTransfer();
+      transfer.items.add(compatible[0]);
+      input.files = transfer.files;
+      updateFileZone(input);
+      return true;
+    }
+
+    function fileMatchesInput(file, input) {
+      if (!file || !input) {
+        return false;
+      }
+
+      const accept = String(input.getAttribute('accept') || '').split(',').map(item => item.trim()).filter(Boolean);
+
+      if (!accept.length) {
+        return true;
+      }
+
+      const name = String(file.name || '').toLowerCase();
+      const type = String(file.type || '').toLowerCase();
+
+      return accept.some(rule => {
+        const normalized = rule.toLowerCase();
+
+        if (normalized.endsWith('/*')) {
+          return type.startsWith(normalized.slice(0, -1));
+        }
+
+        if (normalized.startsWith('.')) {
+          return name.endsWith(normalized);
+        }
+
+        return type === normalized || (normalized === 'text/csv' && name.endsWith('.csv'));
+      });
+    }
+
+    function updateFileZone(input) {
+      const label = document.getElementById(input.id + 'Name');
+      const file = input.files?.[0];
+
+      if (!label) {
+        return;
+      }
+
+      label.textContent = file ? file.name : label.id === 'rackImageName'
+        ? 'Arrastra, pega o elige imagen'
+        : 'Arrastra, pega o elige archivo';
+    }
+
     function fileToCompressedDataUrl(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -2591,6 +2818,7 @@ function pageHtml() {
         .replace(/'/g, '&#039;');
     }
 
+    setupFileDropzones();
     loadBotStatus();
     loadDashboard();
     setInterval(loadBotStatus, 5000);
