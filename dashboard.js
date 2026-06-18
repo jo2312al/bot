@@ -1,4 +1,6 @@
 const http = require("http");
+const fs = require("fs");
+const path = require("path");
 const {
   URL
 } = require("url");
@@ -35,6 +37,14 @@ const {
   cancelCalendarReservationByKey,
   saveCalendarReservation
 } = require("./services/reservationDatabaseService");
+const {
+  getQuotation,
+  getReservationNoteKey,
+  readQuotations,
+  readReservationNotes,
+  saveQuotation,
+  saveReservationNote
+} = require("./services/dashboardExtrasService");
 
 const PORT =
   Number(process.env.DASHBOARD_PORT || 3333);
@@ -122,6 +132,64 @@ function buildOccupancy(reservations) {
   return Object.values(occupancy)
     .sort((left, right) =>
       dateValue(left.date) - dateValue(right.date)
+    );
+}
+
+function attachReservationNotes(reservations, notes) {
+  return reservations.map(reservation => {
+    const key =
+      getReservationNoteKey(reservation);
+    const note =
+      notes[key]?.note || "";
+
+    return {
+      ...reservation,
+      note
+    };
+  });
+}
+
+function buildOverbookingAlerts(occupancy, todayDisplay) {
+  return occupancy
+    .filter(row =>
+      dateValue(row.date) >= dateValue(todayDisplay)
+    )
+    .flatMap(row =>
+      Object.keys(row.limits || {})
+        .filter(type =>
+          Number(row.counts?.[type] || 0) > Number(row.limits?.[type] || 0)
+        )
+        .map(type => ({
+          date:
+            row.date,
+          type,
+          used:
+            Number(row.counts?.[type] || 0),
+          limit:
+            Number(row.limits?.[type] || 0),
+          excess:
+            Number(row.counts?.[type] || 0) - Number(row.limits?.[type] || 0)
+        }))
+    );
+}
+
+function buildTodayArrivals(reservations, todayDisplay) {
+  return reservations
+    .filter(reservation =>
+      reservation.status !== "cancelada"
+      &&
+      (
+        reservation.fecha === todayDisplay
+        ||
+        (
+          Array.isArray(reservation.dates)
+          &&
+          reservation.dates[0] === todayDisplay
+        )
+      )
+    )
+    .sort((left, right) =>
+      String(left.hora || "").localeCompare(String(right.hora || ""))
     );
 }
 
@@ -351,6 +419,128 @@ function csvValue(value) {
     : text;
 }
 
+function htmlEscape(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function formatCurrency(value) {
+  return Number(value || 0)
+    .toLocaleString("es-MX", {
+      style:
+        "currency",
+      currency:
+        "MXN"
+    });
+}
+
+function quoteNeedsCategory(quotation, category) {
+  return quotation.sections
+    .some(section =>
+      section.category === category
+    );
+}
+
+function quotationPrintHtml(quotation) {
+  const showRooms =
+    quoteNeedsCategory(
+      quotation,
+      "habitaciones"
+    );
+  const showHalls =
+    quoteNeedsCategory(
+      quotation,
+      "salon"
+    );
+
+  return `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>${htmlEscape(quotation.id)} - Cotizacion</title>
+  <style>
+    :root { --accent: #0f766e; --text: #0f172a; --muted: #64748b; --line: #d8e0ea; --soft: #f8fafc; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #eef2f7; color: var(--text); font-family: Arial, sans-serif; }
+    .page { width: min(960px, 100%); margin: 24px auto; background: #ffffff; box-shadow: 0 18px 45px rgba(15, 23, 42, .12); }
+    .hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; padding: 34px; background: linear-gradient(135deg, #0f766e, #115e59); color: #ffffff; }
+    .logo { width: 86px; height: 86px; border-radius: 50%; border: 2px solid rgba(255,255,255,.72); display: grid; place-items: center; font-weight: 900; letter-spacing: .08em; background: rgba(255,255,255,.12); }
+    h1 { margin: 0; font-size: 34px; }
+    h2 { margin: 0 0 10px; font-size: 20px; }
+    .muted { color: var(--muted); }
+    .hero .muted { color: rgba(255,255,255,.78); }
+    .content { padding: 30px 34px 36px; }
+    .meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 24px; }
+    .box { border: 1px solid var(--line); border-radius: 10px; padding: 12px; background: var(--soft); }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 12px 8px; text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+    .total { display: flex; justify-content: flex-end; margin-top: 18px; font-size: 30px; font-weight: 900; }
+    .gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 24px 0; }
+    .gallery img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); }
+    .print-actions { position: sticky; top: 0; padding: 10px; text-align: right; background: #ffffff; border-bottom: 1px solid var(--line); }
+    button { border: 1px solid var(--accent); background: var(--accent); color: #ffffff; border-radius: 8px; padding: 10px 14px; font-weight: 700; cursor: pointer; }
+    @media print { body { background: #ffffff; } .page { margin: 0; width: 100%; box-shadow: none; } .print-actions { display: none; } }
+    @media (max-width: 720px) { .hero, .meta, .gallery { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="print-actions"><button onclick="window.print()">Imprimir / guardar PDF</button></div>
+    <section class="hero">
+      <div>
+        <div class="muted">Hotel Villa Margaritas</div>
+        <h1>Cotizacion</h1>
+        <p>${htmlEscape(quotation.eventName || "Evento / grupo / hospedaje")}</p>
+      </div>
+      <div class="logo">HVM</div>
+    </section>
+    <main class="content">
+      <div class="meta">
+        <div class="box"><span class="muted">Folio</span><br><strong>${htmlEscape(quotation.id)}</strong></div>
+        <div class="box"><span class="muted">Cliente</span><br><strong>${htmlEscape(quotation.client)}</strong></div>
+        <div class="box"><span class="muted">Contacto</span><br><strong>${htmlEscape(quotation.contact || "-")}</strong></div>
+        <div class="box"><span class="muted">Vigencia</span><br><strong>${htmlEscape(quotation.validUntil || "-")}</strong></div>
+      </div>
+      ${
+        showRooms || showHalls
+          ? `<div class="gallery">
+              ${showRooms ? '<img src="/media/habitaciones/1.jpg" alt="Habitacion">' : ""}
+              ${showRooms ? '<img src="/media/habitaciones/2.jpg" alt="Habitacion">' : ""}
+              ${showHalls ? '<img src="/media/salones/1.jpg" alt="Salon">' : ""}
+              ${showHalls ? '<img src="/media/salones/2.jpg" alt="Salon">' : ""}
+            </div>`
+          : ""
+      }
+      <h2>Detalle</h2>
+      <table>
+        <thead>
+          <tr><th>Apartado</th><th>Incluye</th><th>Cantidad</th><th>Precio</th><th>Subtotal</th></tr>
+        </thead>
+        <tbody>
+          ${quotation.sections.map(section => `
+            <tr>
+              <td><strong>${htmlEscape(section.title)}</strong><br><span class="muted">${htmlEscape(section.category)}</span></td>
+              <td>${htmlEscape(section.includes || "-").replace(/\n/g, "<br>")}</td>
+              <td>${htmlEscape(section.quantity)}</td>
+              <td>${formatCurrency(section.unitPrice)}</td>
+              <td><strong>${formatCurrency(section.subtotal)}</strong></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+      <div class="total">Total: ${formatCurrency(quotation.total)}</div>
+      ${quotation.notes ? `<div class="box" style="margin-top:24px"><strong>Notas</strong><br>${htmlEscape(quotation.notes).replace(/\n/g, "<br>")}</div>` : ""}
+    </main>
+  </div>
+</body>
+</html>`;
+}
+
 function reservationsToCsv(reservations) {
   const headers = [
     "nombre",
@@ -527,11 +717,20 @@ function normalizeCsvHeader(header) {
 }
 
 function getSummary() {
+  const notes =
+    readReservationNotes();
+
   const reservations =
-    readReservations();
+    attachReservationNotes(
+      readReservations(),
+      notes
+    );
 
   const groupReservations =
-    readGroupReservations();
+    attachReservationNotes(
+      readGroupReservations(),
+      notes
+    );
 
   const groupReservationCalendar =
     buildGroupReservationCalendar(
@@ -558,6 +757,9 @@ function getSummary() {
     groupReservationCalendar.find(row =>
       row.date === todayDisplay
     );
+
+  const occupancy =
+    buildOccupancy(groupReservations);
 
   return {
     generatedAt:
@@ -586,10 +788,22 @@ function getSummary() {
       reservations:
         todayReservationSummary?.reservations?.length || 0
     },
+    todayArrivals:
+      buildTodayArrivals(
+        groupReservations,
+        todayDisplay
+      ),
+    overbookingAlerts:
+      buildOverbookingAlerts(
+        occupancy,
+        todayDisplay
+      ),
     occupancy:
-      buildOccupancy(groupReservations),
+      occupancy,
     groupReservationCalendar,
     groupReservations,
+    quotations:
+      readQuotations(),
     totalRooms:
       TOTAL_ROOMS,
     rackStatus:
@@ -1242,6 +1456,64 @@ function pageHtml() {
       font-size: 12px;
       font-weight: 700;
     }
+    .alert-list,
+    .arrival-list,
+    .quote-list {
+      display: grid;
+      gap: 10px;
+    }
+    .alert-item {
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      background: #fff7f7;
+      padding: 10px 12px;
+    }
+    .arrival-item,
+    .quote-item,
+    .quote-section {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 12px;
+    }
+    .arrival-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+    }
+    .note-row {
+      display: grid;
+      grid-template-columns: minmax(160px, 1fr) auto;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .note-row input {
+      min-width: 0;
+      width: 100%;
+    }
+    .quote-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(280px, .9fr);
+      gap: 16px;
+      align-items: start;
+    }
+    .quote-section {
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(120px, .7fr) minmax(120px, .7fr) auto;
+      gap: 8px;
+      align-items: end;
+      margin-top: 10px;
+    }
+    .quote-section textarea {
+      grid-column: 1 / -1;
+      min-height: 72px;
+    }
+    .quote-total {
+      font-size: 28px;
+      font-weight: 800;
+      margin-top: 8px;
+    }
     .modal-backdrop {
       position: fixed;
       inset: 0;
@@ -1331,6 +1603,12 @@ function pageHtml() {
       .occupancy-list {
         grid-template-columns: 1fr;
       }
+      .quote-layout,
+      .quote-section,
+      .arrival-item,
+      .note-row {
+        grid-template-columns: 1fr;
+      }
       .rack-dashboard {
         grid-template-columns: 1fr;
       }
@@ -1384,6 +1662,7 @@ function pageHtml() {
       <button id="tab-main" class="active" onclick="showView('main')">Principal</button>
       <button id="tab-calendar" onclick="showView('calendar')">Calendario</button>
       <button id="tab-reservations" onclick="showView('reservations')">Reservas</button>
+      <button id="tab-quotes" onclick="showView('quotes')">Cotizaciones</button>
       <button id="tab-rack" onclick="showView('rack')">Rack</button>
     </nav>
 
@@ -1428,6 +1707,26 @@ function pageHtml() {
           <div class="muted">Escanea este codigo desde WhatsApp.</div>
         </div>
       </div>
+    </section>
+
+    <section class="panel">
+      <div class="toolbar">
+        <div>
+          <strong>Alertas de sobreventa</strong>
+          <div class="muted">Fechas donde las reservas superan el limite por tipo.</div>
+        </div>
+      </div>
+      <div id="overbookingAlerts"></div>
+    </section>
+
+    <section class="panel">
+      <div class="toolbar">
+        <div>
+          <strong>Llegadas de hoy</strong>
+          <div class="muted">Reservas cuya entrada es hoy.</div>
+        </div>
+      </div>
+      <div id="todayArrivals"></div>
     </section>
 
     <section class="panel">
@@ -1540,6 +1839,10 @@ function pageHtml() {
           Tarifa
           <input id="manualTarifa" placeholder="$700">
         </label>
+        <label>
+          Nota
+          <input id="manualNota" placeholder="Ej. llega tarde, anticipo, peticion especial">
+        </label>
         <button class="primary" onclick="saveManualReservation()">Guardar reserva</button>
       </div>
       <div class="file-actions" style="margin-top:12px">
@@ -1569,6 +1872,60 @@ function pageHtml() {
         </div>
       </div>
       <div id="reservations"></div>
+    </section>
+    </div>
+
+    <div id="view-quotes" class="view-panel hidden">
+    <section class="panel">
+      <div class="toolbar">
+        <div>
+          <strong>Cotizaciones para eventos y grupos</strong>
+          <div class="muted">Crea apartados por dia, menu, salon u hospedaje. El total se calcula automaticamente.</div>
+        </div>
+        <button class="primary" onclick="saveQuotation()">Guardar cotizacion</button>
+      </div>
+      <div class="quote-layout">
+        <div>
+          <div class="date-controls">
+            <label>
+              Cliente
+              <input id="quoteClient" placeholder="Nombre del cliente o empresa">
+            </label>
+            <label>
+              Contacto
+              <input id="quoteContact" placeholder="Telefono o correo">
+            </label>
+            <label>
+              Evento
+              <input id="quoteEventName" placeholder="Boda, grupo, capacitacion">
+            </label>
+            <label>
+              Vigencia
+              <input id="quoteValidUntil" type="date">
+            </label>
+          </div>
+          <label>
+            Notas generales
+            <textarea id="quoteNotes" placeholder="Condiciones, horarios, politicas o comentarios para la cotizacion."></textarea>
+          </label>
+          <div class="toolbar" style="margin-top:14px">
+            <div>
+              <strong>Apartados</strong>
+              <div class="muted">Cada apartado puede ser un dia, menu, salon u hospedaje.</div>
+            </div>
+            <button onclick="addQuoteSection()">Agregar apartado</button>
+          </div>
+          <div id="quoteSections"></div>
+        </div>
+        <div class="panel" style="margin-bottom:0">
+          <div class="muted">Total cotizacion</div>
+          <div id="quoteTotal" class="quote-total">$0</div>
+          <div id="quoteStatus" class="muted"></div>
+          <hr>
+          <strong>Ultimas cotizaciones</strong>
+          <div id="quoteList" class="quote-list" style="margin-top:10px"></div>
+        </div>
+      </div>
     </section>
     </div>
 
@@ -1661,6 +2018,15 @@ function pageHtml() {
     let pendingDeleteReservation = null;
     let pendingRackRoom = null;
     let activeModalIsoDate = "";
+    let quoteSectionsData = [
+      {
+        title: 'Hospedaje',
+        category: 'habitaciones',
+        quantity: 1,
+        unitPrice: 0,
+        includes: ''
+      }
+    ];
 
     async function loadBotStatus() {
       try {
@@ -1725,6 +2091,10 @@ function pageHtml() {
 
       renderRackDashboard(data.rackStatus);
       renderRackRoomGrid(data.rackStatus);
+      overbookingAlerts.innerHTML = renderOverbookingAlerts(data.overbookingAlerts || []);
+      todayArrivals.innerHTML = renderTodayArrivals(data.todayArrivals || []);
+      renderQuoteSections();
+      renderQuotationList(data.quotations || []);
       occupancy.innerHTML = renderOccupancy(data.occupancy);
       reservations.innerHTML = renderReservations(data.reservations);
       updateSelectionSummary();
@@ -1733,7 +2103,7 @@ function pageHtml() {
     }
 
     function showView(name) {
-      ['main', 'calendar', 'reservations', 'rack'].forEach(view => {
+      ['main', 'calendar', 'reservations', 'quotes', 'rack'].forEach(view => {
         const panel = document.getElementById('view-' + view);
         const tab = document.getElementById('tab-' + view);
 
@@ -1744,6 +2114,176 @@ function pageHtml() {
         if (tab) {
           tab.classList.toggle('active', view === name);
         }
+      });
+    }
+
+    function renderOverbookingAlerts(alerts) {
+      if (!alerts.length) {
+        return '<div class="muted">Sin sobreventas detectadas.</div>';
+      }
+
+      return '<div class="alert-list">' +
+        alerts.map(alert =>
+          '<div class="alert-item">' +
+            '<strong>' + escapeHtml(alert.date) + ' / ' + escapeHtml(alert.type) + '</strong>' +
+            '<div class="muted">' + alert.used + '/' + alert.limit + ' habitaciones. Exceso: ' + alert.excess + '.</div>' +
+          '</div>'
+        ).join('') +
+      '</div>';
+    }
+
+    function renderTodayArrivals(rows) {
+      if (!rows.length) {
+        return '<div class="muted">Sin llegadas registradas para hoy.</div>';
+      }
+
+      return '<div class="arrival-list">' +
+        rows.map(row =>
+          '<div class="arrival-item">' +
+            '<div>' +
+              '<strong>' + escapeHtml(row.nombre || 'Sin nombre') + '</strong>' +
+              '<div class="muted">' +
+                escapeHtml(row.habitaciones || 1) + ' hab(s)' +
+                (row.tipo ? ' / ' + escapeHtml(row.tipo) : '') +
+                (row.hora ? ' / ' + escapeHtml(row.hora) : '') +
+              '</div>' +
+              (row.note ? '<div class="muted">Nota: ' + escapeHtml(row.note) + '</div>' : '') +
+            '</div>' +
+            '<span class="pill">' + escapeHtml(row.source || '-') + '</span>' +
+          '</div>'
+        ).join('') +
+      '</div>';
+    }
+
+    function renderQuoteSections() {
+      quoteSections.innerHTML = quoteSectionsData.map((section, index) =>
+        '<div class="quote-section">' +
+          '<label>Titulo<input value="' + escapeHtml(section.title || '') + '" oninput="updateQuoteSection(' + index + ', \\'title\\', this.value)"></label>' +
+          '<label>Tipo<select onchange="updateQuoteSection(' + index + ', \\'category\\', this.value)">' +
+            '<option value="habitaciones"' + (section.category === 'habitaciones' ? ' selected' : '') + '>Habitaciones</option>' +
+            '<option value="salon"' + (section.category === 'salon' ? ' selected' : '') + '>Salon</option>' +
+            '<option value="alimentos"' + (section.category === 'alimentos' ? ' selected' : '') + '>Alimentos/Menu</option>' +
+            '<option value="otro"' + (section.category === 'otro' ? ' selected' : '') + '>Otro</option>' +
+          '</select></label>' +
+          '<label>Cantidad<input type="number" min="0" value="' + escapeHtml(section.quantity || 0) + '" oninput="updateQuoteSection(' + index + ', \\'quantity\\', this.value)"></label>' +
+          '<label>Precio unitario<input type="number" min="0" value="' + escapeHtml(section.unitPrice || 0) + '" oninput="updateQuoteSection(' + index + ', \\'unitPrice\\', this.value)"></label>' +
+          '<button class="danger" onclick="removeQuoteSection(' + index + ')">Quitar</button>' +
+          '<textarea placeholder="Que incluye este apartado" oninput="updateQuoteSection(' + index + ', \\'includes\\', this.value)">' + escapeHtml(section.includes || '') + '</textarea>' +
+        '</div>'
+      ).join('');
+      quoteTotal.textContent = formatMoney(getQuoteTotal());
+    }
+
+    function addQuoteSection() {
+      quoteSectionsData.push({
+        title: 'Nuevo apartado',
+        category: 'otro',
+        quantity: 1,
+        unitPrice: 0,
+        includes: ''
+      });
+      renderQuoteSections();
+    }
+
+    function removeQuoteSection(index) {
+      quoteSectionsData.splice(index, 1);
+
+      if (!quoteSectionsData.length) {
+        addQuoteSection();
+        return;
+      }
+
+      renderQuoteSections();
+    }
+
+    function updateQuoteSection(index, field, value) {
+      quoteSectionsData[index][field] =
+        field === 'quantity' || field === 'unitPrice'
+          ? Number(value || 0)
+          : value;
+      quoteTotal.textContent = formatMoney(getQuoteTotal());
+    }
+
+    function getQuoteTotal() {
+      return quoteSectionsData.reduce((total, section) =>
+        total + Number(section.quantity || 0) * Number(section.unitPrice || 0),
+        0
+      );
+    }
+
+    function renderQuotationList(rows) {
+      if (!rows.length) {
+        quoteList.innerHTML = '<div class="muted">Sin cotizaciones guardadas.</div>';
+        return;
+      }
+
+      quoteList.innerHTML = rows.slice(0, 8).map(row =>
+        '<div class="quote-item">' +
+          '<strong>' + escapeHtml(row.id) + '</strong>' +
+          '<div>' + escapeHtml(row.client || '') + '</div>' +
+          '<div class="muted">' + escapeHtml(row.eventName || 'Sin evento') + ' / ' + formatMoney(row.total || 0) + '</div>' +
+          '<div class="summary-chips">' +
+            '<button class="compact" onclick="window.open(\\'/api/quotations/' + encodeURIComponent(row.id) + '/print\\', \\'_blank\\')">Imprimir</button>' +
+          '</div>' +
+        '</div>'
+      ).join('');
+    }
+
+    async function saveQuotation() {
+      const payload = {
+        client: quoteClient.value.trim(),
+        contact: quoteContact.value.trim(),
+        eventName: quoteEventName.value.trim(),
+        validUntil: quoteValidUntil.value,
+        notes: quoteNotes.value.trim(),
+        sections: quoteSectionsData
+      };
+
+      if (!payload.client) {
+        alert('Escribe el cliente de la cotizacion.');
+        return;
+      }
+
+      quoteStatus.textContent = 'Guardando cotizacion...';
+      const response = await fetch('/api/quotations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+
+      if (!data.ok) {
+        quoteStatus.textContent = data.error || 'No se pudo guardar.';
+        return;
+      }
+
+      quoteStatus.innerHTML =
+        'Guardada: ' + escapeHtml(data.quotation.id) +
+        ' <button class="compact" onclick="window.open(\\'/api/quotations/' + encodeURIComponent(data.quotation.id) + '/print\\', \\'_blank\\')">Imprimir</button>';
+      quoteClient.value = '';
+      quoteContact.value = '';
+      quoteEventName.value = '';
+      quoteValidUntil.value = '';
+      quoteNotes.value = '';
+      quoteSectionsData = [
+        {
+          title: 'Hospedaje',
+          category: 'habitaciones',
+          quantity: 1,
+          unitPrice: 0,
+          includes: ''
+        }
+      ];
+      await loadDashboard();
+      showView('quotes');
+    }
+
+    function formatMoney(value) {
+      return Number(value || 0).toLocaleString('es-MX', {
+        style: 'currency',
+        currency: 'MXN'
       });
     }
 
@@ -1949,15 +2489,56 @@ function pageHtml() {
         return '<div class="muted">Sin reservas registradas.</div>';
       }
 
-      return '<div class="table-wrap"><table><thead><tr><th>Folio</th><th>Cliente</th><th>Habitacion</th><th>Fechas</th><th>Estado</th></tr></thead><tbody>' +
+      return '<div class="table-wrap"><table><thead><tr><th>Folio</th><th>Cliente</th><th>Habitacion</th><th>Fechas</th><th>Nota</th><th>Estado</th></tr></thead><tbody>' +
         rows.map(row => '<tr>' +
           '<td>#' + escapeHtml(row.folio || '') + '</td>' +
           '<td>' + escapeHtml(row.nombre || 'Sin nombre') + '<br><span class="muted">' + escapeHtml(row.telefono || '') + '</span></td>' +
           '<td>' + escapeHtml(row.habitacion || '') + '<br><span class="muted">' + escapeHtml(row.habitaciones || 1) + ' hab(s)</span>' + (row.servicioEspecial ? '<br><span class="muted">' + escapeHtml(row.servicioEspecial) + '</span>' : '') + '</td>' +
           '<td>' + escapeHtml((row.dates || [row.fecha]).join(', ')) + '<br><span class="muted">' + (row.noches || 1) + ' noche(s)</span></td>' +
+          '<td>' + renderNoteEditor(row) + '</td>' +
           '<td><span class="pill ' + escapeHtml(row.status || '') + '">' + escapeHtml(row.status || 'activa') + '</span></td>' +
         '</tr>').join('') +
       '</tbody></table></div>';
+    }
+
+    function renderNoteEditor(row) {
+      const key = row.sourceKey || (row.folio ? 'folio:' + row.folio : '');
+
+      if (!key) {
+        return '<span class="muted">Sin llave</span>';
+      }
+
+      return '<div class="note-row">' +
+        '<input value="' + escapeHtml(row.note || '') + '" placeholder="Nota interna">' +
+        '<button class="compact" onclick="saveReservationNote(\\'' + escapeJs(key) + '\\', this)">Guardar</button>' +
+      '</div>';
+    }
+
+    async function saveReservationNote(key, trigger) {
+      const input = trigger?.closest('.note-row')?.querySelector('input');
+
+      if (!input) {
+        return;
+      }
+
+      const response = await fetch('/api/reservations/note', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          reservationKey: key,
+          note: input.value
+        })
+      });
+      const data = await response.json();
+
+      if (!data.ok) {
+        alert(data.error || 'No se pudo guardar la nota.');
+        return;
+      }
+
+      await loadDashboard();
     }
 
     async function cancelFolio() {
@@ -1997,7 +2578,8 @@ function pageHtml() {
         ninos: Number(manualNinos.value || 0),
         tipo: manualTipo.value,
         hora: manualHora.value.trim(),
-        tarifa: manualTarifa.value.trim()
+        tarifa: manualTarifa.value.trim(),
+        note: manualNota.value.trim()
       };
 
       if (!payload.nombre || !payload.fecha) {
@@ -2028,6 +2610,7 @@ function pageHtml() {
       manualNinos.value = '0';
       manualHora.value = '';
       manualTarifa.value = '';
+      manualNota.value = '';
       manualReservationStatus.textContent = 'Reserva guardada: #' + data.reservation.folio;
       await loadDashboard();
     }
@@ -2422,7 +3005,7 @@ function pageHtml() {
             '<span class="chip">Bot ' + totals.bot + '</span>' +
             '<span class="chip">Manual/Excel ' + totals.manual + '</span>' +
           '</div>' +
-          '<div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Fuente</th><th>Habs</th><th>Huespedes</th><th>Tipo</th><th>Hora</th><th>Telefono</th><th>Tarifa</th><th></th></tr></thead><tbody>' +
+          '<div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Fuente</th><th>Habs</th><th>Huespedes</th><th>Tipo</th><th>Hora</th><th>Telefono</th><th>Tarifa</th><th>Nota</th><th></th></tr></thead><tbody>' +
           row.reservations.map((item, index) =>
             '<tr>' +
               '<td>' + escapeHtml(item.nombre || 'Sin nombre') + '<br><span class="muted">' + escapeHtml(item.timestamp || '') + '</span></td>' +
@@ -2433,6 +3016,7 @@ function pageHtml() {
               '<td>' + escapeHtml(item.hora || '-') + '</td>' +
               '<td>' + escapeHtml(item.telefono || '-') + '</td>' +
               '<td>' + escapeHtml(item.tarifa || '-') + '</td>' +
+              '<td>' + renderNoteEditor(item) + '</td>' +
               '<td><button class="danger compact" onclick="confirmDeleteReservation(' + index + ')">Eliminar</button></td>' +
             '</tr>'
           ).join('') +
@@ -2818,6 +3402,14 @@ function pageHtml() {
         .replace(/'/g, '&#039;');
     }
 
+    function escapeJs(value) {
+      return String(value)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '');
+    }
+
     setupFileDropzones();
     loadBotStatus();
     loadDashboard();
@@ -2859,9 +3451,89 @@ const server =
     if (
       req.method === "GET"
       &&
+      url.pathname.startsWith("/media/")
+    ) {
+      const mediaRoot =
+        path.resolve(
+          __dirname,
+          "media"
+        );
+      const relative =
+        decodeURIComponent(
+          url.pathname.replace(/^\/media\//, "")
+        );
+      const filePath =
+        path.resolve(
+          mediaRoot,
+          relative
+        );
+
+      if (
+        !filePath.startsWith(mediaRoot)
+        ||
+        !fs.existsSync(filePath)
+      ) {
+        sendJson(res, 404, {
+          ok: false,
+          error: "Archivo no encontrado"
+        });
+        return;
+      }
+
+      const ext =
+        path.extname(filePath).toLowerCase();
+      const contentType =
+        ext === ".png"
+          ? "image/png"
+          : "image/jpeg";
+
+      res.writeHead(200, {
+        "Content-Type": contentType,
+        "Cache-Control": "public, max-age=3600"
+      });
+      fs.createReadStream(filePath).pipe(res);
+      return;
+    }
+
+    if (
+      req.method === "GET"
+      &&
       url.pathname === "/api/summary"
     ) {
       sendJson(res, 200, getSummary());
+      return;
+    }
+
+    const quotationPrintMatch =
+      url.pathname.match(/^\/api\/quotations\/([^/]+)\/print$/);
+
+    if (
+      req.method === "GET"
+      &&
+      quotationPrintMatch
+    ) {
+      const quotation =
+        getQuotation(
+          decodeURIComponent(
+            quotationPrintMatch[1]
+          )
+        );
+
+      if (!quotation) {
+        sendJson(res, 404, {
+          ok: false,
+          error: "Cotizacion no encontrada"
+        });
+        return;
+      }
+
+      res.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store"
+      });
+      res.end(
+        quotationPrintHtml(quotation)
+      );
       return;
     }
 
@@ -2881,6 +3553,69 @@ const server =
       res.end(
         reservationsToCsv(summary.groupReservations)
       );
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/reservations/note"
+    ) {
+      try {
+        const body =
+          await readBody(req);
+
+        const note =
+          saveReservationNote({
+            reservationKey:
+              body.reservationKey,
+            note:
+              body.note
+          });
+
+        sendJson(res, 200, {
+          ok:
+            true,
+          note
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok:
+            false,
+          error:
+            error.message || "No se pudo guardar la nota"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/quotations"
+    ) {
+      try {
+        const body =
+          await readBody(req);
+
+        const quotation =
+          saveQuotation(body);
+
+        sendJson(res, 200, {
+          ok:
+            true,
+          quotation
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok:
+            false,
+          error:
+            error.message || "No se pudo guardar la cotizacion"
+        });
+      }
+
       return;
     }
 
@@ -2920,6 +3655,15 @@ const server =
           normalizeManualReservation(body);
 
         saveCalendarReservation(reservation);
+
+        if (body.note) {
+          saveReservationNote({
+            reservationKey:
+              getReservationNoteKey(reservation),
+            note:
+              body.note
+          });
+        }
 
         sendJson(res, 200, {
           ok:
