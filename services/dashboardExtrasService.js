@@ -122,6 +122,14 @@ function money(value) {
   return Number(value || 0);
 }
 
+function roundMoney(value) {
+  return Math.round(
+    Number(value || 0) * 100
+  )
+  /
+  100;
+}
+
 function normalizeQuotation(input) {
   const sections =
     Array.isArray(input.sections)
@@ -161,6 +169,25 @@ function normalizeQuotation(input) {
         section.quantity > 0
       );
 
+  const subtotal =
+    roundMoney(
+      normalizedSections.reduce(
+        (total, section) => total + section.subtotal,
+        0
+      )
+    );
+
+  const serviceChargePercent =
+    Math.max(
+      Number(input.serviceChargePercent || 0),
+      0
+    );
+
+  const serviceCharge =
+    roundMoney(
+      subtotal * serviceChargePercent / 100
+    );
+
   if (!String(input.client || "").trim()) {
     throw new Error("Cliente requerido");
   }
@@ -182,16 +209,34 @@ function normalizeQuotation(input) {
       String(input.contact || "").trim(),
     eventName:
       String(input.eventName || "").trim(),
+    headline:
+      String(input.headline || "").trim(),
+    stayDates:
+      String(input.stayDates || "").trim(),
+    people:
+      Math.max(
+        Number(input.people || 0),
+        0
+      ),
+    checkIn:
+      String(input.checkIn || "3:00 PM").trim(),
+    checkOut:
+      String(input.checkOut || "12:00 PM").trim(),
     validUntil:
       String(input.validUntil || "").trim(),
     notes:
       String(input.notes || "").trim(),
+    serviceChargePercent:
+      serviceChargePercent,
     sections:
       normalizedSections,
+    subtotal:
+      subtotal,
+    serviceCharge:
+      serviceCharge,
     total:
-      normalizedSections.reduce(
-        (total, section) => total + section.subtotal,
-        0
+      roundMoney(
+        subtotal + serviceCharge
       ),
     createdAt:
       input.createdAt || new Date().toISOString(),

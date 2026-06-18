@@ -445,17 +445,86 @@ function quoteNeedsCategory(quotation, category) {
     );
 }
 
-function quotationPrintHtml(quotation) {
-  const showRooms =
-    quoteNeedsCategory(
-      quotation,
-      "habitaciones"
-    );
-  const showHalls =
+function quotePrimaryImage(quotation) {
+  if (
     quoteNeedsCategory(
       quotation,
       "salon"
-    );
+    )
+  ) {
+    return "/media/salones/1.jpg";
+  }
+
+  if (
+    quoteNeedsCategory(
+      quotation,
+      "alimentos"
+    )
+  ) {
+    return "/media/restaurant/1.jpg";
+  }
+
+  if (
+    quoteNeedsCategory(
+      quotation,
+      "habitaciones"
+    )
+  ) {
+    return "/media/habitaciones/1.jpg";
+  }
+
+  return "/media/lobby/1.jpg";
+}
+
+function quoteIncludedServices(quotation) {
+  const services =
+    [
+      "Recepcion 24 horas",
+      "Estacionamiento",
+      "Internet",
+      "Television por cable",
+      "Agua fria y caliente"
+    ];
+
+  if (
+    quoteNeedsCategory(
+      quotation,
+      "alimentos"
+    )
+    ||
+    quoteNeedsCategory(
+      quotation,
+      "habitaciones"
+    )
+  ) {
+    services.push("Restaurante");
+  }
+
+  if (
+    quoteNeedsCategory(
+      quotation,
+      "salon"
+    )
+  ) {
+    services.push("Salon para evento");
+  }
+
+  return services;
+}
+
+function quotationPrintHtml(quotation) {
+  const title =
+    quotation.headline
+    ||
+    quotation.eventName
+    ||
+    "Cotizacion";
+  const primaryImage =
+    quotePrimaryImage(quotation);
+  const services =
+    quoteIncludedServices(quotation);
+  const serviceChargePercent =
+    Number(quotation.serviceChargePercent || 0);
 
   return `<!doctype html>
 <html lang="es">
@@ -463,63 +532,347 @@ function quotationPrintHtml(quotation) {
   <meta charset="utf-8">
   <title>${htmlEscape(quotation.id)} - Cotizacion</title>
   <style>
-    :root { --accent: #0f766e; --text: #0f172a; --muted: #64748b; --line: #d8e0ea; --soft: #f8fafc; }
+    :root {
+      --gold: #b88422;
+      --gold-light: #e0b556;
+      --brown: #4a2b22;
+      --wine: #8f1236;
+      --paper: #fffdf9;
+      --ink: #241711;
+      --muted: #775c4e;
+      --line: #d8ad58;
+      --soft: #fff7ea;
+    }
     * { box-sizing: border-box; }
-    body { margin: 0; background: #eef2f7; color: var(--text); font-family: Arial, sans-serif; }
-    .page { width: min(960px, 100%); margin: 24px auto; background: #ffffff; box-shadow: 0 18px 45px rgba(15, 23, 42, .12); }
-    .hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; padding: 34px; background: linear-gradient(135deg, #0f766e, #115e59); color: #ffffff; }
-    .logo { width: 86px; height: 86px; border-radius: 50%; border: 2px solid rgba(255,255,255,.72); display: grid; place-items: center; font-weight: 900; letter-spacing: .08em; background: rgba(255,255,255,.12); }
-    h1 { margin: 0; font-size: 34px; }
-    h2 { margin: 0 0 10px; font-size: 20px; }
+    body {
+      margin: 0;
+      background: #efe7db;
+      color: var(--ink);
+      font-family: Georgia, 'Times New Roman', serif;
+    }
+    .page {
+      width: min(920px, 100%);
+      margin: 18px auto;
+      background:
+        radial-gradient(circle at 50% 0%, rgba(224, 181, 86, .13), transparent 32%),
+        var(--paper);
+      border: 4px solid var(--gold);
+      box-shadow: 0 24px 70px rgba(74, 43, 34, .2);
+    }
+    .print-actions {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      padding: 10px;
+      text-align: right;
+      background: #ffffff;
+      border-bottom: 1px solid #ead7b2;
+    }
+    button {
+      border: 1px solid var(--gold);
+      background: var(--brown);
+      color: #ffffff;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .content {
+      padding: 34px 54px 42px;
+    }
+    .brand {
+      text-align: center;
+      margin-bottom: 14px;
+    }
+    .hotel {
+      color: var(--wine);
+      font-size: 54px;
+      font-style: italic;
+      line-height: .9;
+    }
+    .villa {
+      color: #d94d83;
+      font-size: 86px;
+      font-weight: 800;
+      font-style: italic;
+      line-height: .78;
+    }
+    .margaritas {
+      color: var(--wine);
+      font-size: 34px;
+      font-style: italic;
+      line-height: 1;
+    }
+    .flower {
+      color: var(--gold);
+      font-size: 70px;
+      line-height: 1;
+      margin-top: -18px;
+    }
+    .divider-title {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 20px;
+      align-items: center;
+      margin: 26px 0 10px;
+      color: var(--brown);
+      font-family: Arial, sans-serif;
+      font-size: 42px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .divider-title:before,
+    .divider-title:after {
+      content: "";
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+    }
+    .headline {
+      color: var(--wine);
+      text-align: center;
+      font-size: 36px;
+      font-weight: 800;
+      margin: 8px auto 18px;
+      max-width: 760px;
+    }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      margin-bottom: 22px;
+      background: rgba(255, 247, 234, .68);
+    }
+    .summary .box {
+      border: 0;
+      border-right: 1px solid #e9c47c;
+      border-radius: 0;
+      background: transparent;
+      padding: 16px;
+    }
+    .summary .box:last-child { border-right: 0; }
+    .label {
+      color: var(--wine);
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .value {
+      font-family: Arial, sans-serif;
+      font-size: 22px;
+      font-weight: 800;
+      margin-top: 4px;
+    }
+    .main-grid {
+      display: grid;
+      grid-template-columns: .78fr 1.22fr;
+      gap: 28px;
+      align-items: start;
+      margin-top: 18px;
+    }
+    .price-card {
+      border-top: 2px dashed var(--gold);
+      border-bottom: 2px dashed var(--gold);
+      padding: 20px 0;
+      margin-bottom: 18px;
+    }
+    .price-card strong {
+      display: block;
+      color: var(--wine);
+      font-family: Arial, sans-serif;
+      font-size: 44px;
+      line-height: 1;
+      margin-top: 8px;
+    }
+    .schedule {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      background: rgba(255, 247, 234, .68);
+    }
+    .schedule h2,
+    .services h2 {
+      color: var(--wine);
+      font-family: Arial, sans-serif;
+      font-size: 22px;
+      margin: 0 0 12px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .hero-photo {
+      width: 100%;
+      aspect-ratio: 16 / 10;
+      object-fit: cover;
+      border: 9px solid #ffffff;
+      box-shadow: 0 8px 22px rgba(74, 43, 34, .22);
+    }
+    .services {
+      margin-top: 18px;
+    }
+    .services ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      columns: 2;
+    }
+    .services li {
+      break-inside: avoid;
+      margin: 7px 0;
+      font-size: 18px;
+    }
+    .services li:before {
+      content: "✦";
+      color: var(--gold);
+      margin-right: 10px;
+      font-weight: 900;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 24px;
+      font-family: Arial, sans-serif;
+      border: 1px solid var(--wine);
+      overflow: hidden;
+    }
+    th {
+      background: linear-gradient(180deg, #9f163d, #780b2b);
+      color: #ffffff;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      padding: 10px;
+    }
+    td {
+      border: 1px solid #c8798d;
+      padding: 10px;
+      text-align: center;
+      vertical-align: top;
+      font-size: 15px;
+    }
+    td:first-child,
+    td:nth-child(2) {
+      text-align: left;
+    }
+    .total-row td {
+      background: #fff5e7;
+      font-size: 20px;
+      font-weight: 900;
+    }
+    .total-row .grand {
+      background: linear-gradient(180deg, #9f163d, #780b2b);
+      color: #ffffff;
+      font-size: 28px;
+      text-align: center;
+    }
     .muted { color: var(--muted); }
-    .hero .muted { color: rgba(255,255,255,.78); }
-    .content { padding: 30px 34px 36px; }
-    .meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 24px; }
-    .box { border: 1px solid var(--line); border-radius: 10px; padding: 12px; background: var(--soft); }
-    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-    th, td { border-bottom: 1px solid var(--line); padding: 12px 8px; text-align: left; vertical-align: top; }
-    th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
-    .total { display: flex; justify-content: flex-end; margin-top: 18px; font-size: 30px; font-weight: 900; }
-    .gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 24px 0; }
-    .gallery img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); }
-    .print-actions { position: sticky; top: 0; padding: 10px; text-align: right; background: #ffffff; border-bottom: 1px solid var(--line); }
-    button { border: 1px solid var(--accent); background: var(--accent); color: #ffffff; border-radius: 8px; padding: 10px 14px; font-weight: 700; cursor: pointer; }
-    @media print { body { background: #ffffff; } .page { margin: 0; width: 100%; box-shadow: none; } .print-actions { display: none; } }
-    @media (max-width: 720px) { .hero, .meta, .gallery { grid-template-columns: 1fr; } }
+    .note {
+      border: 1px solid var(--wine);
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-top: 16px;
+      color: var(--wine);
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .contact {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 22px;
+      font-size: 22px;
+      color: var(--wine);
+      font-weight: 900;
+    }
+    .contact span {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: #28b45b;
+      color: #ffffff;
+      font-family: Arial, sans-serif;
+    }
+    @media print {
+      body { background: #ffffff; }
+      .page { margin: 0; width: 100%; box-shadow: none; }
+      .print-actions { display: none; }
+    }
+    @media (max-width: 760px) {
+      .content { padding: 24px; }
+      .summary,
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+      .summary .box {
+        border-right: 0;
+        border-bottom: 1px solid #e9c47c;
+      }
+      .services ul { columns: 1; }
+      .hotel { font-size: 42px; }
+      .villa { font-size: 68px; }
+      .divider-title { font-size: 30px; }
+      .headline { font-size: 28px; }
+    }
   </style>
 </head>
 <body>
   <div class="page">
     <div class="print-actions"><button onclick="window.print()">Imprimir / guardar PDF</button></div>
-    <section class="hero">
-      <div>
-        <div class="muted">Hotel Villa Margaritas</div>
-        <h1>Cotizacion</h1>
-        <p>${htmlEscape(quotation.eventName || "Evento / grupo / hospedaje")}</p>
-      </div>
-      <div class="logo">HVM</div>
-    </section>
     <main class="content">
-      <div class="meta">
-        <div class="box"><span class="muted">Folio</span><br><strong>${htmlEscape(quotation.id)}</strong></div>
-        <div class="box"><span class="muted">Cliente</span><br><strong>${htmlEscape(quotation.client)}</strong></div>
-        <div class="box"><span class="muted">Contacto</span><br><strong>${htmlEscape(quotation.contact || "-")}</strong></div>
-        <div class="box"><span class="muted">Vigencia</span><br><strong>${htmlEscape(quotation.validUntil || "-")}</strong></div>
-      </div>
-      ${
-        showRooms || showHalls
-          ? `<div class="gallery">
-              ${showRooms ? '<img src="/media/habitaciones/1.jpg" alt="Habitacion">' : ""}
-              ${showRooms ? '<img src="/media/habitaciones/2.jpg" alt="Habitacion">' : ""}
-              ${showHalls ? '<img src="/media/salones/1.jpg" alt="Salon">' : ""}
-              ${showHalls ? '<img src="/media/salones/2.jpg" alt="Salon">' : ""}
-            </div>`
-          : ""
-      }
-      <h2>Detalle</h2>
+      <section class="brand">
+        <div class="flower">✿</div>
+        <div class="hotel">Hotel</div>
+        <div class="villa">Villa</div>
+        <div class="margaritas">margaritas</div>
+      </section>
+      <div class="divider-title"><span>Cotizacion</span></div>
+      <div class="headline">${htmlEscape(title)}</div>
+      <section class="summary">
+        <div class="box">
+          <div class="label">Para</div>
+          <div class="value">${htmlEscape(quotation.client)}</div>
+        </div>
+        <div class="box">
+          <div class="label">Fechas / evento</div>
+          <div class="value">${htmlEscape(quotation.stayDates || quotation.eventName || "-")}</div>
+        </div>
+        <div class="box">
+          <div class="label">Personas</div>
+          <div class="value">${quotation.people ? htmlEscape(quotation.people) : "-"}</div>
+        </div>
+      </section>
+      <section class="main-grid">
+        <div>
+          <div class="price-card">
+            <div class="muted">Subtotal antes de servicio</div>
+            <strong>${formatCurrency(quotation.subtotal || quotation.total)}</strong>
+            ${serviceChargePercent ? `<div class="muted">+ ${serviceChargePercent}% de servicio: ${formatCurrency(quotation.serviceCharge)}</div>` : ""}
+          </div>
+          <div class="schedule">
+            <h2>Horarios</h2>
+            <div><span class="label">Check-in</span><div class="value">${htmlEscape(quotation.checkIn || "3:00 PM")}</div></div>
+            <hr>
+            <div><span class="label">Check-out</span><div class="value">${htmlEscape(quotation.checkOut || "12:00 PM")}</div></div>
+          </div>
+          <div class="contact"><span>☎</span>993 205 4701</div>
+        </div>
+        <div>
+          <img class="hero-photo" src="${primaryImage}" alt="Hotel Villa Margaritas">
+          <div class="services">
+            <h2>Servicios incluidos</h2>
+            <ul>
+              ${services.map(service => `<li>${htmlEscape(service)}</li>`).join("")}
+            </ul>
+          </div>
+        </div>
+      </section>
       <table>
         <thead>
-          <tr><th>Apartado</th><th>Incluye</th><th>Cantidad</th><th>Precio</th><th>Subtotal</th></tr>
+          <tr><th>Concepto</th><th>Incluye</th><th>Cantidad</th><th>Precio unitario</th><th>Subtotal</th></tr>
         </thead>
         <tbody>
           ${quotation.sections.map(section => `
@@ -531,10 +884,25 @@ function quotationPrintHtml(quotation) {
               <td><strong>${formatCurrency(section.subtotal)}</strong></td>
             </tr>
           `).join("")}
+          ${serviceChargePercent ? `
+            <tr>
+              <td><strong>Servicio</strong></td>
+              <td>${serviceChargePercent}% de servicio</td>
+              <td>1</td>
+              <td>${formatCurrency(quotation.serviceCharge)}</td>
+              <td><strong>${formatCurrency(quotation.serviceCharge)}</strong></td>
+            </tr>
+          ` : ""}
+          <tr class="total-row">
+            <td colspan="3">Total estimado</td>
+            <td colspan="2" class="grand">${formatCurrency(quotation.total)}</td>
+          </tr>
         </tbody>
       </table>
-      <div class="total">Total: ${formatCurrency(quotation.total)}</div>
-      ${quotation.notes ? `<div class="box" style="margin-top:24px"><strong>Notas</strong><br>${htmlEscape(quotation.notes).replace(/\n/g, "<br>")}</div>` : ""}
+      <div class="note">
+        Nota: Tarifa valida unicamente para las fechas indicadas.
+        ${quotation.notes ? `<br>${htmlEscape(quotation.notes).replace(/\n/g, "<br>")}` : ""}
+      </div>
     </main>
   </div>
 </body>
@@ -1494,16 +1862,80 @@ function pageHtml() {
     }
     .quote-layout {
       display: grid;
-      grid-template-columns: minmax(0, 1.1fr) minmax(280px, .9fr);
+      grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr);
       gap: 16px;
       align-items: start;
     }
+    .quote-workspace {
+      background:
+        linear-gradient(180deg, rgba(184, 132, 34, .12), transparent 190px),
+        #fffdf9;
+      border-color: #d7b36a;
+    }
+    .quote-hero-panel {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+      padding: 16px;
+      border: 1px solid #d7b36a;
+      border-radius: 8px;
+      background: #fff7ea;
+      margin-bottom: 14px;
+    }
+    .quote-hero-panel strong {
+      display: block;
+      color: #4a2b22;
+      font-size: 22px;
+    }
+    .quote-hero-panel span {
+      color: #8f1236;
+      font-weight: 800;
+    }
+    .quote-save-card {
+      position: sticky;
+      top: 96px;
+      border: 1px solid #d7b36a;
+      background: #fffdf9;
+    }
+    .quote-save-card .primary {
+      width: 100%;
+      margin-top: 12px;
+      background: #6f4427;
+      border-color: #6f4427;
+    }
+    .quote-fieldset {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .quote-fieldset-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      color: #4a2b22;
+      font-weight: 800;
+      margin: 14px 0 8px;
+    }
+    .quote-presets {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .quote-presets button {
+      border-color: #d7b36a;
+      background: #fff7ea;
+      color: #4a2b22;
+    }
     .quote-section {
       display: grid;
-      grid-template-columns: minmax(0, 1.3fr) minmax(120px, .7fr) minmax(120px, .7fr) auto;
+      grid-template-columns: minmax(0, 1.25fr) minmax(132px, .65fr) minmax(126px, .55fr) minmax(140px, .7fr) auto;
       gap: 8px;
       align-items: end;
       margin-top: 10px;
+      border-color: #d7b36a;
+      background: #fffdf9;
     }
     .quote-section textarea {
       grid-column: 1 / -1;
@@ -1513,6 +1945,20 @@ function pageHtml() {
       font-size: 28px;
       font-weight: 800;
       margin-top: 8px;
+      color: #8f1236;
+    }
+    .quote-subtotal-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 6px 0;
+      border-bottom: 1px solid #ead7b2;
+      color: #775c4e;
+      font-weight: 700;
+    }
+    .quote-item {
+      border-color: #ead7b2;
+      background: #fffdf9;
     }
     .modal-backdrop {
       position: fixed;
@@ -1876,16 +2322,23 @@ function pageHtml() {
     </div>
 
     <div id="view-quotes" class="view-panel hidden">
-    <section class="panel">
+    <section class="panel quote-workspace">
       <div class="toolbar">
         <div>
           <strong>Cotizaciones para eventos y grupos</strong>
-          <div class="muted">Crea apartados por dia, menu, salon u hospedaje. El total se calcula automaticamente.</div>
+          <div class="muted">Diseña una cotizacion visual con apartados por dia, menu, salon u hospedaje.</div>
         </div>
-        <button class="primary" onclick="saveQuotation()">Guardar cotizacion</button>
+      </div>
+      <div class="quote-hero-panel">
+        <div>
+          <strong>Formato Villa Margaritas</strong>
+          <div class="muted">Paleta dorada/cafe, foto automatica segun el tipo y documento listo para imprimir o guardar PDF.</div>
+        </div>
+        <span>Cotizacion</span>
       </div>
       <div class="quote-layout">
         <div>
+          <div class="quote-fieldset-title">Datos del cliente</div>
           <div class="date-controls">
             <label>
               Cliente
@@ -1904,6 +2357,33 @@ function pageHtml() {
               <input id="quoteValidUntil" type="date">
             </label>
           </div>
+          <div class="quote-fieldset-title">Presentacion del documento</div>
+          <div class="date-controls">
+            <label>
+              Titulo visible
+              <input id="quoteHeadline" placeholder="Cotizacion para 40 personas">
+            </label>
+            <label>
+              Fechas / estancia
+              <input id="quoteStayDates" placeholder="28 al 30 de mayo">
+            </label>
+            <label>
+              Personas
+              <input id="quotePeople" type="number" min="0" placeholder="40">
+            </label>
+            <label>
+              Servicio %
+              <input id="quoteServiceCharge" type="number" min="0" value="0" oninput="renderQuoteTotals()">
+            </label>
+            <label>
+              Check-in
+              <input id="quoteCheckIn" placeholder="3:00 PM">
+            </label>
+            <label>
+              Check-out
+              <input id="quoteCheckOut" placeholder="12:00 PM">
+            </label>
+          </div>
           <label>
             Notas generales
             <textarea id="quoteNotes" placeholder="Condiciones, horarios, politicas o comentarios para la cotizacion."></textarea>
@@ -1913,14 +2393,22 @@ function pageHtml() {
               <strong>Apartados</strong>
               <div class="muted">Cada apartado puede ser un dia, menu, salon u hospedaje.</div>
             </div>
-            <button onclick="addQuoteSection()">Agregar apartado</button>
+            <div class="quote-presets">
+              <button onclick="addQuotePreset('habitaciones')">Hospedaje</button>
+              <button onclick="addQuotePreset('salon')">Salon</button>
+              <button onclick="addQuotePreset('alimentos')">Menu/persona</button>
+              <button onclick="addQuoteSection()">Otro</button>
+            </div>
           </div>
           <div id="quoteSections"></div>
         </div>
-        <div class="panel" style="margin-bottom:0">
+        <div class="panel quote-save-card" style="margin-bottom:0">
           <div class="muted">Total cotizacion</div>
+          <div id="quoteSubtotalLine" class="quote-subtotal-line"><span>Subtotal</span><strong>$0</strong></div>
+          <div id="quoteServiceLine" class="quote-subtotal-line"><span>Servicio</span><strong>$0</strong></div>
           <div id="quoteTotal" class="quote-total">$0</div>
           <div id="quoteStatus" class="muted"></div>
+          <button class="primary" onclick="saveQuotation()">Guardar cotizacion</button>
           <hr>
           <strong>Ultimas cotizaciones</strong>
           <div id="quoteList" class="quote-list" style="margin-top:10px"></div>
@@ -2023,8 +2511,8 @@ function pageHtml() {
         title: 'Hospedaje',
         category: 'habitaciones',
         quantity: 1,
-        unitPrice: 0,
-        includes: ''
+        unitPrice: 700,
+        includes: 'Recepcion 24 horas\\nEstacionamiento\\nInternet\\nTelevision por cable\\nAgua fria y caliente'
       }
     ];
 
@@ -2165,17 +2653,52 @@ function pageHtml() {
             '<option value="alimentos"' + (section.category === 'alimentos' ? ' selected' : '') + '>Alimentos/Menu</option>' +
             '<option value="otro"' + (section.category === 'otro' ? ' selected' : '') + '>Otro</option>' +
           '</select></label>' +
-          '<label>Cantidad<input type="number" min="0" value="' + escapeHtml(section.quantity || 0) + '" oninput="updateQuoteSection(' + index + ', \\'quantity\\', this.value)"></label>' +
+          '<label>Cantidad/personas<input type="number" min="0" value="' + escapeHtml(section.quantity || 0) + '" oninput="updateQuoteSection(' + index + ', \\'quantity\\', this.value)"></label>' +
           '<label>Precio unitario<input type="number" min="0" value="' + escapeHtml(section.unitPrice || 0) + '" oninput="updateQuoteSection(' + index + ', \\'unitPrice\\', this.value)"></label>' +
           '<button class="danger" onclick="removeQuoteSection(' + index + ')">Quitar</button>' +
           '<textarea placeholder="Que incluye este apartado" oninput="updateQuoteSection(' + index + ', \\'includes\\', this.value)">' + escapeHtml(section.includes || '') + '</textarea>' +
         '</div>'
       ).join('');
-      quoteTotal.textContent = formatMoney(getQuoteTotal());
+      renderQuoteTotals();
     }
 
     function addQuoteSection() {
       quoteSectionsData.push({
+        title: 'Nuevo apartado',
+        category: 'otro',
+        quantity: 1,
+        unitPrice: 0,
+        includes: ''
+      });
+      renderQuoteSections();
+    }
+
+    function addQuotePreset(type) {
+      const presets = {
+        habitaciones: {
+          title: 'Habitacion doble',
+          category: 'habitaciones',
+          quantity: Number(quotePeople.value || 1),
+          unitPrice: 700,
+          includes: 'Habitacion\\nIVA incluido\\nRecepcion 24 horas\\nEstacionamiento\\nInternet'
+        },
+        salon: {
+          title: 'Salon para evento',
+          category: 'salon',
+          quantity: 1,
+          unitPrice: 0,
+          includes: 'Uso de salon\\nMontaje basico\\nMesas y sillas'
+        },
+        alimentos: {
+          title: 'Menu por persona',
+          category: 'alimentos',
+          quantity: Number(quotePeople.value || 1),
+          unitPrice: 160,
+          includes: 'Coffee break\\nCafe, te y agua fresca\\nBox lunch o menu acordado'
+        }
+      };
+
+      quoteSectionsData.push(presets[type] || {
         title: 'Nuevo apartado',
         category: 'otro',
         quantity: 1,
@@ -2201,14 +2724,30 @@ function pageHtml() {
         field === 'quantity' || field === 'unitPrice'
           ? Number(value || 0)
           : value;
-      quoteTotal.textContent = formatMoney(getQuoteTotal());
+      renderQuoteTotals();
     }
 
-    function getQuoteTotal() {
+    function getQuoteSubtotal() {
       return quoteSectionsData.reduce((total, section) =>
         total + Number(section.quantity || 0) * Number(section.unitPrice || 0),
         0
       );
+    }
+
+    function getQuoteServiceCharge() {
+      return getQuoteSubtotal() * Number(quoteServiceCharge?.value || 0) / 100;
+    }
+
+    function getQuoteTotal() {
+      return getQuoteSubtotal() + getQuoteServiceCharge();
+    }
+
+    function renderQuoteTotals() {
+      const subtotal = getQuoteSubtotal();
+      const service = getQuoteServiceCharge();
+      quoteSubtotalLine.innerHTML = '<span>Subtotal</span><strong>' + formatMoney(subtotal) + '</strong>';
+      quoteServiceLine.innerHTML = '<span>Servicio ' + Number(quoteServiceCharge?.value || 0) + '%</span><strong>' + formatMoney(service) + '</strong>';
+      quoteTotal.textContent = formatMoney(subtotal + service);
     }
 
     function renderQuotationList(rows) {
@@ -2221,7 +2760,7 @@ function pageHtml() {
         '<div class="quote-item">' +
           '<strong>' + escapeHtml(row.id) + '</strong>' +
           '<div>' + escapeHtml(row.client || '') + '</div>' +
-          '<div class="muted">' + escapeHtml(row.eventName || 'Sin evento') + ' / ' + formatMoney(row.total || 0) + '</div>' +
+          '<div class="muted">' + escapeHtml(row.headline || row.eventName || 'Sin evento') + ' / ' + formatMoney(row.total || 0) + '</div>' +
           '<div class="summary-chips">' +
             '<button class="compact" onclick="window.open(\\'/api/quotations/' + encodeURIComponent(row.id) + '/print\\', \\'_blank\\')">Imprimir</button>' +
           '</div>' +
@@ -2234,8 +2773,14 @@ function pageHtml() {
         client: quoteClient.value.trim(),
         contact: quoteContact.value.trim(),
         eventName: quoteEventName.value.trim(),
+        headline: quoteHeadline.value.trim(),
+        stayDates: quoteStayDates.value.trim(),
+        people: Number(quotePeople.value || 0),
+        checkIn: quoteCheckIn.value.trim(),
+        checkOut: quoteCheckOut.value.trim(),
         validUntil: quoteValidUntil.value,
         notes: quoteNotes.value.trim(),
+        serviceChargePercent: Number(quoteServiceCharge.value || 0),
         sections: quoteSectionsData
       };
 
@@ -2265,6 +2810,12 @@ function pageHtml() {
       quoteClient.value = '';
       quoteContact.value = '';
       quoteEventName.value = '';
+      quoteHeadline.value = '';
+      quoteStayDates.value = '';
+      quotePeople.value = '';
+      quoteCheckIn.value = '';
+      quoteCheckOut.value = '';
+      quoteServiceCharge.value = '0';
       quoteValidUntil.value = '';
       quoteNotes.value = '';
       quoteSectionsData = [
@@ -2272,8 +2823,8 @@ function pageHtml() {
           title: 'Hospedaje',
           category: 'habitaciones',
           quantity: 1,
-          unitPrice: 0,
-          includes: ''
+          unitPrice: 700,
+          includes: 'Recepcion 24 horas\\nEstacionamiento\\nInternet\\nTelevision por cable\\nAgua fria y caliente'
         }
       ];
       await loadDashboard();
