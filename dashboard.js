@@ -3403,11 +3403,10 @@ function pageHtml() {
     }
 
     function escapeJs(value) {
-      return String(value)
-        .replace(/\\/g, '\\\\')
-        .replace(/'/g, "\\'")
-        .replace(/\n/g, '\\n')
-        .replace(/\r/g, '');
+      return JSON.stringify(String(value))
+        .slice(1, -1)
+        .split("'")
+        .join("\\\\'");
     }
 
     setupFileDropzones();
