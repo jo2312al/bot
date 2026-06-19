@@ -1539,6 +1539,8 @@ function drawVisualQuotationPdf(doc, quotation) {
     mediaFilePath(quotePrimaryImage(quotation));
   const title =
     quotation.headline || quotation.eventName || "Cotizacion";
+  const showSubtitle =
+    cleanPdfText(title).toLowerCase() !== "cotizacion";
   const services =
     quoteIncludedServices(quotation);
 
@@ -1551,35 +1553,56 @@ function drawVisualQuotationPdf(doc, quotation) {
   addPdfImage(
     doc,
     logo,
-    206,
-    28,
+    54,
+    34,
     {
       width:
-        200
+        132
     }
   );
 
   doc
     .fillColor("#4a2b22")
     .font("Helvetica-Bold")
-    .fontSize(28)
-    .text("COTIZACION", 54, 210, {
+    .fontSize(24)
+    .text("COTIZACION", 226, 42, {
       width:
-        504,
+        320,
       align:
-        "center"
+        "right"
     })
     .fillColor("#8f1236")
-    .fontSize(24)
-    .text(cleanPdfText(title), 84, 250, {
+    .fontSize(15)
+    .text(showSubtitle ? cleanPdfText(title) : cleanPdfText(quotation.id), 226, 74, {
       width:
-        444,
+        320,
       align:
-        "center"
-    });
+        "right"
+    })
+    .fillColor(theme.muted)
+    .font("Helvetica")
+    .fontSize(9)
+    .text(
+      cleanPdfText(new Date(quotation.createdAt || Date.now()).toLocaleDateString("es-MX")),
+      226,
+      98,
+      {
+        width:
+          320,
+        align:
+          "right"
+      }
+    );
 
   doc
-    .roundedRect(72, 306, 468, 64, 8)
+    .moveTo(54, 132)
+    .lineTo(558, 132)
+    .strokeColor("#d8ad58")
+    .lineWidth(1)
+    .stroke();
+
+  doc
+    .roundedRect(72, 154, 468, 64, 8)
     .strokeColor("#d8ad58")
     .lineWidth(1)
     .stroke();
@@ -1604,13 +1627,13 @@ function drawVisualQuotationPdf(doc, quotation) {
       .fillColor("#8f1236")
       .font("Helvetica-Bold")
       .fontSize(8)
-      .text(item[0].toUpperCase(), x, 322, {
+      .text(item[0].toUpperCase(), x, 170, {
         width:
           132
       })
       .fillColor("#241711")
       .fontSize(11)
-      .text(cleanPdfText(item[1]), x, 338, {
+      .text(cleanPdfText(item[1]), x, 186, {
         width:
           132,
         height:
@@ -1622,11 +1645,11 @@ function drawVisualQuotationPdf(doc, quotation) {
     .fillColor(theme.muted)
     .font("Helvetica")
     .fontSize(10)
-    .text("Subtotal antes de servicio", 54, 404)
+    .text("Subtotal antes de servicio", 54, 256)
     .fillColor("#8f1236")
     .font("Helvetica-Bold")
     .fontSize(26)
-    .text(formatCurrency(quotation.subtotal || quotation.total), 54, 424, {
+    .text(formatCurrency(quotation.subtotal || quotation.total), 54, 276, {
       width:
         190
     });
@@ -1636,20 +1659,20 @@ function drawVisualQuotationPdf(doc, quotation) {
       .fillColor(theme.muted)
       .font("Helvetica")
       .fontSize(9)
-      .text(`+ ${quotation.serviceChargePercent}% servicio: ${formatCurrency(quotation.serviceCharge)}`, 54, 460, {
+      .text(`+ ${quotation.serviceChargePercent}% servicio: ${formatCurrency(quotation.serviceCharge)}`, 54, 312, {
         width:
           190
       });
   }
 
   doc
-    .roundedRect(54, 496, 180, 84, 8)
+    .roundedRect(54, 356, 180, 84, 8)
     .strokeColor(theme.line)
     .stroke()
     .fillColor("#8f1236")
     .font("Helvetica-Bold")
     .fontSize(14)
-    .text("HORARIOS", 74, 512, {
+    .text("HORARIOS", 74, 372, {
       width:
         140,
       align:
@@ -1657,14 +1680,14 @@ function drawVisualQuotationPdf(doc, quotation) {
     })
     .fillColor(theme.text)
     .fontSize(10)
-    .text(`Check-in: ${cleanPdfText(quotation.checkIn || "3:00 PM")}`, 74, 540)
-    .text(`Check-out: ${cleanPdfText(quotation.checkOut || "12:00 PM")}`, 74, 560);
+    .text(`Check-in: ${cleanPdfText(quotation.checkIn || "3:00 PM")}`, 74, 400)
+    .text(`Check-out: ${cleanPdfText(quotation.checkOut || "12:00 PM")}`, 74, 420);
 
   addPdfImage(
     doc,
     image,
     270,
-    388,
+    244,
     {
       width:
         260,
@@ -1677,17 +1700,17 @@ function drawVisualQuotationPdf(doc, quotation) {
     .fillColor("#8f1236")
     .font("Helvetica-Bold")
     .fontSize(14)
-    .text("SERVICIOS INCLUIDOS", 270, 554);
+    .text("SERVICIOS INCLUIDOS", 270, 410);
 
   services.slice(0, 7).forEach((service, index) => {
     doc
       .fillColor("#8f1236")
       .font("Helvetica-Bold")
       .fontSize(10)
-      .text("-", 278, 578 + index * 13)
+      .text("-", 278, 434 + index * 13)
       .fillColor(theme.text)
       .font("Helvetica")
-      .text(cleanPdfText(service), 292, 578 + index * 13, {
+      .text(cleanPdfText(service), 292, 434 + index * 13, {
         width:
           220
       });
@@ -1697,7 +1720,7 @@ function drawVisualQuotationPdf(doc, quotation) {
     drawPdfQuoteTable(
       doc,
       quotation,
-      676,
+      548,
       theme,
       {
         compact:
