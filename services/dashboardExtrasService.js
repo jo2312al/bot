@@ -209,6 +209,8 @@ function normalizeQuotation(input) {
       String(input.contact || "").trim(),
     eventName:
       String(input.eventName || "").trim(),
+    template:
+      String(input.template || "visual").trim(),
     headline:
       String(input.headline || "").trim(),
     stayDates:

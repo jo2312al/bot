@@ -513,6 +513,113 @@ function quoteIncludedServices(quotation) {
 }
 
 function quotationPrintHtml(quotation) {
+  return quotation.template === "formal"
+    ? quotationFormalPrintHtml(quotation)
+    : quotationVisualPrintHtml(quotation);
+}
+
+function quotationFormalPrintHtml(quotation) {
+  const title =
+    quotation.headline
+    ||
+    quotation.eventName
+    ||
+    "Cotizacion";
+  const serviceChargePercent =
+    Number(quotation.serviceChargePercent || 0);
+
+  return `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>${htmlEscape(quotation.id)} - Cotizacion formal</title>
+  <style>
+    :root {
+      --brown: #4a2b22;
+      --gold: #b88422;
+      --line: #d9c4a4;
+      --paper: #fffdf9;
+      --muted: #6f6259;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #eee7dd; color: #241711; font-family: Arial, sans-serif; }
+    .page { width: min(920px, 100%); margin: 24px auto; background: var(--paper); border: 1px solid var(--line); box-shadow: 0 18px 50px rgba(74,43,34,.16); }
+    .print-actions { position: sticky; top: 0; text-align: right; padding: 10px; background: #ffffff; border-bottom: 1px solid var(--line); }
+    button { background: var(--brown); border: 1px solid var(--brown); color: #ffffff; border-radius: 8px; padding: 10px 14px; font-weight: 700; cursor: pointer; }
+    .content { padding: 38px 46px 44px; }
+    .header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: start; padding-bottom: 22px; border-bottom: 3px solid var(--gold); }
+    .brand { font-family: Georgia, serif; color: #8f1236; font-size: 34px; font-style: italic; line-height: 1; }
+    .brand strong { display: block; color: #d94d83; font-size: 58px; }
+    .folio { text-align: right; color: var(--muted); }
+    h1 { margin: 28px 0 8px; color: var(--brown); font-size: 30px; text-transform: uppercase; letter-spacing: .08em; }
+    h2 { margin: 0 0 20px; color: #8f1236; font-size: 24px; }
+    .meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 22px; }
+    .box { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: #fff8ed; }
+    .label { color: var(--muted); font-size: 12px; text-transform: uppercase; font-weight: 800; letter-spacing: .04em; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th { background: var(--brown); color: #ffffff; padding: 11px 9px; text-align: left; font-size: 13px; text-transform: uppercase; }
+    td { border: 1px solid var(--line); padding: 10px 9px; vertical-align: top; }
+    td.num, th.num { text-align: right; }
+    .totals { width: min(360px, 100%); margin-left: auto; margin-top: 18px; border: 1px solid var(--line); }
+    .totals div { display: flex; justify-content: space-between; gap: 16px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+    .totals div:last-child { border-bottom: 0; background: #fff1d6; color: #8f1236; font-size: 22px; font-weight: 900; }
+    .notes { margin-top: 22px; border-top: 1px solid var(--line); padding-top: 16px; color: var(--muted); line-height: 1.5; }
+    @media print { body { background: #ffffff; } .page { width: 100%; margin: 0; box-shadow: none; } .print-actions { display: none; } }
+    @media (max-width: 720px) { .content { padding: 24px; } .header, .meta { grid-template-columns: 1fr; } .folio { text-align: left; } }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="print-actions"><button onclick="window.print()">Imprimir / guardar PDF</button></div>
+    <main class="content">
+      <section class="header">
+        <div class="brand">Hotel<strong>Villa</strong><span>margaritas</span></div>
+        <div class="folio">
+          <strong>${htmlEscape(quotation.id)}</strong><br>
+          ${new Date(quotation.createdAt || Date.now()).toLocaleDateString("es-MX")}
+        </div>
+      </section>
+      <h1>Cotizacion</h1>
+      <h2>${htmlEscape(title)}</h2>
+      <section class="meta">
+        <div class="box"><div class="label">Cliente</div><strong>${htmlEscape(quotation.client)}</strong></div>
+        <div class="box"><div class="label">Contacto</div><strong>${htmlEscape(quotation.contact || "-")}</strong></div>
+        <div class="box"><div class="label">Fechas / evento</div><strong>${htmlEscape(quotation.stayDates || quotation.eventName || "-")}</strong></div>
+        <div class="box"><div class="label">Personas</div><strong>${quotation.people ? htmlEscape(quotation.people) : "-"}</strong></div>
+      </section>
+      <table>
+        <thead>
+          <tr><th>Concepto</th><th>Descripcion</th><th class="num">Cantidad</th><th class="num">Precio unitario</th><th class="num">Subtotal</th></tr>
+        </thead>
+        <tbody>
+          ${quotation.sections.map(section => `
+            <tr>
+              <td><strong>${htmlEscape(section.title)}</strong><br><span class="label">${htmlEscape(section.category)}</span></td>
+              <td>${htmlEscape(section.includes || "-").replace(/\n/g, "<br>")}</td>
+              <td class="num">${htmlEscape(section.quantity)}</td>
+              <td class="num">${formatCurrency(section.unitPrice)}</td>
+              <td class="num"><strong>${formatCurrency(section.subtotal)}</strong></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+      <section class="totals">
+        <div><span>Subtotal</span><strong>${formatCurrency(quotation.subtotal || quotation.total)}</strong></div>
+        ${serviceChargePercent ? `<div><span>Servicio ${serviceChargePercent}%</span><strong>${formatCurrency(quotation.serviceCharge)}</strong></div>` : ""}
+        <div><span>Total estimado</span><strong>${formatCurrency(quotation.total)}</strong></div>
+      </section>
+      <section class="notes">
+        <strong>Notas:</strong><br>
+        Cotizacion informativa, no fiscal. Tarifa sujeta a disponibilidad y valida unicamente para las fechas indicadas.
+        ${quotation.notes ? `<br>${htmlEscape(quotation.notes).replace(/\n/g, "<br>")}` : ""}
+      </section>
+    </main>
+  </div>
+</body>
+</html>`;
+}
+
+function quotationVisualPrintHtml(quotation) {
   const title =
     quotation.headline
     ||
@@ -1928,6 +2035,38 @@ function pageHtml() {
       background: #fff7ea;
       color: #4a2b22;
     }
+    .quote-menu-picker {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto;
+      gap: 8px;
+      align-items: end;
+      padding: 12px;
+      border: 1px solid #ead7b2;
+      border-radius: 8px;
+      background: #fffaf2;
+      margin: 10px 0;
+    }
+    .quote-menu-preview {
+      grid-column: 1 / -1;
+      color: #775c4e;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .quote-template-toggle {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .quote-template-option {
+      border: 1px solid #d7b36a;
+      border-radius: 8px;
+      padding: 10px;
+      background: #ffffff;
+    }
+    .quote-template-option input {
+      min-width: 0;
+      margin-right: 6px;
+    }
     .quote-section {
       display: grid;
       grid-template-columns: minmax(0, 1.25fr) minmax(132px, .65fr) minmax(126px, .55fr) minmax(140px, .7fr) auto;
@@ -2358,6 +2497,18 @@ function pageHtml() {
             </label>
           </div>
           <div class="quote-fieldset-title">Presentacion del documento</div>
+          <div class="quote-template-toggle">
+            <label class="quote-template-option">
+              <input type="radio" name="quoteTemplate" value="visual" checked>
+              <strong>Visual hotel</strong>
+              <div class="muted">Mas comercial, con foto grande y estilo folleto.</div>
+            </label>
+            <label class="quote-template-option">
+              <input type="radio" name="quoteTemplate" value="formal">
+              <strong>Formal</strong>
+              <div class="muted">Sobria, tipo factura/carta sin ser documento fiscal.</div>
+            </label>
+          </div>
           <div class="date-controls">
             <label>
               Titulo visible
@@ -2399,6 +2550,14 @@ function pageHtml() {
               <button onclick="addQuotePreset('alimentos')">Menu/persona</button>
               <button onclick="addQuoteSection()">Otro</button>
             </div>
+          </div>
+          <div class="quote-menu-picker">
+            <label>
+              Menu rapido
+              <select id="quoteMenuSelect" onchange="renderQuoteMenuPreview()"></select>
+            </label>
+            <button onclick="addSelectedMenuItem()">Agregar menu</button>
+            <div id="quoteMenuPreview" class="quote-menu-preview"></div>
           </div>
           <div id="quoteSections"></div>
         </div>
@@ -2515,6 +2674,33 @@ function pageHtml() {
         includes: 'Recepcion 24 horas\\nEstacionamiento\\nInternet\\nTelevision por cable\\nAgua fria y caliente'
       }
     ];
+    const quoteMenuItems = [
+      {
+        title: 'Coffee Break',
+        price: 160,
+        description: 'Cafe, te, agua fresca y galletas'
+      },
+      {
+        title: 'Box lunch',
+        price: 350,
+        description: 'Hot dog, manzana, chocolate y espagueti'
+      },
+      {
+        title: 'Coffee Break + Box lunch',
+        price: 350,
+        description: 'Coffee break con cafe, te y agua fresca. Box lunch con hot dog, manzana, chocolate y espagueti'
+      },
+      {
+        title: 'Desayuno restaurante',
+        price: 180,
+        description: 'Platillo de desayuno, cafe y agua fresca'
+      },
+      {
+        title: 'Comida ejecutiva',
+        price: 250,
+        description: 'Platillo fuerte, agua fresca y servicio en restaurante o salon'
+      }
+    ];
 
     async function loadBotStatus() {
       try {
@@ -2581,6 +2767,7 @@ function pageHtml() {
       renderRackRoomGrid(data.rackStatus);
       overbookingAlerts.innerHTML = renderOverbookingAlerts(data.overbookingAlerts || []);
       todayArrivals.innerHTML = renderTodayArrivals(data.todayArrivals || []);
+      renderQuoteMenuOptions();
       renderQuoteSections();
       renderQuotationList(data.quotations || []);
       occupancy.innerHTML = renderOccupancy(data.occupancy);
@@ -2660,6 +2847,47 @@ function pageHtml() {
         '</div>'
       ).join('');
       renderQuoteTotals();
+    }
+
+    function renderQuoteMenuOptions() {
+      if (!quoteMenuSelect || quoteMenuSelect.options.length) {
+        renderQuoteMenuPreview();
+        return;
+      }
+
+      quoteMenuSelect.innerHTML = quoteMenuItems.map((item, index) =>
+        '<option value="' + index + '">' + escapeHtml(item.title) + ' - ' + formatMoney(item.price) + ' p/p</option>'
+      ).join('');
+      renderQuoteMenuPreview();
+    }
+
+    function renderQuoteMenuPreview() {
+      if (!quoteMenuSelect || !quoteMenuPreview) {
+        return;
+      }
+
+      const item = quoteMenuItems[Number(quoteMenuSelect.value || 0)];
+
+      quoteMenuPreview.textContent = item
+        ? item.description + ' / ' + formatMoney(item.price) + ' por persona'
+        : '';
+    }
+
+    function addSelectedMenuItem() {
+      const item = quoteMenuItems[Number(quoteMenuSelect.value || 0)];
+
+      if (!item) {
+        return;
+      }
+
+      quoteSectionsData.push({
+        title: item.title,
+        category: 'alimentos',
+        quantity: Number(quotePeople.value || 1),
+        unitPrice: item.price,
+        includes: item.description
+      });
+      renderQuoteSections();
     }
 
     function addQuoteSection() {
@@ -2761,6 +2989,7 @@ function pageHtml() {
           '<strong>' + escapeHtml(row.id) + '</strong>' +
           '<div>' + escapeHtml(row.client || '') + '</div>' +
           '<div class="muted">' + escapeHtml(row.headline || row.eventName || 'Sin evento') + ' / ' + formatMoney(row.total || 0) + '</div>' +
+          '<div class="muted">Formato: ' + escapeHtml(row.template === 'formal' ? 'Formal' : 'Visual hotel') + '</div>' +
           '<div class="summary-chips">' +
             '<button class="compact" onclick="window.open(\\'/api/quotations/' + encodeURIComponent(row.id) + '/print\\', \\'_blank\\')">Imprimir</button>' +
           '</div>' +
@@ -2773,6 +3002,7 @@ function pageHtml() {
         client: quoteClient.value.trim(),
         contact: quoteContact.value.trim(),
         eventName: quoteEventName.value.trim(),
+        template: document.querySelector('input[name="quoteTemplate"]:checked')?.value || 'visual',
         headline: quoteHeadline.value.trim(),
         stayDates: quoteStayDates.value.trim(),
         people: Number(quotePeople.value || 0),
@@ -2818,6 +3048,7 @@ function pageHtml() {
       quoteServiceCharge.value = '0';
       quoteValidUntil.value = '';
       quoteNotes.value = '';
+      document.querySelector('input[name="quoteTemplate"][value="visual"]').checked = true;
       quoteSectionsData = [
         {
           title: 'Hospedaje',
