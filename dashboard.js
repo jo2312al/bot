@@ -548,8 +548,7 @@ function quotationFormalPrintHtml(quotation) {
     button { background: var(--brown); border: 1px solid var(--brown); color: #ffffff; border-radius: 8px; padding: 10px 14px; font-weight: 700; cursor: pointer; }
     .content { padding: 38px 46px 44px; }
     .header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: start; padding-bottom: 22px; border-bottom: 3px solid var(--gold); }
-    .brand { font-family: Georgia, serif; color: #8f1236; font-size: 34px; font-style: italic; line-height: 1; }
-    .brand strong { display: block; color: #d94d83; font-size: 58px; }
+    .brand img { width: 220px; max-width: 100%; display: block; }
     .folio { text-align: right; color: var(--muted); }
     h1 { margin: 28px 0 8px; color: var(--brown); font-size: 30px; text-transform: uppercase; letter-spacing: .08em; }
     h2 { margin: 0 0 20px; color: #8f1236; font-size: 24px; }
@@ -573,7 +572,7 @@ function quotationFormalPrintHtml(quotation) {
     <div class="print-actions"><button onclick="window.print()">Imprimir / guardar PDF</button></div>
     <main class="content">
       <section class="header">
-        <div class="brand">Hotel<strong>Villa</strong><span>margaritas</span></div>
+        <div class="brand"><img src="/media/logo-villa-margaritas.png" alt="Hotel Villa Margaritas"></div>
         <div class="folio">
           <strong>${htmlEscape(quotation.id)}</strong><br>
           ${new Date(quotation.createdAt || Date.now()).toLocaleDateString("es-MX")}
@@ -691,30 +690,11 @@ function quotationVisualPrintHtml(quotation) {
       text-align: center;
       margin-bottom: 14px;
     }
-    .hotel {
-      color: var(--wine);
-      font-size: 54px;
-      font-style: italic;
-      line-height: .9;
-    }
-    .villa {
-      color: #d94d83;
-      font-size: 86px;
-      font-weight: 800;
-      font-style: italic;
-      line-height: .78;
-    }
-    .margaritas {
-      color: var(--wine);
-      font-size: 34px;
-      font-style: italic;
-      line-height: 1;
-    }
-    .flower {
-      color: var(--gold);
-      font-size: 70px;
-      line-height: 1;
-      margin-top: -18px;
+    .brand img {
+      width: 360px;
+      max-width: 78%;
+      display: block;
+      margin: 0 auto;
     }
     .divider-title {
       display: grid;
@@ -919,8 +899,6 @@ function quotationVisualPrintHtml(quotation) {
         border-bottom: 1px solid #e9c47c;
       }
       .services ul { columns: 1; }
-      .hotel { font-size: 42px; }
-      .villa { font-size: 68px; }
       .divider-title { font-size: 30px; }
       .headline { font-size: 28px; }
     }
@@ -931,10 +909,7 @@ function quotationVisualPrintHtml(quotation) {
     <div class="print-actions"><button onclick="window.print()">Imprimir / guardar PDF</button></div>
     <main class="content">
       <section class="brand">
-        <div class="flower">✿</div>
-        <div class="hotel">Hotel</div>
-        <div class="villa">Villa</div>
-        <div class="margaritas">margaritas</div>
+        <img src="/media/logo-villa-margaritas.png" alt="Hotel Villa Margaritas">
       </section>
       <div class="divider-title"><span>Cotizacion</span></div>
       <div class="headline">${htmlEscape(title)}</div>
@@ -2052,6 +2027,26 @@ function pageHtml() {
       font-size: 13px;
       line-height: 1.4;
     }
+    .quote-menu-modifiers {
+      grid-column: 1 / -1;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .quote-menu-modifiers label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid #ead7b2;
+      border-radius: 999px;
+      padding: 6px 10px;
+      background: #ffffff;
+      color: #4a2b22;
+      font-weight: 700;
+    }
+    .quote-menu-modifiers input {
+      min-width: 0;
+    }
     .quote-template-toggle {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2557,6 +2552,10 @@ function pageHtml() {
               <select id="quoteMenuSelect" onchange="renderQuoteMenuPreview()"></select>
             </label>
             <button onclick="addSelectedMenuItem()">Agregar menu</button>
+            <div class="quote-menu-modifiers">
+              <label><input id="quoteAddWater" type="checkbox" onchange="renderQuoteMenuPreview()"> Agua +$30</label>
+              <label><input id="quoteAddCoffee" type="checkbox" onchange="renderQuoteMenuPreview()"> Cafe +$30</label>
+            </div>
             <div id="quoteMenuPreview" class="quote-menu-preview"></div>
           </div>
           <div id="quoteSections"></div>
@@ -2677,28 +2676,88 @@ function pageHtml() {
     const quoteMenuItems = [
       {
         title: 'Coffee Break',
-        price: 160,
-        description: 'Cafe, te, agua fresca y galletas'
-      },
-      {
-        title: 'Box lunch',
-        price: 350,
-        description: 'Hot dog, manzana, chocolate y espagueti'
-      },
-      {
-        title: 'Coffee Break + Box lunch',
-        price: 350,
-        description: 'Coffee break con cafe, te y agua fresca. Box lunch con hot dog, manzana, chocolate y espagueti'
-      },
-      {
-        title: 'Desayuno restaurante',
         price: 180,
-        description: 'Platillo de desayuno, cafe y agua fresca'
+        description: 'Coffee break por persona'
       },
       {
-        title: 'Comida ejecutiva',
-        price: 250,
-        description: 'Platillo fuerte, agua fresca y servicio en restaurante o salon'
+        title: 'Empanadas Margaritas',
+        price: 90,
+        description: 'Orden de 3 empanadas de maiz rellenas de pollo, res o queso con ensalada y salsa'
+      },
+      {
+        title: 'Huevos revueltos especiales',
+        price: 130,
+        description: 'Huevos revueltos con chilaquiles verdes o rojos y frijoles refritos'
+      },
+      {
+        title: 'Chilaquiles naturales',
+        price: 100,
+        description: 'Chilaquiles verdes o rojos con crema, queso y cebolla'
+      },
+      {
+        title: 'Chilaquiles con pollo o huevo',
+        price: 130,
+        description: 'Chilaquiles verdes o rojos con pollo o huevo, crema, queso y cebolla'
+      },
+      {
+        title: 'Enchiladas verdes/rojas',
+        price: 140,
+        description: 'Enchiladas de pollo o carne con salsa roja o verde, crema, queso y frijoles'
+      },
+      {
+        title: 'Enchiladas de mole',
+        price: 140,
+        description: 'Enchiladas de pollo o carne con mole artesanal tabasqueno, crema y queso'
+      },
+      {
+        title: 'Tacos dorados',
+        price: 100,
+        description: 'Orden de 6 tacos dorados de pollo o res con lechuga, queso, crema y salsa'
+      },
+      {
+        title: 'Hamburguesa clasica',
+        price: 130,
+        description: 'Hamburguesa clasica del restaurante'
+      },
+      {
+        title: 'Hamburguesa hawaiana',
+        price: 150,
+        description: 'Hamburguesa hawaiana del restaurante'
+      },
+      {
+        title: 'Hot dog',
+        price: 120,
+        description: 'Hot dog del restaurante'
+      },
+      {
+        title: 'Club Sandwich Margaritas',
+        price: 150,
+        description: 'Club sandwich Margaritas'
+      },
+      {
+        title: 'Pollo a la parrilla',
+        price: 200,
+        description: 'Pollo a la parrilla con verduras al vapor'
+      },
+      {
+        title: 'Fajitas de pollo o res',
+        price: 200,
+        description: 'Fajitas de pollo o res'
+      },
+      {
+        title: 'Milanesa de pollo o res',
+        price: 200,
+        description: 'Milanesa de pollo o res'
+      },
+      {
+        title: 'Espagueti a la bolonesa',
+        price: 130,
+        description: 'Espagueti a la bolonesa'
+      },
+      {
+        title: 'Sandwich de jamon o pollo',
+        price: 120,
+        description: 'Sandwich de jamon o pollo'
       }
     ];
 
@@ -2861,15 +2920,35 @@ function pageHtml() {
       renderQuoteMenuPreview();
     }
 
+    function getMenuModifierPrice() {
+      return (quoteAddWater?.checked ? 30 : 0) + (quoteAddCoffee?.checked ? 30 : 0);
+    }
+
+    function getMenuModifierText() {
+      const modifiers = [];
+
+      if (quoteAddWater?.checked) {
+        modifiers.push('Agua +$30');
+      }
+
+      if (quoteAddCoffee?.checked) {
+        modifiers.push('Cafe +$30');
+      }
+
+      return modifiers;
+    }
+
     function renderQuoteMenuPreview() {
       if (!quoteMenuSelect || !quoteMenuPreview) {
         return;
       }
 
       const item = quoteMenuItems[Number(quoteMenuSelect.value || 0)];
+      const totalPrice = item ? item.price + getMenuModifierPrice() : 0;
+      const modifiers = getMenuModifierText();
 
       quoteMenuPreview.textContent = item
-        ? item.description + ' / ' + formatMoney(item.price) + ' por persona'
+        ? item.description + (modifiers.length ? ' / ' + modifiers.join(' / ') : '') + ' / ' + formatMoney(totalPrice) + ' por persona'
         : '';
     }
 
@@ -2880,12 +2959,14 @@ function pageHtml() {
         return;
       }
 
+      const modifiers = getMenuModifierText();
+
       quoteSectionsData.push({
         title: item.title,
         category: 'alimentos',
         quantity: Number(quotePeople.value || 1),
-        unitPrice: item.price,
-        includes: item.description
+        unitPrice: item.price + getMenuModifierPrice(),
+        includes: item.description + (modifiers.length ? '\\n' + modifiers.join('\\n') : '')
       });
       renderQuoteSections();
     }
@@ -2918,11 +2999,11 @@ function pageHtml() {
           includes: 'Uso de salon\\nMontaje basico\\nMesas y sillas'
         },
         alimentos: {
-          title: 'Menu por persona',
+          title: 'Coffee Break',
           category: 'alimentos',
           quantity: Number(quotePeople.value || 1),
-          unitPrice: 160,
-          includes: 'Coffee break\\nCafe, te y agua fresca\\nBox lunch o menu acordado'
+          unitPrice: 180,
+          includes: 'Coffee break por persona'
         }
       };
 
