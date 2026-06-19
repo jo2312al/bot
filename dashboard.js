@@ -608,7 +608,7 @@ function quotationFormalPrintHtml(quotation) {
       </table>
       <section class="totals">
         <div><span>Subtotal</span><strong>${formatCurrency(quotation.subtotal || quotation.total)}</strong></div>
-        ${serviceChargePercent ? `<div><span>Servicio ${serviceChargePercent}%</span><strong>${formatCurrency(quotation.serviceCharge)}</strong></div>` : ""}
+        ${serviceChargePercent && quotation.serviceCharge ? `<div><span>Servicio ${serviceChargePercent}% alimentos</span><strong>${formatCurrency(quotation.serviceCharge)}</strong></div>` : ""}
         <div><span>Total estimado</span><strong>${formatCurrency(quotation.total)}</strong></div>
       </section>
       <section class="notes">
@@ -936,7 +936,7 @@ function quotationVisualPrintHtml(quotation) {
           <div class="price-card">
             <div class="muted">Subtotal antes de servicio</div>
             <strong>${formatCurrency(quotation.subtotal || quotation.total)}</strong>
-            ${serviceChargePercent ? `<div class="muted">+ ${serviceChargePercent}% de servicio: ${formatCurrency(quotation.serviceCharge)}</div>` : ""}
+            ${serviceChargePercent && quotation.serviceCharge ? `<div class="muted">+ ${serviceChargePercent}% de servicio sobre alimentos: ${formatCurrency(quotation.serviceCharge)}</div>` : ""}
           </div>
           <div class="schedule">
             <h2>Horarios</h2>
@@ -970,10 +970,10 @@ function quotationVisualPrintHtml(quotation) {
               <td><strong>${formatCurrency(section.subtotal)}</strong></td>
             </tr>
           `).join("")}
-          ${serviceChargePercent ? `
+          ${serviceChargePercent && quotation.serviceCharge ? `
             <tr>
               <td><strong>Servicio</strong></td>
-              <td>${serviceChargePercent}% de servicio</td>
+              <td>${serviceChargePercent}% de servicio sobre alimentos</td>
               <td>1</td>
               <td>${formatCurrency(quotation.serviceCharge)}</td>
               <td><strong>${formatCurrency(quotation.serviceCharge)}</strong></td>
@@ -1256,7 +1256,7 @@ function drawPdfQuoteTable(doc, quotation, startY, theme, options = {}) {
     y += rowHeight;
   });
 
-  if (quotation.serviceChargePercent) {
+  if (quotation.serviceChargePercent && quotation.serviceCharge) {
     y =
       ensurePdfSpace(
         doc,
@@ -1268,7 +1268,7 @@ function drawPdfQuoteTable(doc, quotation, startY, theme, options = {}) {
       .font("Helvetica")
       .fontSize(9)
       .text(
-        `Servicio ${quotation.serviceChargePercent}%`,
+        `Servicio ${quotation.serviceChargePercent}% alimentos`,
         left + 310,
         y + (compact ? 5 : 8),
         {
@@ -1331,6 +1331,9 @@ function drawPdfQuoteTable(doc, quotation, startY, theme, options = {}) {
 }
 
 async function quotationPdfBuffer(quotation) {
+  quotation =
+    withComputedQuotationTotals(quotation);
+
   const doc =
     new PDFDocument({
       size:
@@ -1358,6 +1361,44 @@ async function quotationPdfBuffer(quotation) {
   }
 
   return collectPdf(doc);
+}
+
+function withComputedQuotationTotals(quotation) {
+  const sections =
+    Array.isArray(quotation.sections)
+      ? quotation.sections.map(section => ({
+        ...section,
+        subtotal:
+          Number(section.quantity || 0) * Number(section.unitPrice || 0)
+      }))
+      : [];
+  const subtotal =
+    sections.reduce(
+      (total, section) => total + Number(section.subtotal || 0),
+      0
+    );
+  const serviceChargeBase =
+    sections.reduce(
+      (total, section) =>
+        section.category === "alimentos"
+          ? total + Number(section.subtotal || 0)
+          : total,
+      0
+    );
+  const serviceChargePercent =
+    Number(quotation.serviceChargePercent || 0);
+  const serviceCharge =
+    serviceChargeBase * serviceChargePercent / 100;
+
+  return {
+    ...quotation,
+    sections,
+    subtotal,
+    serviceChargeBase,
+    serviceCharge,
+    total:
+      subtotal + serviceCharge
+  };
 }
 
 function drawFormalQuotationPdf(doc, quotation) {
@@ -1654,12 +1695,12 @@ function drawVisualQuotationPdf(doc, quotation) {
         190
     });
 
-  if (quotation.serviceChargePercent) {
+  if (quotation.serviceChargePercent && quotation.serviceCharge) {
     doc
       .fillColor(theme.muted)
       .font("Helvetica")
       .fontSize(9)
-      .text(`+ ${quotation.serviceChargePercent}% servicio: ${formatCurrency(quotation.serviceCharge)}`, 54, 312, {
+      .text(`+ ${quotation.serviceChargePercent}% servicio alimentos: ${formatCurrency(quotation.serviceCharge)}`, 54, 312, {
         width:
           190
       });
@@ -3316,7 +3357,7 @@ function pageHtml() {
               <input id="quotePeople" type="number" min="0" placeholder="40">
             </label>
             <label>
-              Servicio %
+              Servicio % alimentos
               <input id="quoteServiceCharge" type="number" min="0" value="0" oninput="renderQuoteTotals()">
             </label>
             <label>
@@ -3362,7 +3403,7 @@ function pageHtml() {
         <div class="panel quote-save-card" style="margin-bottom:0">
           <div class="muted">Total cotizacion</div>
           <div id="quoteSubtotalLine" class="quote-subtotal-line"><span>Subtotal</span><strong>$0</strong></div>
-          <div id="quoteServiceLine" class="quote-subtotal-line"><span>Servicio</span><strong>$0</strong></div>
+          <div id="quoteServiceLine" class="quote-subtotal-line"><span>Servicio alimentos</span><strong>$0</strong></div>
           <div id="quoteTotal" class="quote-total">$0</div>
           <div id="quoteStatus" class="muted"></div>
           <button class="primary" onclick="saveQuotation()">Guardar cotizacion</button>
@@ -3641,13 +3682,37 @@ function pageHtml() {
             '<option value="alimentos"' + (section.category === 'alimentos' ? ' selected' : '') + '>Alimentos/Menu</option>' +
             '<option value="otro"' + (section.category === 'otro' ? ' selected' : '') + '>Otro</option>' +
           '</select></label>' +
-          '<label>Cantidad/personas<input type="number" min="0" value="' + escapeHtml(section.quantity || 0) + '" oninput="updateQuoteSection(' + index + ', \\'quantity\\', this.value)"></label>' +
-          '<label>Precio unitario<input type="number" min="0" value="' + escapeHtml(section.unitPrice || 0) + '" oninput="updateQuoteSection(' + index + ', \\'unitPrice\\', this.value)"></label>' +
+          '<label>' + escapeHtml(getQuoteQuantityLabel(section.category)) + '<input type="number" min="0" value="' + escapeHtml(section.quantity || 0) + '" oninput="updateQuoteSection(' + index + ', \\'quantity\\', this.value)"></label>' +
+          '<label>' + escapeHtml(getQuotePriceLabel(section.category)) + '<input type="number" min="0" value="' + escapeHtml(section.unitPrice || 0) + '" oninput="updateQuoteSection(' + index + ', \\'unitPrice\\', this.value)"></label>' +
           '<button class="danger" onclick="removeQuoteSection(' + index + ')">Quitar</button>' +
           '<textarea placeholder="Que incluye este apartado" oninput="updateQuoteSection(' + index + ', \\'includes\\', this.value)">' + escapeHtml(section.includes || '') + '</textarea>' +
         '</div>'
       ).join('');
       renderQuoteTotals();
+    }
+
+    function getQuoteQuantityLabel(category) {
+      if (category === 'habitaciones') {
+        return 'Habitaciones';
+      }
+
+      if (category === 'alimentos') {
+        return 'Personas';
+      }
+
+      return 'Cantidad';
+    }
+
+    function getQuotePriceLabel(category) {
+      if (category === 'habitaciones') {
+        return 'Precio por habitacion';
+      }
+
+      if (category === 'alimentos') {
+        return 'Precio por persona';
+      }
+
+      return 'Precio unitario';
     }
 
     function renderQuoteMenuOptions() {
@@ -3874,8 +3939,17 @@ function pageHtml() {
       );
     }
 
+    function getQuoteFoodSubtotal() {
+      return quoteSectionsData.reduce((total, section) =>
+        section.category === 'alimentos'
+          ? total + Number(section.quantity || 0) * Number(section.unitPrice || 0)
+          : total,
+        0
+      );
+    }
+
     function getQuoteServiceCharge() {
-      return getQuoteSubtotal() * Number(quoteServiceCharge?.value || 0) / 100;
+      return getQuoteFoodSubtotal() * Number(quoteServiceCharge?.value || 0) / 100;
     }
 
     function getQuoteTotal() {
@@ -3884,9 +3958,10 @@ function pageHtml() {
 
     function renderQuoteTotals() {
       const subtotal = getQuoteSubtotal();
+      const foodSubtotal = getQuoteFoodSubtotal();
       const service = getQuoteServiceCharge();
       quoteSubtotalLine.innerHTML = '<span>Subtotal</span><strong>' + formatMoney(subtotal) + '</strong>';
-      quoteServiceLine.innerHTML = '<span>Servicio ' + Number(quoteServiceCharge?.value || 0) + '%</span><strong>' + formatMoney(service) + '</strong>';
+      quoteServiceLine.innerHTML = '<span>Servicio ' + Number(quoteServiceCharge?.value || 0) + '% alimentos <small>(' + formatMoney(foodSubtotal) + ')</small></span><strong>' + formatMoney(service) + '</strong>';
       quoteTotal.textContent = formatMoney(subtotal + service);
     }
 

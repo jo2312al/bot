@@ -320,6 +320,17 @@ function normalizeQuotation(input) {
       )
     );
 
+  const serviceChargeBase =
+    roundMoney(
+      normalizedSections.reduce(
+        (total, section) =>
+          section.category === "alimentos"
+            ? total + section.subtotal
+            : total,
+        0
+      )
+    );
+
   const serviceChargePercent =
     Math.max(
       Number(input.serviceChargePercent || 0),
@@ -328,7 +339,7 @@ function normalizeQuotation(input) {
 
   const serviceCharge =
     roundMoney(
-      subtotal * serviceChargePercent / 100
+      serviceChargeBase * serviceChargePercent / 100
     );
 
   if (!String(input.client || "").trim()) {
@@ -379,6 +390,8 @@ function normalizeQuotation(input) {
       subtotal,
     serviceCharge:
       serviceCharge,
+    serviceChargeBase:
+      serviceChargeBase,
     total:
       roundMoney(
         subtotal + serviceCharge
