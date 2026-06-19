@@ -19,6 +19,101 @@ const QUOTES_FILE =
     "quotations.json"
   );
 
+const QUOTATION_MENU_FILE =
+  path.join(
+    DATA_DIR,
+    "quotationMenu.json"
+  );
+
+const DEFAULT_QUOTATION_MENU =
+  [
+    {
+      title: "Coffee Break",
+      price: 180,
+      description: "Coffee break por persona"
+    },
+    {
+      title: "Empanadas Margaritas",
+      price: 90,
+      description: "Orden de 3 empanadas de maiz rellenas de pollo, res o queso con ensalada y salsa"
+    },
+    {
+      title: "Huevos revueltos especiales",
+      price: 130,
+      description: "Huevos revueltos con chilaquiles verdes o rojos y frijoles refritos"
+    },
+    {
+      title: "Chilaquiles naturales",
+      price: 100,
+      description: "Chilaquiles verdes o rojos con crema, queso y cebolla"
+    },
+    {
+      title: "Chilaquiles con pollo o huevo",
+      price: 130,
+      description: "Chilaquiles verdes o rojos con pollo o huevo, crema, queso y cebolla"
+    },
+    {
+      title: "Enchiladas verdes/rojas",
+      price: 140,
+      description: "Enchiladas de pollo o carne con salsa roja o verde, crema, queso y frijoles"
+    },
+    {
+      title: "Enchiladas de mole",
+      price: 140,
+      description: "Enchiladas de pollo o carne con mole artesanal tabasqueno, crema y queso"
+    },
+    {
+      title: "Tacos dorados",
+      price: 100,
+      description: "Orden de 6 tacos dorados de pollo o res con lechuga, queso, crema y salsa"
+    },
+    {
+      title: "Hamburguesa clasica",
+      price: 130,
+      description: "Hamburguesa clasica del restaurante"
+    },
+    {
+      title: "Hamburguesa hawaiana",
+      price: 150,
+      description: "Hamburguesa hawaiana del restaurante"
+    },
+    {
+      title: "Hot dog",
+      price: 120,
+      description: "Hot dog del restaurante"
+    },
+    {
+      title: "Club Sandwich Margaritas",
+      price: 150,
+      description: "Club sandwich Margaritas"
+    },
+    {
+      title: "Pollo a la parrilla",
+      price: 200,
+      description: "Pollo a la parrilla con verduras al vapor"
+    },
+    {
+      title: "Fajitas de pollo o res",
+      price: 200,
+      description: "Fajitas de pollo o res"
+    },
+    {
+      title: "Milanesa de pollo o res",
+      price: 200,
+      description: "Milanesa de pollo o res"
+    },
+    {
+      title: "Espagueti a la bolonesa",
+      price: 130,
+      description: "Espagueti a la bolonesa"
+    },
+    {
+      title: "Sandwich de jamon o pollo",
+      price: 120,
+      description: "Sandwich de jamon o pollo"
+    }
+  ];
+
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(
@@ -116,6 +211,54 @@ function readQuotations() {
     QUOTES_FILE,
     []
   );
+}
+
+function normalizeQuotationMenu(items) {
+  return (Array.isArray(items) ? items : [])
+    .map(item => ({
+      title:
+        String(item.title || "").trim(),
+      price:
+        Math.max(
+          money(item.price),
+          0
+        ),
+      description:
+        String(item.description || "").trim()
+    }))
+    .filter(item =>
+      item.title
+    );
+}
+
+function readQuotationMenu() {
+  const menu =
+    normalizeQuotationMenu(
+      readJson(
+        QUOTATION_MENU_FILE,
+        DEFAULT_QUOTATION_MENU
+      )
+    );
+
+  return menu.length
+    ? menu
+    : DEFAULT_QUOTATION_MENU;
+}
+
+function saveQuotationMenu(items) {
+  const menu =
+    normalizeQuotationMenu(items);
+
+  if (!menu.length) {
+    throw new Error("Agrega al menos un platillo");
+  }
+
+  writeJson(
+    QUOTATION_MENU_FILE,
+    menu
+  );
+
+  return menu;
 }
 
 function money(value) {
@@ -280,8 +423,10 @@ function getQuotation(id) {
 module.exports = {
   getQuotation,
   getReservationNoteKey,
+  readQuotationMenu,
   readQuotations,
   readReservationNotes,
+  saveQuotationMenu,
   saveQuotation,
   saveReservationNote
 };

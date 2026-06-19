@@ -40,8 +40,10 @@ const {
 const {
   getQuotation,
   getReservationNoteKey,
+  readQuotationMenu,
   readQuotations,
   readReservationNotes,
+  saveQuotationMenu,
   saveQuotation,
   saveReservationNote
 } = require("./services/dashboardExtrasService");
@@ -1254,6 +1256,8 @@ function getSummary() {
     groupReservations,
     quotations:
       readQuotations(),
+    quotationMenu:
+      readQuotationMenu(),
     totalRooms:
       TOTAL_ROOMS,
     rackStatus:
@@ -2062,6 +2066,36 @@ function pageHtml() {
       min-width: 0;
       margin-right: 6px;
     }
+    .quote-menu-editor {
+      margin-top: 12px;
+      border: 1px solid #ead7b2;
+      border-radius: 8px;
+      background: #fffdf9;
+      padding: 12px;
+    }
+    .quote-menu-editor-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .quote-menu-row {
+      display: grid;
+      grid-template-columns: minmax(150px, 1fr) 96px minmax(220px, 1.35fr) auto;
+      gap: 8px;
+      align-items: center;
+      margin-top: 8px;
+    }
+    .quote-menu-row input {
+      min-width: 0;
+      width: 100%;
+    }
+    .quote-menu-status {
+      color: #775c4e;
+      font-size: 13px;
+      margin-top: 8px;
+    }
     .quote-section {
       display: grid;
       grid-template-columns: minmax(0, 1.25fr) minmax(132px, .65fr) minmax(126px, .55fr) minmax(140px, .7fr) auto;
@@ -2185,6 +2219,7 @@ function pageHtml() {
       }
       .quote-layout,
       .quote-section,
+      .quote-menu-row,
       .arrival-item,
       .note-row {
         grid-template-columns: 1fr;
@@ -2558,6 +2593,20 @@ function pageHtml() {
             </div>
             <div id="quoteMenuPreview" class="quote-menu-preview"></div>
           </div>
+          <div class="quote-menu-editor">
+            <div class="quote-menu-editor-head">
+              <div>
+                <strong>Catalogo de platillos</strong>
+                <div class="muted">Edita precios y descripciones para el menu rapido.</div>
+              </div>
+              <div class="quote-presets">
+                <button onclick="addQuoteMenuEditorRow()">Agregar</button>
+                <button class="primary" onclick="saveQuoteMenuCatalog()">Guardar catalogo</button>
+              </div>
+            </div>
+            <div id="quoteMenuEditor"></div>
+            <div id="quoteMenuStatus" class="quote-menu-status"></div>
+          </div>
           <div id="quoteSections"></div>
         </div>
         <div class="panel quote-save-card" style="margin-bottom:0">
@@ -2673,93 +2722,7 @@ function pageHtml() {
         includes: 'Recepcion 24 horas\\nEstacionamiento\\nInternet\\nTelevision por cable\\nAgua fria y caliente'
       }
     ];
-    const quoteMenuItems = [
-      {
-        title: 'Coffee Break',
-        price: 180,
-        description: 'Coffee break por persona'
-      },
-      {
-        title: 'Empanadas Margaritas',
-        price: 90,
-        description: 'Orden de 3 empanadas de maiz rellenas de pollo, res o queso con ensalada y salsa'
-      },
-      {
-        title: 'Huevos revueltos especiales',
-        price: 130,
-        description: 'Huevos revueltos con chilaquiles verdes o rojos y frijoles refritos'
-      },
-      {
-        title: 'Chilaquiles naturales',
-        price: 100,
-        description: 'Chilaquiles verdes o rojos con crema, queso y cebolla'
-      },
-      {
-        title: 'Chilaquiles con pollo o huevo',
-        price: 130,
-        description: 'Chilaquiles verdes o rojos con pollo o huevo, crema, queso y cebolla'
-      },
-      {
-        title: 'Enchiladas verdes/rojas',
-        price: 140,
-        description: 'Enchiladas de pollo o carne con salsa roja o verde, crema, queso y frijoles'
-      },
-      {
-        title: 'Enchiladas de mole',
-        price: 140,
-        description: 'Enchiladas de pollo o carne con mole artesanal tabasqueno, crema y queso'
-      },
-      {
-        title: 'Tacos dorados',
-        price: 100,
-        description: 'Orden de 6 tacos dorados de pollo o res con lechuga, queso, crema y salsa'
-      },
-      {
-        title: 'Hamburguesa clasica',
-        price: 130,
-        description: 'Hamburguesa clasica del restaurante'
-      },
-      {
-        title: 'Hamburguesa hawaiana',
-        price: 150,
-        description: 'Hamburguesa hawaiana del restaurante'
-      },
-      {
-        title: 'Hot dog',
-        price: 120,
-        description: 'Hot dog del restaurante'
-      },
-      {
-        title: 'Club Sandwich Margaritas',
-        price: 150,
-        description: 'Club sandwich Margaritas'
-      },
-      {
-        title: 'Pollo a la parrilla',
-        price: 200,
-        description: 'Pollo a la parrilla con verduras al vapor'
-      },
-      {
-        title: 'Fajitas de pollo o res',
-        price: 200,
-        description: 'Fajitas de pollo o res'
-      },
-      {
-        title: 'Milanesa de pollo o res',
-        price: 200,
-        description: 'Milanesa de pollo o res'
-      },
-      {
-        title: 'Espagueti a la bolonesa',
-        price: 130,
-        description: 'Espagueti a la bolonesa'
-      },
-      {
-        title: 'Sandwich de jamon o pollo',
-        price: 120,
-        description: 'Sandwich de jamon o pollo'
-      }
-    ];
+    let quoteMenuItems = [];
 
     async function loadBotStatus() {
       try {
@@ -2826,7 +2789,9 @@ function pageHtml() {
       renderRackRoomGrid(data.rackStatus);
       overbookingAlerts.innerHTML = renderOverbookingAlerts(data.overbookingAlerts || []);
       todayArrivals.innerHTML = renderTodayArrivals(data.todayArrivals || []);
+      quoteMenuItems = Array.isArray(data.quotationMenu) ? data.quotationMenu : [];
       renderQuoteMenuOptions();
+      renderQuoteMenuEditor();
       renderQuoteSections();
       renderQuotationList(data.quotations || []);
       occupancy.innerHTML = renderOccupancy(data.occupancy);
@@ -2909,15 +2874,86 @@ function pageHtml() {
     }
 
     function renderQuoteMenuOptions() {
-      if (!quoteMenuSelect || quoteMenuSelect.options.length) {
-        renderQuoteMenuPreview();
+      if (!quoteMenuSelect) {
         return;
       }
 
+      const previousValue = quoteMenuSelect.value;
       quoteMenuSelect.innerHTML = quoteMenuItems.map((item, index) =>
         '<option value="' + index + '">' + escapeHtml(item.title) + ' - ' + formatMoney(item.price) + ' p/p</option>'
       ).join('');
+      if (previousValue && quoteMenuSelect.options[Number(previousValue)]) {
+        quoteMenuSelect.value = previousValue;
+      }
       renderQuoteMenuPreview();
+    }
+
+    function renderQuoteMenuEditor() {
+      if (!quoteMenuEditor) {
+        return;
+      }
+
+      quoteMenuEditor.innerHTML = quoteMenuItems.map((item, index) =>
+        '<div class="quote-menu-row">' +
+          '<input value="' + escapeHtml(item.title || '') + '" placeholder="Platillo" oninput="updateQuoteMenuItem(' + index + ', \\'title\\', this.value)">' +
+          '<input type="number" min="0" value="' + escapeHtml(item.price || 0) + '" oninput="updateQuoteMenuItem(' + index + ', \\'price\\', this.value)">' +
+          '<input value="' + escapeHtml(item.description || '') + '" placeholder="Descripcion" oninput="updateQuoteMenuItem(' + index + ', \\'description\\', this.value)">' +
+          '<button class="danger compact" onclick="removeQuoteMenuItem(' + index + ')">Quitar</button>' +
+        '</div>'
+      ).join('');
+    }
+
+    function updateQuoteMenuItem(index, field, value) {
+      quoteMenuItems[index][field] = field === 'price'
+        ? Number(value || 0)
+        : value;
+      renderQuoteMenuOptions();
+    }
+
+    function addQuoteMenuEditorRow() {
+      quoteMenuItems.push({
+        title: 'Nuevo platillo',
+        price: 0,
+        description: ''
+      });
+      renderQuoteMenuEditor();
+      renderQuoteMenuOptions();
+    }
+
+    function removeQuoteMenuItem(index) {
+      quoteMenuItems.splice(index, 1);
+
+      if (!quoteMenuItems.length) {
+        addQuoteMenuEditorRow();
+        return;
+      }
+
+      renderQuoteMenuEditor();
+      renderQuoteMenuOptions();
+    }
+
+    async function saveQuoteMenuCatalog() {
+      quoteMenuStatus.textContent = 'Guardando catalogo...';
+      const response = await fetch('/api/quotation-menu', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          items: quoteMenuItems
+        })
+      });
+      const data = await response.json();
+
+      if (!data.ok) {
+        quoteMenuStatus.textContent = data.error || 'No se pudo guardar el catalogo.';
+        return;
+      }
+
+      quoteMenuItems = data.menu;
+      quoteMenuStatus.textContent = 'Catalogo guardado.';
+      renderQuoteMenuEditor();
+      renderQuoteMenuOptions();
     }
 
     function getMenuModifierPrice() {
@@ -4498,6 +4534,37 @@ const server =
           qrDataUrl: null,
           detail:
             error.message || "No se pudo generar el QR"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/quotation-menu"
+    ) {
+      try {
+        const body =
+          await readBody(req);
+
+        const menu =
+          saveQuotationMenu(
+            body.items
+          );
+
+        sendJson(res, 200, {
+          ok:
+            true,
+          menu
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok:
+            false,
+          error:
+            error.message || "No se pudo guardar el catalogo"
         });
       }
 
