@@ -1388,10 +1388,10 @@ function drawFormalQuotationPdf(doc, quotation) {
     doc,
     logo,
     54,
-    48,
+    44,
     {
       width:
-        170
+        118
     }
   );
 
@@ -1425,8 +1425,8 @@ function drawFormalQuotationPdf(doc, quotation) {
     );
 
   doc
-    .moveTo(54, 142)
-    .lineTo(558, 142)
+    .moveTo(54, 166)
+    .lineTo(558, 166)
     .strokeColor("#b88422")
     .lineWidth(2)
     .stroke();
@@ -1435,16 +1435,16 @@ function drawFormalQuotationPdf(doc, quotation) {
     .fillColor(theme.header)
     .font("Helvetica-Bold")
     .fontSize(24)
-    .text("COTIZACION", 54, 164)
+    .text("COTIZACION", 54, 188)
     .fillColor("#8f1236")
     .fontSize(18)
-    .text(cleanPdfText(title), 54, 195, {
+    .text(cleanPdfText(title), 54, 219, {
       width:
         504
     });
 
   const metaY =
-    238;
+    266;
   [
     [
       "Cliente",
@@ -1486,7 +1486,7 @@ function drawFormalQuotationPdf(doc, quotation) {
     drawPdfQuoteTable(
       doc,
       quotation,
-      360,
+      388,
       theme
     );
 
@@ -1551,11 +1551,11 @@ function drawVisualQuotationPdf(doc, quotation) {
   addPdfImage(
     doc,
     logo,
-    176,
-    34,
+    206,
+    28,
     {
       width:
-        260
+        200
     }
   );
 
@@ -1563,7 +1563,7 @@ function drawVisualQuotationPdf(doc, quotation) {
     .fillColor("#4a2b22")
     .font("Helvetica-Bold")
     .fontSize(28)
-    .text("COTIZACION", 54, 174, {
+    .text("COTIZACION", 54, 210, {
       width:
         504,
       align:
@@ -1571,7 +1571,7 @@ function drawVisualQuotationPdf(doc, quotation) {
     })
     .fillColor("#8f1236")
     .fontSize(24)
-    .text(cleanPdfText(title), 84, 214, {
+    .text(cleanPdfText(title), 84, 250, {
       width:
         444,
       align:
@@ -1579,7 +1579,7 @@ function drawVisualQuotationPdf(doc, quotation) {
     });
 
   doc
-    .roundedRect(72, 270, 468, 64, 8)
+    .roundedRect(72, 306, 468, 64, 8)
     .strokeColor("#d8ad58")
     .lineWidth(1)
     .stroke();
@@ -1604,13 +1604,13 @@ function drawVisualQuotationPdf(doc, quotation) {
       .fillColor("#8f1236")
       .font("Helvetica-Bold")
       .fontSize(8)
-      .text(item[0].toUpperCase(), x, 286, {
+      .text(item[0].toUpperCase(), x, 322, {
         width:
           132
       })
       .fillColor("#241711")
       .fontSize(11)
-      .text(cleanPdfText(item[1]), x, 302, {
+      .text(cleanPdfText(item[1]), x, 338, {
         width:
           132,
         height:
@@ -1622,11 +1622,11 @@ function drawVisualQuotationPdf(doc, quotation) {
     .fillColor(theme.muted)
     .font("Helvetica")
     .fontSize(10)
-    .text("Subtotal antes de servicio", 54, 368)
+    .text("Subtotal antes de servicio", 54, 404)
     .fillColor("#8f1236")
     .font("Helvetica-Bold")
     .fontSize(26)
-    .text(formatCurrency(quotation.subtotal || quotation.total), 54, 388, {
+    .text(formatCurrency(quotation.subtotal || quotation.total), 54, 424, {
       width:
         190
     });
@@ -1636,20 +1636,20 @@ function drawVisualQuotationPdf(doc, quotation) {
       .fillColor(theme.muted)
       .font("Helvetica")
       .fontSize(9)
-      .text(`+ ${quotation.serviceChargePercent}% servicio: ${formatCurrency(quotation.serviceCharge)}`, 54, 424, {
+      .text(`+ ${quotation.serviceChargePercent}% servicio: ${formatCurrency(quotation.serviceCharge)}`, 54, 460, {
         width:
           190
       });
   }
 
   doc
-    .roundedRect(54, 468, 180, 84, 8)
+    .roundedRect(54, 496, 180, 84, 8)
     .strokeColor(theme.line)
     .stroke()
     .fillColor("#8f1236")
     .font("Helvetica-Bold")
     .fontSize(14)
-    .text("HORARIOS", 74, 484, {
+    .text("HORARIOS", 74, 512, {
       width:
         140,
       align:
@@ -1657,19 +1657,19 @@ function drawVisualQuotationPdf(doc, quotation) {
     })
     .fillColor(theme.text)
     .fontSize(10)
-    .text(`Check-in: ${cleanPdfText(quotation.checkIn || "3:00 PM")}`, 74, 512)
-    .text(`Check-out: ${cleanPdfText(quotation.checkOut || "12:00 PM")}`, 74, 532);
+    .text(`Check-in: ${cleanPdfText(quotation.checkIn || "3:00 PM")}`, 74, 540)
+    .text(`Check-out: ${cleanPdfText(quotation.checkOut || "12:00 PM")}`, 74, 560);
 
   addPdfImage(
     doc,
     image,
     270,
-    360,
+    388,
     {
       width:
         260,
       height:
-        164
+        148
     }
   );
 
@@ -1677,17 +1677,17 @@ function drawVisualQuotationPdf(doc, quotation) {
     .fillColor("#8f1236")
     .font("Helvetica-Bold")
     .fontSize(14)
-    .text("SERVICIOS INCLUIDOS", 270, 542);
+    .text("SERVICIOS INCLUIDOS", 270, 554);
 
   services.slice(0, 7).forEach((service, index) => {
     doc
       .fillColor("#8f1236")
       .font("Helvetica-Bold")
       .fontSize(10)
-      .text("-", 278, 566 + index * 14)
+      .text("-", 278, 578 + index * 13)
       .fillColor(theme.text)
       .font("Helvetica")
-      .text(cleanPdfText(service), 292, 566 + index * 14, {
+      .text(cleanPdfText(service), 292, 578 + index * 13, {
         width:
           220
       });
@@ -1697,7 +1697,7 @@ function drawVisualQuotationPdf(doc, quotation) {
     drawPdfQuoteTable(
       doc,
       quotation,
-      632,
+      676,
       theme,
       {
         compact:
@@ -2830,6 +2830,12 @@ function pageHtml() {
       font-size: 13px;
       margin-top: 8px;
     }
+    .quote-catalog-modal {
+      width: min(900px, 100%);
+    }
+    .quote-catalog-modal .quote-menu-editor {
+      margin-top: 0;
+    }
     .quote-section {
       display: grid;
       grid-template-columns: minmax(0, 1.25fr) minmax(132px, .65fr) minmax(126px, .55fr) minmax(140px, .7fr) auto;
@@ -3325,21 +3331,8 @@ function pageHtml() {
               <label><input id="quoteAddWater" type="checkbox" onchange="renderQuoteMenuPreview()"> Agua +$30</label>
               <label><input id="quoteAddCoffee" type="checkbox" onchange="renderQuoteMenuPreview()"> Cafe +$30</label>
             </div>
+            <button onclick="openQuoteMenuModal()">Editar catalogo</button>
             <div id="quoteMenuPreview" class="quote-menu-preview"></div>
-          </div>
-          <div class="quote-menu-editor">
-            <div class="quote-menu-editor-head">
-              <div>
-                <strong>Catalogo de platillos</strong>
-                <div class="muted">Edita precios y descripciones para el menu rapido.</div>
-              </div>
-              <div class="quote-presets">
-                <button onclick="addQuoteMenuEditorRow()">Agregar</button>
-                <button class="primary" onclick="saveQuoteMenuCatalog()">Guardar catalogo</button>
-              </div>
-            </div>
-            <div id="quoteMenuEditor"></div>
-            <div id="quoteMenuStatus" class="quote-menu-status"></div>
           </div>
           <div id="quoteSections"></div>
         </div>
@@ -3435,6 +3428,33 @@ function pageHtml() {
         <div class="confirm-actions">
           <button onclick="closeRackConfirm()">Cancelar</button>
           <button class="primary" onclick="confirmRackRoomOccupied()">Marcar ocupada</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="quoteMenuModalBackdrop" class="modal-backdrop hidden" onclick="closeQuoteMenuModal()">
+    <div class="modal quote-catalog-modal" role="dialog" aria-modal="true" aria-labelledby="quoteMenuModalTitle" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <strong id="quoteMenuModalTitle">Catalogo de platillos</strong>
+          <div class="muted">Edita precios y descripciones para el menu rapido de cotizaciones.</div>
+        </div>
+        <button onclick="closeQuoteMenuModal()">Cerrar</button>
+      </div>
+      <div class="modal-body">
+        <div class="quote-menu-editor">
+          <div class="quote-menu-editor-head">
+            <div>
+              <strong>Platillos disponibles</strong>
+              <div class="muted">Agrega alimentos, coffee break o paquetes con precio por persona.</div>
+            </div>
+            <div class="quote-presets">
+              <button onclick="addQuoteMenuEditorRow()">Agregar</button>
+              <button class="primary" onclick="saveQuoteMenuCatalog()">Guardar catalogo</button>
+            </div>
+          </div>
+          <div id="quoteMenuEditor"></div>
+          <div id="quoteMenuStatus" class="quote-menu-status"></div>
         </div>
       </div>
     </div>
@@ -3688,6 +3708,24 @@ function pageHtml() {
       quoteMenuStatus.textContent = 'Catalogo guardado.';
       renderQuoteMenuEditor();
       renderQuoteMenuOptions();
+    }
+
+    function openQuoteMenuModal() {
+      renderQuoteMenuEditor();
+      quoteMenuModalBackdrop.classList.remove('hidden');
+      document.body.classList.add('modal-open');
+    }
+
+    function closeQuoteMenuModal() {
+      quoteMenuModalBackdrop.classList.add('hidden');
+
+      if (
+        dayModalBackdrop.classList.contains('hidden') &&
+        confirmDeleteBackdrop.classList.contains('hidden') &&
+        confirmRackBackdrop.classList.contains('hidden')
+      ) {
+        document.body.classList.remove('modal-open');
+      }
     }
 
     function getMenuModifierPrice() {
@@ -5050,6 +5088,8 @@ function pageHtml() {
       if (event.key === 'Escape') {
         if (!confirmRackBackdrop.classList.contains('hidden')) {
           closeRackConfirm();
+        } else if (!quoteMenuModalBackdrop.classList.contains('hidden')) {
+          closeQuoteMenuModal();
         } else if (!confirmDeleteBackdrop.classList.contains('hidden')) {
           closeDeleteConfirm();
         } else {
