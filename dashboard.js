@@ -6,6 +6,8 @@ const {
 } = require("url");
 const QRCode =
   require("qrcode");
+const PDFDocument =
+  require("pdfkit");
 const {
   readReservations,
   getRoomLimits,
@@ -991,6 +993,738 @@ function quotationVisualPrintHtml(quotation) {
   </div>
 </body>
 </html>`;
+}
+
+function mediaFilePath(relativePath) {
+  const mediaRoot =
+    path.resolve(
+      __dirname,
+      "media"
+    );
+  const filePath =
+    path.resolve(
+      mediaRoot,
+      String(relativePath || "").replace(/^\/media\//, "")
+    );
+
+  return filePath.startsWith(mediaRoot) && fs.existsSync(filePath)
+    ? filePath
+    : "";
+}
+
+function cleanPdfText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7E\n]/g, "");
+}
+
+function collectPdf(doc) {
+  return new Promise((resolve, reject) => {
+    const chunks =
+      [];
+
+    doc.on("data", chunk =>
+      chunks.push(chunk)
+    );
+    doc.on("end", () =>
+      resolve(Buffer.concat(chunks))
+    );
+    doc.on("error", reject);
+    doc.end();
+  });
+}
+
+function addPdfImage(doc, filePath, x, y, options) {
+  if (!filePath) {
+    return false;
+  }
+
+  try {
+    doc.image(
+      filePath,
+      x,
+      y,
+      options
+    );
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function ensurePdfSpace(doc, y, needed) {
+  if (y + needed <= doc.page.height - 54) {
+    return y;
+  }
+
+  doc.addPage();
+  return 54;
+}
+
+function drawPdfWrapped(doc, text, x, y, width, options = {}) {
+  const height =
+    doc.heightOfString(
+      cleanPdfText(text),
+      {
+        width,
+        ...options
+      }
+    );
+
+  doc.text(
+    cleanPdfText(text),
+    x,
+    y,
+    {
+      width,
+      ...options
+    }
+  );
+
+  return y + height;
+}
+
+function drawPdfQuoteTable(doc, quotation, startY, theme, options = {}) {
+  let y =
+    startY;
+  const compact =
+    Boolean(options.compact);
+  const left =
+    54;
+  const widths =
+    [
+      108,
+      194,
+      62,
+      78,
+      86
+    ];
+  const headers =
+    [
+      "Concepto",
+      "Descripcion",
+      "Cant.",
+      "P. unit.",
+      "Subtotal"
+    ];
+
+  function drawHeader() {
+    const headerHeight =
+      compact ? 18 : 24;
+
+    doc
+      .rect(left, y, 528, headerHeight)
+      .fill(theme.header);
+    doc
+      .fillColor("#ffffff")
+      .font("Helvetica-Bold")
+      .fontSize(8);
+
+    let x =
+      left;
+    headers.forEach((header, index) => {
+      doc.text(
+        header,
+        x + 5,
+        y + (compact ? 5 : 8),
+        {
+          width:
+            widths[index] - 10,
+          align:
+            index >= 2 ? "right" : "left"
+        }
+      );
+      x += widths[index];
+    });
+
+    y += headerHeight;
+  }
+
+  drawHeader();
+
+  quotation.sections.forEach(section => {
+    const description =
+      section.includes || "-";
+    const rowHeight =
+      Math.max(
+        compact ? 32 : 48,
+        doc.heightOfString(
+          cleanPdfText(description),
+          {
+            width:
+              widths[1] - 10
+          }
+        )
+        +
+        (compact ? 12 : 22)
+      );
+
+    y =
+      ensurePdfSpace(
+        doc,
+        y,
+        rowHeight + 42
+      );
+
+    if (y === 54) {
+      drawHeader();
+    }
+
+    doc
+      .rect(left, y, 528, rowHeight)
+      .strokeColor(theme.line)
+      .stroke();
+
+    let x =
+      left;
+    widths.slice(0, -1).forEach(width => {
+      x += width;
+      doc
+        .moveTo(x, y)
+        .lineTo(x, y + rowHeight)
+        .strokeColor(theme.line)
+        .stroke();
+    });
+
+    x = left;
+    doc
+      .fillColor(theme.text)
+      .font("Helvetica-Bold")
+      .fontSize(9)
+      .text(
+        cleanPdfText(section.title),
+        x + 5,
+        y + (compact ? 5 : 8),
+        {
+          width:
+            widths[0] - 10
+        }
+      )
+      .font("Helvetica")
+      .fontSize(7)
+      .fillColor(theme.muted)
+      .text(
+        cleanPdfText(section.category),
+        x + 5,
+        y + (compact ? 18 : 23),
+        {
+          width:
+            widths[0] - 10
+        }
+      );
+
+    x += widths[0];
+    doc
+      .fillColor(theme.text)
+      .font("Helvetica")
+      .fontSize(8)
+      .text(
+        cleanPdfText(description),
+        x + 5,
+        y + (compact ? 5 : 8),
+        {
+          width:
+            widths[1] - 10
+        }
+      );
+
+    x += widths[1];
+    [
+      section.quantity,
+      formatCurrency(section.unitPrice),
+      formatCurrency(section.subtotal)
+    ].forEach((value, index) => {
+      doc
+        .fillColor(theme.text)
+        .font("Helvetica")
+        .fontSize(8)
+        .text(
+          cleanPdfText(value),
+          x + 5,
+          y + (compact ? 5 : 8),
+          {
+            width:
+              widths[index + 2] - 10,
+            align:
+              "right"
+          }
+        );
+      x += widths[index + 2];
+    });
+
+    y += rowHeight;
+  });
+
+  if (quotation.serviceChargePercent) {
+    y =
+      ensurePdfSpace(
+        doc,
+        y,
+        40
+      );
+    doc
+      .fillColor(theme.text)
+      .font("Helvetica")
+      .fontSize(9)
+      .text(
+        `Servicio ${quotation.serviceChargePercent}%`,
+        left + 310,
+        y + (compact ? 5 : 8),
+        {
+          width:
+            120,
+          align:
+            "right"
+        }
+      )
+      .font("Helvetica-Bold")
+      .text(
+        formatCurrency(quotation.serviceCharge),
+        left + 438,
+        y + (compact ? 5 : 8),
+        {
+          width:
+            86,
+          align:
+            "right"
+        }
+      );
+    y += compact ? 18 : 24;
+  }
+
+  y =
+    ensurePdfSpace(
+      doc,
+      y,
+      54
+    );
+  doc
+    .rect(left, y, 528, compact ? 30 : 36)
+    .fill(theme.total);
+  doc
+    .fillColor("#ffffff")
+    .font("Helvetica-Bold")
+    .fontSize(compact ? 13 : 15)
+    .text(
+      "TOTAL ESTIMADO",
+      left + 14,
+      y + (compact ? 8 : 10),
+      {
+        width:
+          250
+      }
+    )
+    .text(
+      formatCurrency(quotation.total),
+      left + 300,
+      y + (compact ? 7 : 9),
+      {
+        width:
+          210,
+        align:
+          "right"
+      }
+    );
+
+  return y + (compact ? 40 : 52);
+}
+
+async function quotationPdfBuffer(quotation) {
+  const doc =
+    new PDFDocument({
+      size:
+        "LETTER",
+      margin:
+        0,
+      info: {
+        Title:
+          `${quotation.id} - Cotizacion`,
+        Author:
+          "Hotel Villa Margaritas"
+      }
+    });
+
+  if (quotation.template === "formal") {
+    drawFormalQuotationPdf(
+      doc,
+      quotation
+    );
+  } else {
+    drawVisualQuotationPdf(
+      doc,
+      quotation
+    );
+  }
+
+  return collectPdf(doc);
+}
+
+function drawFormalQuotationPdf(doc, quotation) {
+  const theme = {
+    text:
+      "#241711",
+    muted:
+      "#6f6259",
+    line:
+      "#d9c4a4",
+    header:
+      "#4a2b22",
+    total:
+      "#8f1236"
+  };
+  const logo =
+    mediaFilePath("/media/logo-villa-margaritas.png");
+  const title =
+    quotation.headline || quotation.eventName || "Cotizacion";
+
+  doc
+    .rect(26, 26, 560, 740)
+    .strokeColor(theme.line)
+    .lineWidth(1)
+    .stroke();
+
+  addPdfImage(
+    doc,
+    logo,
+    54,
+    48,
+    {
+      width:
+        170
+    }
+  );
+
+  doc
+    .fillColor(theme.muted)
+    .font("Helvetica")
+    .fontSize(9)
+    .text(
+      cleanPdfText(new Date(quotation.createdAt || Date.now()).toLocaleDateString("es-MX")),
+      390,
+      58,
+      {
+        width:
+          160,
+        align:
+          "right"
+      }
+    )
+    .font("Helvetica-Bold")
+    .fontSize(11)
+    .text(
+      cleanPdfText(quotation.id),
+      390,
+      76,
+      {
+        width:
+          160,
+        align:
+          "right"
+      }
+    );
+
+  doc
+    .moveTo(54, 142)
+    .lineTo(558, 142)
+    .strokeColor("#b88422")
+    .lineWidth(2)
+    .stroke();
+
+  doc
+    .fillColor(theme.header)
+    .font("Helvetica-Bold")
+    .fontSize(24)
+    .text("COTIZACION", 54, 164)
+    .fillColor("#8f1236")
+    .fontSize(18)
+    .text(cleanPdfText(title), 54, 195, {
+      width:
+        504
+    });
+
+  const metaY =
+    238;
+  [
+    [
+      "Cliente",
+      quotation.client
+    ],
+    [
+      "Contacto",
+      quotation.contact || "-"
+    ],
+    [
+      "Fechas / evento",
+      quotation.stayDates || quotation.eventName || "-"
+    ],
+    [
+      "Personas",
+      quotation.people || "-"
+    ]
+  ].forEach((item, index) => {
+    const x =
+      54 + (index % 2) * 252;
+    const y =
+      metaY + Math.floor(index / 2) * 54;
+    doc
+      .rect(x, y, 238, 42)
+      .fillAndStroke("#fff8ed", theme.line)
+      .fillColor(theme.muted)
+      .font("Helvetica-Bold")
+      .fontSize(7)
+      .text(item[0].toUpperCase(), x + 10, y + 8)
+      .fillColor(theme.text)
+      .fontSize(10)
+      .text(cleanPdfText(item[1]), x + 10, y + 21, {
+        width:
+          218
+      });
+  });
+
+  let y =
+    drawPdfQuoteTable(
+      doc,
+      quotation,
+      360,
+      theme
+    );
+
+  y =
+    ensurePdfSpace(doc, y, 90);
+
+  doc
+    .moveTo(54, y)
+    .lineTo(558, y)
+    .strokeColor(theme.line)
+    .lineWidth(1)
+    .stroke();
+  y += 14;
+
+  doc
+    .fillColor(theme.muted)
+    .font("Helvetica-Bold")
+    .fontSize(9)
+    .text("Notas:", 54, y);
+  y += 14;
+  drawPdfWrapped(
+    doc,
+    `Cotizacion informativa, no fiscal. Tarifa sujeta a disponibilidad y valida unicamente para las fechas indicadas.${quotation.notes ? `\n${quotation.notes}` : ""}`,
+    54,
+    y,
+    504,
+    {
+      fontSize:
+        9
+    }
+  );
+}
+
+function drawVisualQuotationPdf(doc, quotation) {
+  const theme = {
+    text:
+      "#241711",
+    muted:
+      "#775c4e",
+    line:
+      "#d8ad58",
+    header:
+      "#8f1236",
+    total:
+      "#8f1236"
+  };
+  const logo =
+    mediaFilePath("/media/logo-villa-margaritas.png");
+  const image =
+    mediaFilePath(quotePrimaryImage(quotation));
+  const title =
+    quotation.headline || quotation.eventName || "Cotizacion";
+  const services =
+    quoteIncludedServices(quotation);
+
+  doc
+    .rect(14, 14, 584, 764)
+    .strokeColor("#b88422")
+    .lineWidth(3)
+    .stroke();
+
+  addPdfImage(
+    doc,
+    logo,
+    176,
+    34,
+    {
+      width:
+        260
+    }
+  );
+
+  doc
+    .fillColor("#4a2b22")
+    .font("Helvetica-Bold")
+    .fontSize(28)
+    .text("COTIZACION", 54, 174, {
+      width:
+        504,
+      align:
+        "center"
+    })
+    .fillColor("#8f1236")
+    .fontSize(24)
+    .text(cleanPdfText(title), 84, 214, {
+      width:
+        444,
+      align:
+        "center"
+    });
+
+  doc
+    .roundedRect(72, 270, 468, 64, 8)
+    .strokeColor("#d8ad58")
+    .lineWidth(1)
+    .stroke();
+
+  [
+    [
+      "Para",
+      quotation.client
+    ],
+    [
+      "Fecha/evento",
+      quotation.stayDates || quotation.eventName || "-"
+    ],
+    [
+      "Personas",
+      quotation.people || "-"
+    ]
+  ].forEach((item, index) => {
+    const x =
+      86 + index * 150;
+    doc
+      .fillColor("#8f1236")
+      .font("Helvetica-Bold")
+      .fontSize(8)
+      .text(item[0].toUpperCase(), x, 286, {
+        width:
+          132
+      })
+      .fillColor("#241711")
+      .fontSize(11)
+      .text(cleanPdfText(item[1]), x, 302, {
+        width:
+          132,
+        height:
+          24
+      });
+  });
+
+  doc
+    .fillColor(theme.muted)
+    .font("Helvetica")
+    .fontSize(10)
+    .text("Subtotal antes de servicio", 54, 368)
+    .fillColor("#8f1236")
+    .font("Helvetica-Bold")
+    .fontSize(26)
+    .text(formatCurrency(quotation.subtotal || quotation.total), 54, 388, {
+      width:
+        190
+    });
+
+  if (quotation.serviceChargePercent) {
+    doc
+      .fillColor(theme.muted)
+      .font("Helvetica")
+      .fontSize(9)
+      .text(`+ ${quotation.serviceChargePercent}% servicio: ${formatCurrency(quotation.serviceCharge)}`, 54, 424, {
+        width:
+          190
+      });
+  }
+
+  doc
+    .roundedRect(54, 468, 180, 84, 8)
+    .strokeColor(theme.line)
+    .stroke()
+    .fillColor("#8f1236")
+    .font("Helvetica-Bold")
+    .fontSize(14)
+    .text("HORARIOS", 74, 484, {
+      width:
+        140,
+      align:
+        "center"
+    })
+    .fillColor(theme.text)
+    .fontSize(10)
+    .text(`Check-in: ${cleanPdfText(quotation.checkIn || "3:00 PM")}`, 74, 512)
+    .text(`Check-out: ${cleanPdfText(quotation.checkOut || "12:00 PM")}`, 74, 532);
+
+  addPdfImage(
+    doc,
+    image,
+    270,
+    360,
+    {
+      width:
+        260,
+      height:
+        164
+    }
+  );
+
+  doc
+    .fillColor("#8f1236")
+    .font("Helvetica-Bold")
+    .fontSize(14)
+    .text("SERVICIOS INCLUIDOS", 270, 542);
+
+  services.slice(0, 7).forEach((service, index) => {
+    doc
+      .fillColor("#8f1236")
+      .font("Helvetica-Bold")
+      .fontSize(10)
+      .text("-", 278, 566 + index * 14)
+      .fillColor(theme.text)
+      .font("Helvetica")
+      .text(cleanPdfText(service), 292, 566 + index * 14, {
+        width:
+          220
+      });
+  });
+
+  let y =
+    drawPdfQuoteTable(
+      doc,
+      quotation,
+      632,
+      theme,
+      {
+        compact:
+          true
+      }
+    );
+
+  y =
+    ensurePdfSpace(doc, y, 50);
+  doc
+    .roundedRect(54, y, 504, 34, 8)
+    .strokeColor("#8f1236")
+    .stroke()
+    .fillColor("#8f1236")
+    .font("Helvetica-Bold")
+    .fontSize(9)
+    .text("Nota:", 70, y + 10)
+    .font("Helvetica")
+    .text(
+      cleanPdfText(`Tarifa valida unicamente para las fechas indicadas.${quotation.notes ? ` ${quotation.notes}` : ""}`),
+      104,
+      y + 10,
+      {
+        width:
+          420
+      }
+    );
 }
 
 function reservationsToCsv(reservations) {
@@ -3108,7 +3842,7 @@ function pageHtml() {
           '<div class="muted">' + escapeHtml(row.headline || row.eventName || 'Sin evento') + ' / ' + formatMoney(row.total || 0) + '</div>' +
           '<div class="muted">Formato: ' + escapeHtml(row.template === 'formal' ? 'Formal' : 'Visual hotel') + '</div>' +
           '<div class="summary-chips">' +
-            '<button class="compact" onclick="window.open(\\'/api/quotations/' + encodeURIComponent(row.id) + '/print\\', \\'_blank\\')">Imprimir</button>' +
+            '<button class="compact" onclick="window.open(\\'/api/quotations/' + encodeURIComponent(row.id) + '/print\\', \\'_blank\\')">Abrir PDF</button>' +
           '</div>' +
         '</div>'
       ).join('');
@@ -3153,7 +3887,7 @@ function pageHtml() {
 
       quoteStatus.innerHTML =
         'Guardada: ' + escapeHtml(data.quotation.id) +
-        ' <button class="compact" onclick="window.open(\\'/api/quotations/' + encodeURIComponent(data.quotation.id) + '/print\\', \\'_blank\\')">Imprimir</button>';
+        ' <button class="compact" onclick="window.open(\\'/api/quotations/' + encodeURIComponent(data.quotation.id) + '/print\\', \\'_blank\\')">Abrir PDF</button>';
       quoteClient.value = '';
       quoteContact.value = '';
       quoteEventName.value = '';
@@ -4425,13 +5159,15 @@ const server =
         return;
       }
 
+      const pdf =
+        await quotationPdfBuffer(quotation);
+
       res.writeHead(200, {
-        "Content-Type": "text/html; charset=utf-8",
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `inline; filename="${quotation.id}.pdf"`,
         "Cache-Control": "no-store"
       });
-      res.end(
-        quotationPrintHtml(quotation)
-      );
+      res.end(pdf);
       return;
     }
 
