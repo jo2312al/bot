@@ -18,7 +18,16 @@ function ensureStateDir() {
   }
 }
 
-function readBotStatus() {
+function defaultStatus() {
+  return {
+    connection: "unknown",
+    qr: null,
+    updatedAt: null,
+    detail: "Sin estado registrado"
+  };
+}
+
+function readStatusFile() {
   try {
     return JSON.parse(
       fs.readFileSync(
@@ -27,30 +36,60 @@ function readBotStatus() {
       )
     );
   } catch {
-    return {
-      connection: "unknown",
-      qr: null,
-      updatedAt: null,
-      detail: "Sin estado registrado"
-    };
+    return null;
   }
 }
 
-function writeBotStatus(status) {
+function readBotStatuses() {
+  const stored =
+    readStatusFile();
+
+  if (stored?.instances) {
+    return {
+      principal:
+        stored.instances.principal || defaultStatus(),
+      nocturno:
+        stored.instances.nocturno || defaultStatus()
+    };
+  }
+
+  return {
+    principal:
+      stored || defaultStatus(),
+    nocturno:
+      defaultStatus()
+  };
+}
+
+function readBotStatus(instanceId = "principal") {
+  return readBotStatuses()[instanceId] || defaultStatus();
+}
+
+function writeBotStatus(instanceId, status) {
+  if (typeof instanceId === "object") {
+    status = instanceId;
+    instanceId = "principal";
+  }
+
   ensureStateDir();
 
-  const current =
-    readBotStatus();
+  const instances =
+    readBotStatuses();
 
   fs.writeFileSync(
     STATUS_FILE,
     JSON.stringify(
       {
-        ...current,
-        ...status,
-        updatedAt:
-          new Date()
-            .toISOString()
+        instances: {
+          ...instances,
+          [instanceId]: {
+            ...instances[instanceId],
+            ...status,
+            updatedAt:
+              new Date()
+                .toISOString()
+          }
+        }
       },
       null,
       2
@@ -61,5 +100,6 @@ function writeBotStatus(status) {
 
 module.exports = {
   readBotStatus,
+  readBotStatuses,
   writeBotStatus
 };

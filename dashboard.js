@@ -28,7 +28,8 @@ const {
   updateRackRoomStatus
 } = require("./services/rackAnalysisService");
 const {
-  readBotStatus
+  readBotStatus,
+  readBotStatuses
 } = require("./services/botStatusService");
 const {
   TOTAL_ROOMS,
@@ -2068,23 +2069,37 @@ function getSummary() {
 }
 
 async function getBotStatus() {
-  const status =
-    readBotStatus();
-
-  const qrDataUrl =
-    status.qr
-      ? await QRCode.toDataURL(
-        status.qr,
-        {
-          margin: 1,
-          width: 320
-        }
-      )
-      : null;
+  const statuses =
+    readBotStatuses();
+  const instances =
+    await Promise.all(
+      Object.entries(statuses).map(async ([id, status]) => ({
+        id,
+        label:
+          id === "nocturno" ? "Bot nocturno" : "Bot principal",
+        ...status,
+        qrDataUrl:
+          status.qr
+            ? await QRCode.toDataURL(
+              status.qr,
+              {
+                margin: 1,
+                width: 320
+              }
+            )
+            : null
+      }))
+    );
+  const primary =
+    instances.find(instance => instance.id === "principal")
+    || {
+      ...readBotStatus(),
+      qrDataUrl: null
+    };
 
   return {
-    ...status,
-    qrDataUrl
+    ...primary,
+    instances
   };
 }
 
@@ -2183,6 +2198,19 @@ function pageHtml() {
       grid-template-columns: minmax(0, 1fr) auto;
       gap: 16px;
       align-items: center;
+    }
+    .bot-status-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .bot-status-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+    }
+    .bot-status-card .bot-status {
+      min-height: 118px;
     }
     .status-row {
       display: flex;
@@ -2997,6 +3025,7 @@ function pageHtml() {
     }
     @media (max-width: 800px) {
       .grid { grid-template-columns: 1fr; }
+      .bot-status-grid { grid-template-columns: 1fr; }
       .bot-status {
         grid-template-columns: 1fr;
       }
@@ -3111,21 +3140,13 @@ function pageHtml() {
     </section>
 
     <section class="panel">
-      <div class="bot-status">
+      <div class="toolbar">
         <div>
           <strong>Estado de WhatsApp</strong>
-          <div class="status-row">
-            <span id="botStatusDot" class="status-dot"></span>
-            <span id="botStatusText">Cargando...</span>
-          </div>
-          <div id="botStatusDetail" class="muted"></div>
-          <div id="botStatusUpdated" class="muted"></div>
-        </div>
-        <div id="qrBox" class="qr-box hidden">
-          <img id="qrImage" alt="QR de WhatsApp">
-          <div class="muted">Escanea este codigo desde WhatsApp.</div>
+          <div class="muted">Cada bot usa su propio numero, sesion y QR.</div>
         </div>
       </div>
+      <div id="botStatusList" class="bot-status-grid"></div>
     </section>
 
     <section class="panel">
@@ -3546,34 +3567,41 @@ function pageHtml() {
       try {
         const response = await fetch('/api/bot-status');
         const status = await response.json();
-        const connection = status.connection || 'unknown';
-        const labels = {
-          open: 'Conectado',
-          qr: 'Esperando escaneo de QR',
-          close: 'Desconectado',
-          unknown: 'Sin estado'
-        };
+        renderBotStatuses(status.instances || [status]);
+      } catch (error) {
+        botStatusList.innerHTML = '<div class="muted">No se pudo leer el estado de WhatsApp: ' + escapeHtml(error.message || '') + '</div>';
+      }
+    }
 
-        botStatusDot.className = 'status-dot ' + connection;
-        botStatusText.textContent = labels[connection] || connection;
-        botStatusDetail.textContent = status.detail || '';
-        botStatusUpdated.textContent = status.updatedAt
-          ? 'Actualizado: ' + new Date(status.updatedAt).toLocaleString()
+    function renderBotStatuses(instances) {
+      const labels = {
+        open: 'Conectado',
+        qr: 'Esperando escaneo de QR',
+        close: 'Desconectado',
+        unknown: 'Sin estado'
+      };
+
+      botStatusList.innerHTML = instances.map(instance => {
+        const connection = instance.connection || 'unknown';
+        const availability = instance.availability === 'inactive'
+          ? 'Fuera de horario'
+          : 'Activo';
+        const qr = instance.qrDataUrl
+          ? '<div class="qr-box"><img src="' + instance.qrDataUrl + '" alt="QR de ' + escapeHtml(instance.label || instance.id || 'WhatsApp') + '"><div class="muted">Escanea este codigo desde WhatsApp.</div></div>'
           : '';
 
-        if (status.qrDataUrl) {
-          qrImage.src = status.qrDataUrl;
-          qrBox.classList.remove('hidden');
-        } else {
-          qrImage.removeAttribute('src');
-          qrBox.classList.add('hidden');
-        }
-      } catch (error) {
-        botStatusDot.className = 'status-dot close';
-        botStatusText.textContent = 'No se pudo leer el estado';
-        botStatusDetail.textContent = error.message || '';
-        qrBox.classList.add('hidden');
-      }
+        return '<div class="bot-status-card">' +
+          '<div class="bot-status">' +
+            '<div>' +
+              '<strong>' + escapeHtml(instance.label || instance.id || 'Bot') + '</strong>' +
+              '<div class="status-row"><span class="status-dot ' + escapeHtml(connection) + '"></span><span>' + escapeHtml(labels[connection] || connection) + '</span><span class="pill">' + escapeHtml(availability) + '</span></div>' +
+              '<div class="muted">' + escapeHtml(instance.schedule || instance.detail || '') + '</div>' +
+              '<div class="muted">' + (instance.updatedAt ? 'Actualizado: ' + escapeHtml(new Date(instance.updatedAt).toLocaleString()) : '') + '</div>' +
+            '</div>' +
+            qr +
+          '</div>' +
+        '</div>';
+      }).join('');
     }
 
     async function loadDashboard() {

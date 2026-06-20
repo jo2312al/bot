@@ -80,9 +80,10 @@ jobs:
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y tesseract-ocr imagemagick sqlite3 &&
           npm install --omit=dev &&
           sudo install -m 644 deploy/hotel-bot.service /etc/systemd/system/hotel-bot.service &&
+          sudo install -m 644 deploy/hotel-night-bot.service /etc/systemd/system/hotel-night-bot.service &&
           sudo install -m 644 deploy/hotel-dashboard.service /etc/systemd/system/hotel-dashboard.service &&
           sudo systemctl daemon-reload &&
-          sudo systemctl enable hotel-bot hotel-dashboard &&
-          sudo systemctl restart hotel-bot hotel-dashboard &&
-          sudo systemctl --no-pager --full status hotel-bot hotel-dashboard
+          sudo systemctl enable hotel-bot hotel-night-bot hotel-dashboard &&
+          sudo systemctl restart hotel-bot hotel-night-bot hotel-dashboard &&
+          sudo systemctl --no-pager --full status hotel-bot hotel-night-bot hotel-dashboard
           "

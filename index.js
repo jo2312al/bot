@@ -63,6 +63,17 @@ const {
   "./services/groupReservationLogService"
 );
 
+const BOT_ID =
+  process.env.BOT_ID || "principal";
+const BOT_LABEL =
+  process.env.BOT_LABEL || "Bot principal";
+const AUTH_DIR =
+  process.env.BOT_AUTH_DIR || "auth";
+const ACTIVE_HOURS =
+  process.env.BOT_ACTIVE_HOURS || "";
+const BOT_TIME_ZONE =
+  process.env.BOT_TIME_ZONE || "America/Mexico_City";
+
 let reconnectTimer =
   null;
 
@@ -74,6 +85,62 @@ let isStarting =
 
 let authResetDone =
   false;
+
+function getScheduleStatus() {
+  if (!ACTIVE_HOURS) {
+    return {
+      active: true,
+      detail: "Disponible 24/7"
+    };
+  }
+
+  const match =
+    ACTIVE_HOURS.match(/^(\d{1,2})-(\d{1,2})$/);
+
+  if (!match) {
+    return {
+      active: true,
+      detail: "Horario no valido; disponible"
+    };
+  }
+
+  const start =
+    Number(match[1]);
+  const end =
+    Number(match[2]);
+  const hour =
+    Number(
+      new Intl.DateTimeFormat("en-US", {
+        timeZone: BOT_TIME_ZONE,
+        hour: "2-digit",
+        hourCycle: "h23"
+      }).format(new Date())
+    );
+  const active =
+    start > end
+      ? hour >= start || hour < end
+      : hour >= start && hour < end;
+
+  return {
+    active,
+    detail: active
+      ? `Disponible ${ACTIVE_HOURS} (${BOT_TIME_ZONE})`
+      : `Fuera de horario ${ACTIVE_HOURS} (${BOT_TIME_ZONE})`
+  };
+}
+
+function updateScheduleStatus() {
+  const schedule =
+    getScheduleStatus();
+
+  writeBotStatus(BOT_ID, {
+    availability:
+      schedule.active ? "active" : "inactive",
+    schedule: schedule.detail
+  });
+
+  return schedule;
+}
 
 // ==========================================
 // DELAY
@@ -114,7 +181,7 @@ function resetAuthSession() {
   const authDir =
     path.join(
       __dirname,
-      "auth"
+      AUTH_DIR
     );
 
   if (
@@ -128,7 +195,7 @@ function resetAuthSession() {
   const backupDir =
     path.join(
       __dirname,
-      `auth-invalid-${Date.now()}`
+    `${AUTH_DIR}-invalid-${Date.now()}`
     );
 
   fs.renameSync(
@@ -251,7 +318,7 @@ async function startBot() {
     saveCreds
   } =
     await useMultiFileAuthState(
-      "auth"
+      AUTH_DIR
     );
 
   const {
@@ -271,7 +338,7 @@ async function startBot() {
       auth: state,
 
       browser: [
-        "Hotel Bot",
+        BOT_LABEL,
         "Chrome",
         "1.0"
       ]
@@ -330,14 +397,17 @@ async function startBot() {
 
       if (qr) {
 
-        writeBotStatus({
+        writeBotStatus(BOT_ID, {
           connection: "qr",
           qr,
-          detail: "Escanea el QR para conectar WhatsApp"
+          detail: `Escanea el QR para conectar ${BOT_LABEL}`,
+          availability:
+            getScheduleStatus().active ? "active" : "inactive",
+          schedule: getScheduleStatus().detail
         });
 
         console.log(
-          "\n📱 ESCANEA QR\n"
+          `\n📱 ESCANEA QR ${BOT_LABEL}\n`
         );
 
         qrcode.generate(
@@ -361,13 +431,16 @@ async function startBot() {
         reconnectAttempts =
           0;
 
-        writeBotStatus({
+        writeBotStatus(BOT_ID, {
           connection: "open",
           qr: null,
-          detail: "Bot conectado"
+          detail: `${BOT_LABEL} conectado`,
+          availability:
+            getScheduleStatus().active ? "active" : "inactive",
+          schedule: getScheduleStatus().detail
         });
 
-        log({usuario: "Sistema", modulo: "Core", accion: "✅ BOT CONECTADO"});
+        log({usuario: "Sistema", modulo: "Core", accion: `✅ ${BOT_LABEL} CONECTADO`});
 
       }
 
@@ -399,10 +472,11 @@ async function startBot() {
 
           "sin detalle";
 
-        writeBotStatus({
+        writeBotStatus(BOT_ID, {
           connection: "close",
           detail:
-            `Desconectado status=${statusCode || "unknown"} detalle=${detail}`
+            `${BOT_LABEL} desconectado status=${statusCode || "unknown"} detalle=${detail}`,
+          schedule: getScheduleStatus().detail
         });
 
         log({
@@ -527,6 +601,11 @@ async function startBot() {
           text
             .toLowerCase()
             .includes("rack");
+
+        if (!getScheduleStatus().active) {
+          updateScheduleStatus();
+          return;
+        }
 
         // ======================================
         // LOG GRUPOS
@@ -718,6 +797,12 @@ process.on(
     }
 
   }
+);
+
+updateScheduleStatus();
+setInterval(
+  updateScheduleStatus,
+  60 * 1000
 );
 
 startBot()

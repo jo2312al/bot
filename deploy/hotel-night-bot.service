@@ -1,5 +1,5 @@
 [Unit]
-Description=Hotel Villa Margaritas WhatsApp bot
+Description=Hotel Villa Margaritas WhatsApp night bot
 After=network-online.target
 Wants=network-online.target
 
@@ -11,9 +11,11 @@ ExecStart=/usr/bin/node index.js
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
-Environment=BOT_ID=principal
-Environment=BOT_LABEL=Bot principal
-Environment=BOT_AUTH_DIR=auth
+Environment=BOT_ID=nocturno
+Environment=BOT_LABEL=Bot nocturno
+Environment=BOT_AUTH_DIR=auth-nocturno
+Environment=BOT_ACTIVE_HOURS=22-9
+Environment=BOT_TIME_ZONE=America/Mexico_City
 
 [Install]
 WantedBy=multi-user.target
