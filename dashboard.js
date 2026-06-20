@@ -5841,6 +5841,6 @@ const server =
     });
   });
 
-server.listen(PORT, () => {
-  console.log(`Dashboard disponible en http://localhost:${PORT}`);
+server.listen(PORT, "127.0.0.1", () => {
+  console.log(`Dashboard disponible en http://127.0.0.1:${PORT}`);
 });
