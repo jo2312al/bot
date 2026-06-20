@@ -8,31 +8,40 @@ on:
 
 jobs:
   deploy:
-    if: ${{ secrets.EC2_SSH_KEY != '' }}
     runs-on: ubuntu-latest
 
     env:
       DEPLOY_HOST: ec2-3-21-92-184.us-east-2.compute.amazonaws.com
       DEPLOY_USER: ubuntu
       DEPLOY_PATH: /opt/hotel-bot
+      HAS_EC2_KEY: ${{ secrets.EC2_SSH_KEY != '' }}
 
     steps:
 
+      - name: EC2 key required
+        if: env.HAS_EC2_KEY != 'true'
+        run: echo "Add the EC2_SSH_KEY repository secret, then run this workflow again."
+
       - name: Checkout repo
+        if: env.HAS_EC2_KEY == 'true'
         uses: actions/checkout@v4
 
       - name: Setup Node
+        if: env.HAS_EC2_KEY == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
       - name: Install dependencies
+        if: env.HAS_EC2_KEY == 'true'
         run: npm install
 
       - name: Validate JavaScript
+        if: env.HAS_EC2_KEY == 'true'
         run: npm run check
 
       - name: Setup SSH
+        if: env.HAS_EC2_KEY == 'true'
         run: |
 
           mkdir -p ~/.ssh
@@ -44,6 +53,7 @@ jobs:
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
 
       - name: Deploy files
+        if: env.HAS_EC2_KEY == 'true'
         run: |
 
           rsync -avz --delete \
@@ -60,6 +70,7 @@ jobs:
           ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
 
       - name: Install and restart services
+        if: env.HAS_EC2_KEY == 'true'
         run: |
 
           ssh "$DEPLOY_USER@$DEPLOY_HOST" "
