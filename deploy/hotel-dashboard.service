@@ -1,0 +1,17 @@
+[Unit]
+Description=Hotel Villa Margaritas dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/hotel-bot
+ExecStart=/usr/bin/node dashboard.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=DASHBOARD_PORT=3333
+
+[Install]
+WantedBy=multi-user.target
