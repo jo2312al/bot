@@ -42,6 +42,9 @@ const {
   updateCalendarReservation
 } = require("./services/reservationDatabaseService");
 const {
+  enqueueReservationGroupNotification
+} = require("./services/groupReservationNotificationService");
+const {
   getQuotation,
   getReservationNoteKey,
   readQuotationMenu,
@@ -3570,6 +3573,22 @@ function pageHtml() {
       </div>
     </div>
   </div>
+  <div id="groupSendConfirmBackdrop" class="modal-backdrop hidden" onclick="closeGroupSendConfirm()">
+    <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="groupSendConfirmTitle" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <strong id="groupSendConfirmTitle">Enviar reserva al grupo</strong>
+          <div id="groupSendConfirmText" class="muted"></div>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="confirm-actions">
+          <button onclick="closeGroupSendConfirm()">No</button>
+          <button class="primary" onclick="sendPendingReservationsToGroup()">Si, enviar al grupo</button>
+        </div>
+      </div>
+    </div>
+  </div>
   <div id="confirmDeleteBackdrop" class="modal-backdrop hidden" onclick="closeDeleteConfirm()">
     <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirmDeleteTitle" onclick="event.stopPropagation()">
       <div class="modal-head">
@@ -3638,6 +3657,7 @@ function pageHtml() {
     let selectedEnd = "";
     let pendingDeleteReservation = null;
     let pendingEditReservation = null;
+    let pendingGroupReservations = [];
     let pendingRackRoom = null;
     let activeModalIsoDate = "";
     let quoteSectionsData = [
@@ -4498,6 +4518,7 @@ function pageHtml() {
       manualNota.value = '';
       manualReservationStatus.textContent = 'Reserva guardada: #' + data.reservation.folio;
       await loadDashboard();
+      openGroupSendConfirm([data.reservation], 'capturada');
     }
 
     async function importReservationsCsv() {
@@ -4530,6 +4551,61 @@ function pageHtml() {
       manualReservationStatus.textContent =
         'Importadas: ' + data.imported + (data.errors.length ? ' / Errores: ' + data.errors.join(' | ') : '');
       await loadDashboard();
+      openGroupSendConfirm(data.reservations || [], 'importadas');
+    }
+
+    function openGroupSendConfirm(reservations, source) {
+      pendingGroupReservations = Array.isArray(reservations)
+        ? reservations.filter(reservation => reservation?.nombre && reservation?.fecha)
+        : [];
+
+      if (!pendingGroupReservations.length) {
+        return;
+      }
+
+      const count = pendingGroupReservations.length;
+      groupSendConfirmTitle.textContent = count === 1
+        ? 'Enviar reserva al grupo'
+        : 'Enviar reservas al grupo';
+      groupSendConfirmText.textContent = count === 1
+        ? 'La reserva ' + source + ' se enviara al grupo de reservas.'
+        : count + ' reservas ' + source + ' se enviaran al grupo de reservas.';
+      groupSendConfirmBackdrop.classList.remove('hidden');
+      document.body.classList.add('modal-open');
+    }
+
+    function closeGroupSendConfirm() {
+      groupSendConfirmBackdrop.classList.add('hidden');
+      pendingGroupReservations = [];
+      document.body.classList.remove('modal-open');
+    }
+
+    async function sendPendingReservationsToGroup() {
+      if (!pendingGroupReservations.length) {
+        closeGroupSendConfirm();
+        return;
+      }
+
+      const response = await fetch('/api/reservations/send-to-group', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          reservations: pendingGroupReservations
+        })
+      });
+      const data = await response.json();
+
+      if (!data.ok) {
+        alert(data.error || 'No se pudo preparar el envio al grupo.');
+        return;
+      }
+
+      manualReservationStatus.textContent = data.count === 1
+        ? 'Reserva encolada para enviar al grupo.'
+        : data.count + ' reservas encoladas para enviar al grupo.';
+      closeGroupSendConfirm();
     }
 
     function downloadReservationsCsv() {
@@ -5421,6 +5497,8 @@ function pageHtml() {
           closeRackConfirm();
         } else if (!quoteMenuModalBackdrop.classList.contains('hidden')) {
           closeQuoteMenuModal();
+        } else if (!groupSendConfirmBackdrop.classList.contains('hidden')) {
+          closeGroupSendConfirm();
         } else if (!confirmDeleteBackdrop.classList.contains('hidden')) {
           closeDeleteConfirm();
         } else {
@@ -5780,6 +5858,8 @@ const server =
             true,
           imported:
             result.imported.length,
+          reservations:
+            result.imported,
           errors:
             result.errors
         });
@@ -5789,6 +5869,36 @@ const server =
             false,
           error:
             error.message || "No se pudo importar el CSV"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/reservations/send-to-group"
+    ) {
+      try {
+        const body =
+          await readBody(req);
+        const notification =
+          enqueueReservationGroupNotification(
+            body.reservations,
+            "dashboard"
+          );
+
+        sendJson(res, 200, {
+          ok: true,
+          notificationId: notification.id,
+          count: notification.reservations.length
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok: false,
+          error:
+            error.message || "No se pudo preparar el envio al grupo"
         });
       }
 

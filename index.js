@@ -62,6 +62,12 @@ const {
 } = require(
   "./services/groupReservationLogService"
 );
+const {
+  readPendingReservationGroupNotifications,
+  markReservationGroupNotificationSent
+} = require(
+  "./services/groupReservationNotificationService"
+);
 
 const BOT_ID =
   process.env.BOT_ID || "principal";
@@ -84,6 +90,12 @@ let isStarting =
   false;
 
 let authResetDone =
+  false;
+
+let groupNotificationTimer =
+  null;
+
+let isFlushingGroupNotifications =
   false;
 
 function getScheduleStatus() {
@@ -140,6 +152,90 @@ function updateScheduleStatus() {
   });
 
   return schedule;
+}
+
+function formatReservationGroupNotification(notification) {
+  const reservations =
+    notification.reservations || [];
+  const heading =
+    reservations.length === 1
+      ? "*RESERVA REGISTRADA*"
+      : `*RESERVAS IMPORTADAS (${reservations.length})*`;
+  const details =
+    reservations.map((reservation, index) => {
+      const title =
+        reservations.length === 1
+          ? `*Cliente:* ${reservation.nombre}`
+          : `*${index + 1}. ${reservation.nombre}*`;
+      const dates =
+        Array.isArray(reservation.dates) && reservation.dates.length
+          ? reservation.dates.join(" al ")
+          : reservation.fecha;
+      const guests =
+        `${reservation.adultos || 0} adulto(s), ${reservation.ninos || 0} menor(es)`;
+      const lines = [
+        title,
+        `Fecha: ${dates}`,
+        `Habitaciones: ${reservation.habitaciones || 1}`,
+        `Huespedes: ${guests}`
+      ];
+
+      if (reservation.tipo) lines.push(`Tipo: ${reservation.tipo}`);
+      if (reservation.hora) lines.push(`Hora de llegada: ${reservation.hora}`);
+      if (reservation.telefono) lines.push(`Telefono: ${reservation.telefono}`);
+      if (reservation.tarifa) lines.push(`Tarifa: ${reservation.tarifa}`);
+      if (reservation.folio) lines.push(`Folio: #${reservation.folio}`);
+
+      return lines.join("\n");
+    });
+
+  return [heading, ...details].join("\n\n");
+}
+
+async function flushGroupReservationNotifications(sock) {
+  if (BOT_ID !== "principal" || isFlushingGroupNotifications) {
+    return;
+  }
+
+  isFlushingGroupNotifications = true;
+
+  try {
+    const pending =
+      readPendingReservationGroupNotifications();
+
+    for (const notification of pending) {
+      await sock.sendMessage(GROUP_ID, {
+        text: formatReservationGroupNotification(notification)
+      });
+      markReservationGroupNotificationSent(notification.id);
+      await delay(1500);
+    }
+  } catch (error) {
+    log({
+      usuario: "Sistema",
+      modulo: "Reservas",
+      accion: `No se pudo enviar reserva al grupo: ${getErrorMessage(error)}`
+    });
+  } finally {
+    isFlushingGroupNotifications = false;
+  }
+}
+
+function startGroupReservationNotificationPolling(sock) {
+  if (BOT_ID !== "principal") {
+    return;
+  }
+
+  if (groupNotificationTimer) {
+    clearInterval(groupNotificationTimer);
+  }
+
+  flushGroupReservationNotifications(sock);
+  groupNotificationTimer =
+    setInterval(
+      () => flushGroupReservationNotifications(sock),
+      5000
+    );
 }
 
 // ==========================================
@@ -439,6 +535,8 @@ async function startBot() {
             getScheduleStatus().active ? "active" : "inactive",
           schedule: getScheduleStatus().detail
         });
+
+        startGroupReservationNotificationPolling(sock);
 
         log({usuario: "Sistema", modulo: "Core", accion: `✅ ${BOT_LABEL} CONECTADO`});
 

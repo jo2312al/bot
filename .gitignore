@@ -5,6 +5,7 @@ data/closedDates.json
 data/calendarReservations.json
 data/groupMessages.json
 data/rackStatus.json
+data/groupReservationNotifications.json
 data/*.db
 data/*.db-*
 logs/*.log
