@@ -377,6 +377,49 @@ function readCalendarReservations() {
     );
 }
 
+function updateCalendarReservation(sourceKey, updates = {}) {
+  const current =
+    readCalendarReservations()
+      .find(row =>
+        row.sourceKey === sourceKey
+      );
+
+  if (!current) {
+    throw new Error("Reserva no encontrada");
+  }
+
+  const dates =
+    Array.isArray(updates.dates)
+    &&
+    updates.dates.length
+      ? updates.dates
+      : current.dates;
+  const updated =
+    normalizeReservation({
+      ...current,
+      ...updates,
+      sourceKey,
+      dates,
+      fecha:
+        dates[0] || current.fecha,
+      source:
+        current.source,
+      groupId:
+        current.groupId,
+      raw:
+        current.raw,
+      status:
+        current.status
+    });
+
+  if (!updated.nombre || !updated.fecha || !updated.dates.length) {
+    throw new Error("Nombre y fechas validas son requeridos");
+  }
+
+  saveCalendarReservation(updated);
+  return updated;
+}
+
 function readCanceledCalendarReservationKeys() {
   if (initSqlite()) {
     return new Set(
@@ -527,6 +570,7 @@ function saveGroupMessage({
 module.exports = {
   saveCalendarReservation,
   readCalendarReservations,
+  updateCalendarReservation,
   readCanceledCalendarReservationKeys,
   cancelCalendarReservationByFolio,
   cancelCalendarReservationByKey,

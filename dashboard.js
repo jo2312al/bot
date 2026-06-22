@@ -38,7 +38,8 @@ const {
 } = require("./services/groupReservationLogService");
 const {
   cancelCalendarReservationByKey,
-  saveCalendarReservation
+  saveCalendarReservation,
+  updateCalendarReservation
 } = require("./services/reservationDatabaseService");
 const {
   getQuotation,
@@ -2997,6 +2998,9 @@ function pageHtml() {
     .confirm-modal {
       width: min(460px, 100%);
     }
+    .reservation-edit-modal {
+      width: min(760px, 100%);
+    }
     .confirm-actions {
       display: flex;
       justify-content: flex-end;
@@ -3020,12 +3024,65 @@ function pageHtml() {
       font-size: 20px;
       margin-top: 4px;
     }
+    .day-reservation-list {
+      display: grid;
+      gap: 10px;
+    }
+    .day-reservation-item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+    .day-reservation-head,
+    .day-reservation-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .day-reservation-details {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .day-reservation-details div {
+      min-width: 0;
+    }
+    .day-reservation-details strong,
+    .day-reservation-details span {
+      display: block;
+      overflow-wrap: anywhere;
+    }
+    .reservation-edit-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .reservation-edit-grid label {
+      display: grid;
+      gap: 5px;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .reservation-edit-grid .wide {
+      grid-column: span 2;
+    }
     body.modal-open {
       overflow: hidden;
     }
     @media (max-width: 800px) {
       .grid { grid-template-columns: 1fr; }
       .bot-status-grid { grid-template-columns: 1fr; }
+      .day-reservation-details,
+      .reservation-edit-grid {
+        grid-template-columns: 1fr;
+      }
+      .reservation-edit-grid .wide {
+        grid-column: auto;
+      }
       .bot-status {
         grid-template-columns: 1fr;
       }
@@ -3483,6 +3540,36 @@ function pageHtml() {
       <div id="dayModalBody" class="modal-body"></div>
     </div>
   </div>
+  <div id="reservationEditBackdrop" class="modal-backdrop hidden" onclick="closeReservationEdit()">
+    <div class="modal reservation-edit-modal" role="dialog" aria-modal="true" aria-labelledby="reservationEditTitle" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <strong id="reservationEditTitle">Editar reserva</strong>
+          <div id="reservationEditSubtitle" class="muted"></div>
+        </div>
+        <button onclick="closeReservationEdit()">Cerrar</button>
+      </div>
+      <div class="modal-body">
+        <div class="reservation-edit-grid">
+          <label class="wide">Cliente<input id="editReservationName" autocomplete="off"></label>
+          <label>Telefono<input id="editReservationPhone" inputmode="tel"></label>
+          <label>Entrada<input id="editReservationStart" type="date"></label>
+          <label>Salida<input id="editReservationEnd" type="date"></label>
+          <label>Habitaciones<input id="editReservationRooms" type="number" min="1"></label>
+          <label>Adultos<input id="editReservationAdults" type="number" min="0"></label>
+          <label>Menores<input id="editReservationChildren" type="number" min="0"></label>
+          <label>Tipo<input id="editReservationType"></label>
+          <label>Hora<input id="editReservationTime"></label>
+          <label>Tarifa<input id="editReservationRate"></label>
+          <label class="wide">Nota interna<textarea id="editReservationNote" rows="3"></textarea></label>
+        </div>
+        <div class="confirm-actions">
+          <button onclick="closeReservationEdit()">Cancelar</button>
+          <button class="primary" onclick="saveReservationEdit()">Guardar cambios</button>
+        </div>
+      </div>
+    </div>
+  </div>
   <div id="confirmDeleteBackdrop" class="modal-backdrop hidden" onclick="closeDeleteConfirm()">
     <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirmDeleteTitle" onclick="event.stopPropagation()">
       <div class="modal-head">
@@ -3550,6 +3637,7 @@ function pageHtml() {
     let selectedStart = "";
     let selectedEnd = "";
     let pendingDeleteReservation = null;
+    let pendingEditReservation = null;
     let pendingRackRoom = null;
     let activeModalIsoDate = "";
     let quoteSectionsData = [
@@ -4802,22 +4890,26 @@ function pageHtml() {
             '<span class="chip">Bot ' + totals.bot + '</span>' +
             '<span class="chip">Manual/Excel ' + totals.manual + '</span>' +
           '</div>' +
-          '<div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Fuente</th><th>Habs</th><th>Huespedes</th><th>Tipo</th><th>Hora</th><th>Telefono</th><th>Tarifa</th><th>Nota</th><th></th></tr></thead><tbody>' +
+          '<div class="day-reservation-list">' +
           row.reservations.map((item, index) =>
-            '<tr>' +
-              '<td>' + escapeHtml(item.nombre || 'Sin nombre') + '<br><span class="muted">' + escapeHtml(item.timestamp || '') + '</span></td>' +
-              '<td><span class="pill">' + escapeHtml(item.source || '-') + '</span></td>' +
-              '<td>' + escapeHtml(item.habitaciones || 1) + '</td>' +
-              '<td>' + escapeHtml((item.adultos || 0) + ' adulto(s), ' + (item.ninos || 0) + ' menor(es)') + '</td>' +
-              '<td>' + escapeHtml(item.tipo || '-') + '</td>' +
-              '<td>' + escapeHtml(item.hora || '-') + '</td>' +
-              '<td>' + escapeHtml(item.telefono || '-') + '</td>' +
-              '<td>' + escapeHtml(item.tarifa || '-') + '</td>' +
-              '<td>' + renderNoteEditor(item) + '</td>' +
-              '<td><button class="danger compact" onclick="confirmDeleteReservation(' + index + ')">Eliminar</button></td>' +
-            '</tr>'
+            '<article class="day-reservation-item">' +
+              '<div class="day-reservation-head">' +
+                '<div><strong>' + escapeHtml(item.nombre || 'Sin nombre') + '</strong><div class="muted">' + escapeHtml(item.timestamp || '') + '</div></div>' +
+                '<div class="summary-chips"><span class="pill">' + escapeHtml(item.source || '-') + '</span><span class="pill ' + escapeHtml(item.status || '') + '">' + escapeHtml(item.status || 'activa') + '</span></div>' +
+              '</div>' +
+              '<div class="day-reservation-details">' +
+                '<div><span class="muted">Habitaciones</span><strong>' + escapeHtml(item.habitaciones || 1) + '</strong></div>' +
+                '<div><span class="muted">Huespedes</span><strong>' + escapeHtml((item.adultos || 0) + ' adulto(s), ' + (item.ninos || 0) + ' menor(es)') + '</strong></div>' +
+                '<div><span class="muted">Tipo / hora</span><strong>' + escapeHtml(item.tipo || '-') + ' / ' + escapeHtml(item.hora || '-') + '</strong></div>' +
+                '<div><span class="muted">Telefono / tarifa</span><strong>' + escapeHtml(item.telefono || '-') + ' / ' + escapeHtml(item.tarifa || '-') + '</strong></div>' +
+              '</div>' +
+              '<div class="day-reservation-actions">' +
+                renderNoteEditor(item) +
+                '<div><button class="compact" onclick="openReservationEdit(' + index + ')">Editar</button> <button class="danger compact" onclick="confirmDeleteReservation(' + index + ')">Eliminar</button></div>' +
+              '</div>' +
+            '</article>'
           ).join('') +
-          '</tbody></table></div>';
+          '</div>';
       }
 
       dayModalBackdrop.classList.remove('hidden');
@@ -4826,9 +4918,122 @@ function pageHtml() {
 
     function closeDayModal() {
       dayModalBackdrop.classList.add('hidden');
+      reservationEditBackdrop.classList.add('hidden');
       confirmDeleteBackdrop.classList.add('hidden');
       pendingDeleteReservation = null;
+      pendingEditReservation = null;
       document.body.classList.remove('modal-open');
+    }
+
+    function displayToIso(value) {
+      const parts = String(value || '').split('/').map(Number);
+
+      if (parts.length !== 3 || parts.some(part => !part)) {
+        return '';
+      }
+
+      return String(parts[2]).padStart(4, '0') + '-' + String(parts[1]).padStart(2, '0') + '-' + String(parts[0]).padStart(2, '0');
+    }
+
+    function getEditReservationDates(startValue, endValue) {
+      const start = isoToDate(startValue);
+      const end = isoToDate(endValue || startValue);
+
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+        return [];
+      }
+
+      const dates = [];
+      const cursor = new Date(start);
+
+      while (cursor <= end) {
+        dates.push(dateToDisplay(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+      }
+
+      return dates;
+    }
+
+    function openReservationEdit(index) {
+      const row = getCalendarRowForIso(activeModalIsoDate);
+      const reservation = row?.reservations?.[index];
+
+      if (!reservation?.sourceKey) {
+        alert('No se encontro la llave de esta reserva.');
+        return;
+      }
+
+      pendingEditReservation = reservation;
+      const dates = reservation.dates || [reservation.fecha];
+      editReservationName.value = reservation.nombre || '';
+      editReservationPhone.value = reservation.telefono || '';
+      editReservationStart.value = displayToIso(dates[0] || reservation.fecha);
+      editReservationEnd.value = displayToIso(dates[dates.length - 1] || reservation.fecha);
+      editReservationRooms.value = reservation.habitaciones || 1;
+      editReservationAdults.value = reservation.adultos || 0;
+      editReservationChildren.value = reservation.ninos || 0;
+      editReservationType.value = reservation.tipo || '';
+      editReservationTime.value = reservation.hora || '';
+      editReservationRate.value = reservation.tarifa || '';
+      editReservationNote.value = reservation.note || '';
+      reservationEditSubtitle.textContent = reservation.source ? 'Fuente: ' + reservation.source : '';
+      reservationEditBackdrop.classList.remove('hidden');
+      document.body.classList.add('modal-open');
+    }
+
+    function closeReservationEdit() {
+      reservationEditBackdrop.classList.add('hidden');
+      pendingEditReservation = null;
+
+      if (dayModalBackdrop.classList.contains('hidden')) {
+        document.body.classList.remove('modal-open');
+      }
+    }
+
+    async function saveReservationEdit() {
+      if (!pendingEditReservation) {
+        return;
+      }
+
+      const dates = getEditReservationDates(
+        editReservationStart.value,
+        editReservationEnd.value
+      );
+
+      if (!editReservationName.value.trim() || !dates.length) {
+        alert('Cliente y fechas validas son requeridos.');
+        return;
+      }
+
+      const response = await fetch('/api/reservations/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sourceKey: pendingEditReservation.sourceKey,
+          nombre: editReservationName.value.trim(),
+          telefono: editReservationPhone.value.trim(),
+          dates,
+          habitaciones: Number(editReservationRooms.value || 1),
+          adultos: Number(editReservationAdults.value || 0),
+          ninos: Number(editReservationChildren.value || 0),
+          tipo: editReservationType.value.trim(),
+          hora: editReservationTime.value.trim(),
+          tarifa: editReservationRate.value.trim(),
+          note: editReservationNote.value.trim()
+        })
+      });
+      const data = await response.json();
+
+      if (!data.ok) {
+        alert(data.error || 'No se pudo actualizar la reserva.');
+        return;
+      }
+
+      closeReservationEdit();
+      await loadDashboard();
+      openDayModal(activeModalIsoDate);
     }
 
     function confirmDeleteReservation(index) {
@@ -5507,6 +5712,49 @@ const server =
             false,
           error:
             error.message || "No se pudo guardar la reserva"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/reservations/update"
+    ) {
+      try {
+        const body =
+          await readBody(req);
+
+        if (!body.sourceKey) {
+          throw new Error("Reserva requerida");
+        }
+
+        const reservation =
+          updateCalendarReservation(
+            String(body.sourceKey),
+            body
+          );
+
+        if (Object.prototype.hasOwnProperty.call(body, "note")) {
+          saveReservationNote({
+            reservationKey:
+              getReservationNoteKey(reservation),
+            note:
+              body.note
+          });
+        }
+
+        sendJson(res, 200, {
+          ok: true,
+          reservation
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok: false,
+          error:
+            error.message || "No se pudo actualizar la reserva"
         });
       }
 
