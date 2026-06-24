@@ -892,10 +892,9 @@ function readGroupReservations() {
       .filter(Boolean);
 
   return dedupeReservations([
-    ...readCalendarReservations()
-      .filter(reservation =>
-        ["bot", "manual", "excel"].includes(reservation.source)
-      ),
+    // Conserva las reservas historicas importadas antes de desactivar el
+    // scraper del grupo. No se agregan nuevas: index.js ya no las procesa.
+    ...readCalendarReservations(),
     ...stored
   ]);
 }
