@@ -4442,7 +4442,7 @@ function pageHtml() {
           '<td>' + escapeHtml((row.dates || [row.fecha]).join(', ')) + '<br><span class="muted">' + (row.noches || 1) + ' noche(s)</span></td>' +
           '<td>' + renderNoteEditor(row) + '</td>' +
           '<td><span class="pill ' + escapeHtml(row.status || '') + '">' + escapeHtml(row.status || 'activa') + '</span></td>' +
-          '<td><button class="compact" onclick="openReservationArrivalByKey(\'' + escapeJs(row.sourceKey || (row.folio ? 'folio:' + row.folio : '')) + '\')">' + (row.arrivalAt ? 'Ver llegada' : 'Registrar llegada') + '</button></td>' +
+          '<td><button class="compact" onclick="openReservationArrivalByKey(\\'' + escapeJs(row.sourceKey || (row.folio ? 'folio:' + row.folio : '')) + '\\')">' + (row.arrivalAt ? 'Ver llegada' : 'Registrar llegada') + '</button></td>' +
         '</tr>').join('') +
       '</tbody></table></div>';
     }
