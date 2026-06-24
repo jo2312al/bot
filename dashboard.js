@@ -59,6 +59,19 @@ const {
 const PORT =
   Number(process.env.DASHBOARD_PORT || 3333);
 
+const HOTEL_ROOM_NUMBERS =
+  [1, 2, 3, 4]
+    .flatMap(floor =>
+      Array.from(
+        { length: floor === 4 ? 6 : 22 },
+        (_, index) => index + 1
+      )
+        .filter(number => number !== 13)
+        .map(number =>
+          `${floor}${String(number).padStart(2, "0")}`
+        )
+    );
+
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
@@ -3602,7 +3615,10 @@ function pageHtml() {
       <div class="modal-body">
         <div id="reservationArrivalDetails" class="day-reservation-details"></div>
         <label style="display:block; margin-top:16px">Habitacion asignada (opcional)
-          <select id="reservationArrivalRoom"></select>
+          <input id="reservationArrivalRoom" list="reservationArrivalRoomOptions" inputmode="numeric" placeholder="Ej. 101">
+          <datalist id="reservationArrivalRoomOptions">
+            ${HOTEL_ROOM_NUMBERS.map(room => `<option value="${room}"></option>`).join("")}
+          </datalist>
         </label>
         <div id="reservationArrivalHelp" class="muted" style="margin-top:8px"></div>
         <div class="confirm-actions">
@@ -5107,29 +5123,6 @@ function pageHtml() {
       }
     }
 
-    function comparableRoomType(value) {
-      return String(value || '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '');
-    }
-
-    function getAssignableRackRooms(reservation) {
-      const rooms = dashboardData?.rackStatus?.rooms || [];
-      const type = comparableRoomType(reservation.tipo);
-
-      return rooms.filter(room => {
-        if (room.room === reservation.roomNumber) {
-          return true;
-        }
-
-        if (!['VL', 'VS'].includes(room.status)) {
-          return false;
-        }
-
-        return !type || comparableRoomType(room.type) === type;
-      });
-    }
-
     function openReservationArrival(index) {
       const row = getCalendarRowForIso(activeModalIsoDate);
       const reservation = row?.reservations?.[index];
@@ -5152,10 +5145,6 @@ function pageHtml() {
       }
 
       pendingArrivalReservation = reservation;
-      const rooms = getAssignableRackRooms(reservation);
-      const defaultOption = reservation.roomNumber
-        ? '<option value="">No cambiar habitacion</option>'
-        : '<option value="">No asignar por ahora</option>';
 
       reservationArrivalTitle.textContent = reservation.arrivalAt
         ? 'Llegada registrada'
@@ -5165,14 +5154,9 @@ function pageHtml() {
         '<div><span class="muted">Fecha</span><strong>' + escapeHtml((reservation.dates || [reservation.fecha]).join(' al ')) + '</strong></div>' +
         '<div><span class="muted">Tipo</span><strong>' + escapeHtml(reservation.tipo || '-') + '</strong></div>' +
         '<div><span class="muted">Nota</span><strong>' + escapeHtml(reservation.note || 'Sin nota interna') + '</strong></div>';
-      reservationArrivalRoom.innerHTML = defaultOption + rooms.map(room =>
-        '<option value="' + escapeHtml(room.room) + '"' + (room.room === reservation.roomNumber ? ' selected' : '') + '>' +
-          escapeHtml(room.room + ' - ' + (room.type || '-') + ' (' + room.status + ')') +
-        '</option>'
-      ).join('');
-      reservationArrivalHelp.textContent = rooms.length
-        ? 'Al asignar una habitacion se marcara como OC en el rack. No se enviara aviso al grupo.'
-        : 'No hay habitaciones disponibles del tipo solicitado en el ultimo rack. Puedes registrar la llegada sin asignar una.';
+      reservationArrivalRoom.value = reservation.roomNumber || '';
+      reservationArrivalHelp.textContent =
+        'Escribe o selecciona una habitacion. Al asignarla se guardara como ocupada; no se enviara aviso al grupo.';
       reservationArrivalBackdrop.classList.remove('hidden');
       document.body.classList.add('modal-open');
     }
@@ -6049,6 +6033,10 @@ const server =
         }
 
         if (room) {
+          if (!HOTEL_ROOM_NUMBERS.includes(room)) {
+            throw new Error("Habitacion invalida. Usa 101-122, 201-222, 301-322 o 401-406 (sin terminacion 13)");
+          }
+
           const rackStatus =
             readLatestRackStatus();
           const rackRoom =
@@ -6056,25 +6044,19 @@ const server =
               item.room === room
             );
 
-          if (!rackRoom) {
-            throw new Error("Habitacion no encontrada en el ultimo rack");
-          }
-
           const isCurrentRoom =
             String(current.roomNumber || "") === room;
-          const sameType =
-            !current.tipo
-            || normalizeRoomType(rackRoom.type) === normalizeRoomType(current.tipo);
-
-          if (!sameType) {
-            throw new Error("La habitacion no coincide con el tipo reservado");
-          }
-
-          if (!isCurrentRoom && !["VL", "VS"].includes(rackRoom.status)) {
+          if (
+            rackRoom
+            &&
+            !isCurrentRoom
+            &&
+            !["VL", "VS"].includes(rackRoom.status)
+          ) {
             throw new Error("La habitacion no esta disponible en el rack");
           }
 
-          if (!isCurrentRoom) {
+          if (rackRoom && !isCurrentRoom) {
             updateRackRoomStatus({
               room,
               status: "OC"
