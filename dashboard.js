@@ -38,6 +38,7 @@ const {
 } = require("./services/groupReservationLogService");
 const {
   cancelCalendarReservationByKey,
+  readCalendarReservations,
   saveCalendarReservation,
   updateCalendarReservation
 } = require("./services/reservationDatabaseService");
@@ -334,6 +335,8 @@ function normalizeManualReservation(input) {
       String(input.tarifa || "").trim(),
     hora:
       String(input.hora || "").trim(),
+    note:
+      String(input.note || "").trim(),
     raw:
       input.raw || "Captura manual",
     status:
@@ -1808,6 +1811,7 @@ function reservationsToCsv(reservations) {
     "tipo",
     "hora",
     "tarifa",
+    "nota",
     "folio",
     "fuente"
   ];
@@ -1830,6 +1834,7 @@ function reservationsToCsv(reservations) {
         reservation.tipo || reservation.habitacion || "",
         reservation.hora || "",
         reservation.tarifa || "",
+        reservation.note || "",
         reservation.folio || "",
         reservation.source || ""
       ];
@@ -1904,11 +1909,19 @@ function importReservationsFromCsv(csv) {
               data.hora,
             tarifa:
               data.tarifa,
+            note:
+              data.nota || data.note,
             raw:
               "Importado desde CSV"
           });
 
         saveCalendarReservation(reservation);
+        if (reservation.note) {
+          saveReservationNote({
+            reservationKey: getReservationNoteKey(reservation),
+            note: reservation.note
+          });
+        }
         imported.push(reservation);
       } catch (error) {
         errors.push(
@@ -1965,7 +1978,11 @@ function normalizeCsvHeader(header) {
     preciotarifa:
       "tarifa",
     precio:
-      "tarifa"
+      "tarifa",
+    nota:
+      "nota",
+    note:
+      "nota"
   };
 
   return aliases[key] || key;
@@ -3256,7 +3273,7 @@ function pageHtml() {
       <div class="toolbar">
         <div>
           <strong>Calendario de reservas</strong>
-          <div class="muted">Cada dia muestra reservas detectadas y guardadas sobre 69 habitaciones. Da clic en un dia para ver el desglose.</div>
+          <div class="muted">Cada dia muestra reservas del bot, manuales y de Excel sobre 69 habitaciones. Da clic en un dia para ver el desglose.</div>
         </div>
         <button class="primary" onclick="closeToday()">Cerrar hoy</button>
       </div>
@@ -3573,6 +3590,28 @@ function pageHtml() {
       </div>
     </div>
   </div>
+  <div id="reservationArrivalBackdrop" class="modal-backdrop hidden" onclick="closeReservationArrival()">
+    <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="reservationArrivalTitle" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <strong id="reservationArrivalTitle">Registrar llegada</strong>
+          <div id="reservationArrivalSubtitle" class="muted"></div>
+        </div>
+        <button onclick="closeReservationArrival()">Cerrar</button>
+      </div>
+      <div class="modal-body">
+        <div id="reservationArrivalDetails" class="day-reservation-details"></div>
+        <label style="display:block; margin-top:16px">Habitacion asignada (opcional)
+          <select id="reservationArrivalRoom"></select>
+        </label>
+        <div id="reservationArrivalHelp" class="muted" style="margin-top:8px"></div>
+        <div class="confirm-actions">
+          <button onclick="closeReservationArrival()">Cancelar</button>
+          <button class="primary" onclick="saveReservationArrival()">Registrar llegada</button>
+        </div>
+      </div>
+    </div>
+  </div>
   <div id="groupSendConfirmBackdrop" class="modal-backdrop hidden" onclick="closeGroupSendConfirm()">
     <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="groupSendConfirmTitle" onclick="event.stopPropagation()">
       <div class="modal-head">
@@ -3657,6 +3696,7 @@ function pageHtml() {
     let selectedEnd = "";
     let pendingDeleteReservation = null;
     let pendingEditReservation = null;
+    let pendingArrivalReservation = null;
     let pendingGroupReservations = [];
     let pendingRackRoom = null;
     let activeModalIsoDate = "";
@@ -4394,7 +4434,7 @@ function pageHtml() {
         return '<div class="muted">Sin reservas registradas.</div>';
       }
 
-      return '<div class="table-wrap"><table><thead><tr><th>Folio</th><th>Cliente</th><th>Habitacion</th><th>Fechas</th><th>Nota</th><th>Estado</th></tr></thead><tbody>' +
+      return '<div class="table-wrap"><table><thead><tr><th>Folio</th><th>Cliente</th><th>Habitacion</th><th>Fechas</th><th>Nota</th><th>Estado</th><th></th></tr></thead><tbody>' +
         rows.map(row => '<tr>' +
           '<td>#' + escapeHtml(row.folio || '') + '</td>' +
           '<td>' + escapeHtml(row.nombre || 'Sin nombre') + '<br><span class="muted">' + escapeHtml(row.telefono || '') + '</span></td>' +
@@ -4402,6 +4442,7 @@ function pageHtml() {
           '<td>' + escapeHtml((row.dates || [row.fecha]).join(', ')) + '<br><span class="muted">' + (row.noches || 1) + ' noche(s)</span></td>' +
           '<td>' + renderNoteEditor(row) + '</td>' +
           '<td><span class="pill ' + escapeHtml(row.status || '') + '">' + escapeHtml(row.status || 'activa') + '</span></td>' +
+          '<td><button class="compact" onclick="openReservationArrivalByKey(\'' + escapeJs(row.sourceKey || (row.folio ? 'folio:' + row.folio : '')) + '\')">' + (row.arrivalAt ? 'Ver llegada' : 'Registrar llegada') + '</button></td>' +
         '</tr>').join('') +
       '</tbody></table></div>';
     }
@@ -4912,9 +4953,6 @@ function pageHtml() {
         if (item.source === 'manual' || item.source === 'excel') {
           totals.manual++;
         }
-        if (item.source === 'grupo') {
-          totals.grupo++;
-        }
         if (item.source === 'bot') {
           totals.bot++;
         }
@@ -4923,7 +4961,6 @@ function pageHtml() {
         adultos: 0,
         ninos: 0,
         manual: 0,
-        grupo: 0,
         bot: 0
       });
     }
@@ -4962,7 +4999,6 @@ function pageHtml() {
             '<div class="modal-kpi"><span class="muted">Menores</span><strong>' + totals.ninos + '</strong></div>' +
           '</div>' +
           '<div class="summary-chips" style="margin-bottom:12px">' +
-            '<span class="chip">Grupo ' + totals.grupo + '</span>' +
             '<span class="chip">Bot ' + totals.bot + '</span>' +
             '<span class="chip">Manual/Excel ' + totals.manual + '</span>' +
           '</div>' +
@@ -4971,17 +5007,20 @@ function pageHtml() {
             '<article class="day-reservation-item">' +
               '<div class="day-reservation-head">' +
                 '<div><strong>' + escapeHtml(item.nombre || 'Sin nombre') + '</strong><div class="muted">' + escapeHtml(item.timestamp || '') + '</div></div>' +
-                '<div class="summary-chips"><span class="pill">' + escapeHtml(item.source || '-') + '</span><span class="pill ' + escapeHtml(item.status || '') + '">' + escapeHtml(item.status || 'activa') + '</span></div>' +
+                '<div class="summary-chips"><span class="pill">' + escapeHtml(item.source || '-') + '</span><span class="pill ' + escapeHtml(item.status || '') + '">' + escapeHtml(item.status || 'activa') + '</span>' +
+                  (item.arrivalAt ? '<span class="pill activa">Llego' + (item.roomNumber ? ' ' + escapeHtml(item.roomNumber) : '') + '</span>' : '') +
+                '</div>' +
               '</div>' +
               '<div class="day-reservation-details">' +
                 '<div><span class="muted">Habitaciones</span><strong>' + escapeHtml(item.habitaciones || 1) + '</strong></div>' +
                 '<div><span class="muted">Huespedes</span><strong>' + escapeHtml((item.adultos || 0) + ' adulto(s), ' + (item.ninos || 0) + ' menor(es)') + '</strong></div>' +
                 '<div><span class="muted">Tipo / hora</span><strong>' + escapeHtml(item.tipo || '-') + ' / ' + escapeHtml(item.hora || '-') + '</strong></div>' +
                 '<div><span class="muted">Telefono / tarifa</span><strong>' + escapeHtml(item.telefono || '-') + ' / ' + escapeHtml(item.tarifa || '-') + '</strong></div>' +
+                '<div><span class="muted">Llegada / habitacion</span><strong>' + escapeHtml(item.arrivalAt ? new Date(item.arrivalAt).toLocaleString() : 'Pendiente') + ' / ' + escapeHtml(item.roomNumber || '-') + '</strong></div>' +
               '</div>' +
               '<div class="day-reservation-actions">' +
                 renderNoteEditor(item) +
-                '<div><button class="compact" onclick="openReservationEdit(' + index + ')">Editar</button> <button class="danger compact" onclick="confirmDeleteReservation(' + index + ')">Eliminar</button></div>' +
+                '<div><button class="compact" onclick="openReservationArrival(' + index + ')">' + (item.arrivalAt ? 'Ver llegada' : 'Registrar llegada') + '</button> <button class="compact" onclick="openReservationEdit(' + index + ')">Editar</button> <button class="danger compact" onclick="confirmDeleteReservation(' + index + ')">Eliminar</button></div>' +
               '</div>' +
             '</article>'
           ).join('') +
@@ -4995,9 +5034,11 @@ function pageHtml() {
     function closeDayModal() {
       dayModalBackdrop.classList.add('hidden');
       reservationEditBackdrop.classList.add('hidden');
+      reservationArrivalBackdrop.classList.add('hidden');
       confirmDeleteBackdrop.classList.add('hidden');
       pendingDeleteReservation = null;
       pendingEditReservation = null;
+      pendingArrivalReservation = null;
       document.body.classList.remove('modal-open');
     }
 
@@ -5063,6 +5104,114 @@ function pageHtml() {
 
       if (dayModalBackdrop.classList.contains('hidden')) {
         document.body.classList.remove('modal-open');
+      }
+    }
+
+    function comparableRoomType(value) {
+      return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '');
+    }
+
+    function getAssignableRackRooms(reservation) {
+      const rooms = dashboardData?.rackStatus?.rooms || [];
+      const type = comparableRoomType(reservation.tipo);
+
+      return rooms.filter(room => {
+        if (room.room === reservation.roomNumber) {
+          return true;
+        }
+
+        if (!['VL', 'VS'].includes(room.status)) {
+          return false;
+        }
+
+        return !type || comparableRoomType(room.type) === type;
+      });
+    }
+
+    function openReservationArrival(index) {
+      const row = getCalendarRowForIso(activeModalIsoDate);
+      const reservation = row?.reservations?.[index];
+
+      openReservationArrivalFor(reservation);
+    }
+
+    function openReservationArrivalByKey(sourceKey) {
+      const reservation = (dashboardData?.groupReservations || [])
+        .find(item => item.sourceKey === sourceKey);
+
+      openReservationArrivalFor(reservation);
+    }
+
+    function openReservationArrivalFor(reservation) {
+
+      if (!reservation?.sourceKey) {
+        alert('No se encontro la llave de esta reserva.');
+        return;
+      }
+
+      pendingArrivalReservation = reservation;
+      const rooms = getAssignableRackRooms(reservation);
+      const defaultOption = reservation.roomNumber
+        ? '<option value="">No cambiar habitacion</option>'
+        : '<option value="">No asignar por ahora</option>';
+
+      reservationArrivalTitle.textContent = reservation.arrivalAt
+        ? 'Llegada registrada'
+        : 'Registrar llegada';
+      reservationArrivalSubtitle.textContent = reservation.nombre || 'Reserva sin nombre';
+      reservationArrivalDetails.innerHTML =
+        '<div><span class="muted">Fecha</span><strong>' + escapeHtml((reservation.dates || [reservation.fecha]).join(' al ')) + '</strong></div>' +
+        '<div><span class="muted">Tipo</span><strong>' + escapeHtml(reservation.tipo || '-') + '</strong></div>' +
+        '<div><span class="muted">Nota</span><strong>' + escapeHtml(reservation.note || 'Sin nota interna') + '</strong></div>';
+      reservationArrivalRoom.innerHTML = defaultOption + rooms.map(room =>
+        '<option value="' + escapeHtml(room.room) + '"' + (room.room === reservation.roomNumber ? ' selected' : '') + '>' +
+          escapeHtml(room.room + ' - ' + (room.type || '-') + ' (' + room.status + ')') +
+        '</option>'
+      ).join('');
+      reservationArrivalHelp.textContent = rooms.length
+        ? 'Al asignar una habitacion se marcara como OC en el rack. No se enviara aviso al grupo.'
+        : 'No hay habitaciones disponibles del tipo solicitado en el ultimo rack. Puedes registrar la llegada sin asignar una.';
+      reservationArrivalBackdrop.classList.remove('hidden');
+      document.body.classList.add('modal-open');
+    }
+
+    function closeReservationArrival() {
+      reservationArrivalBackdrop.classList.add('hidden');
+      pendingArrivalReservation = null;
+
+      if (dayModalBackdrop.classList.contains('hidden')) {
+        document.body.classList.remove('modal-open');
+      }
+    }
+
+    async function saveReservationArrival() {
+      if (!pendingArrivalReservation) {
+        return;
+      }
+
+      const response = await fetch('/api/reservations/arrival', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sourceKey: pendingArrivalReservation.sourceKey,
+          room: reservationArrivalRoom.value
+        })
+      });
+      const data = await response.json();
+
+      if (!data.ok) {
+        alert(data.error || 'No se pudo registrar la llegada.');
+        return;
+      }
+
+      closeReservationArrival();
+      await loadDashboard();
+      if (activeModalIsoDate && !dayModalBackdrop.classList.contains('hidden')) {
+        openDayModal(activeModalIsoDate);
       }
     }
 
@@ -5499,6 +5648,8 @@ function pageHtml() {
           closeQuoteMenuModal();
         } else if (!groupSendConfirmBackdrop.classList.contains('hidden')) {
           closeGroupSendConfirm();
+        } else if (!reservationArrivalBackdrop.classList.contains('hidden')) {
+          closeReservationArrival();
         } else if (!confirmDeleteBackdrop.classList.contains('hidden')) {
           closeDeleteConfirm();
         } else {
@@ -5869,6 +6020,84 @@ const server =
             false,
           error:
             error.message || "No se pudo importar el CSV"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/reservations/arrival"
+    ) {
+      try {
+        const body =
+          await readBody(req);
+        const sourceKey =
+          String(body.sourceKey || "").trim();
+        const room =
+          String(body.room || "").replace(/\D/g, "");
+        const current =
+          readCalendarReservations()
+            .find(reservation =>
+              reservation.sourceKey === sourceKey
+            );
+
+        if (!current) {
+          throw new Error("Reserva no encontrada");
+        }
+
+        if (room) {
+          const rackStatus =
+            readLatestRackStatus();
+          const rackRoom =
+            rackStatus?.rooms?.find(item =>
+              item.room === room
+            );
+
+          if (!rackRoom) {
+            throw new Error("Habitacion no encontrada en el ultimo rack");
+          }
+
+          const isCurrentRoom =
+            String(current.roomNumber || "") === room;
+          const sameType =
+            !current.tipo
+            || normalizeRoomType(rackRoom.type) === normalizeRoomType(current.tipo);
+
+          if (!sameType) {
+            throw new Error("La habitacion no coincide con el tipo reservado");
+          }
+
+          if (!isCurrentRoom && !["VL", "VS"].includes(rackRoom.status)) {
+            throw new Error("La habitacion no esta disponible en el rack");
+          }
+
+          if (!isCurrentRoom) {
+            updateRackRoomStatus({
+              room,
+              status: "OC"
+            });
+          }
+        }
+
+        const reservation =
+          updateCalendarReservation(sourceKey, {
+            arrivalAt:
+              current.arrivalAt || new Date().toISOString(),
+            ...(room ? { roomNumber: room } : {})
+          });
+        sendJson(res, 200, {
+          ok: true,
+          reservation,
+          queuedForGroup: false
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok: false,
+          error:
+            error.message || "No se pudo registrar la llegada"
         });
       }
 

@@ -69,7 +69,13 @@ function cleanReservation(reservation = {}) {
     tarifa:
       String(reservation.tarifa || "").trim(),
     folio:
-      String(reservation.folio || "").trim()
+      String(reservation.folio || "").trim(),
+    note:
+      String(reservation.note || "").trim(),
+    roomNumber:
+      String(reservation.roomNumber || "").trim(),
+    arrivalAt:
+      String(reservation.arrivalAt || "").trim()
   };
 }
 

@@ -52,17 +52,6 @@ const {
   "./services/botStatusService"
 );
 const {
-  saveCalendarReservation,
-  saveGroupMessage
-} = require(
-  "./services/reservationDatabaseService"
-);
-const {
-  parseReservationEvent
-} = require(
-  "./services/groupReservationLogService"
-);
-const {
   readPendingReservationGroupNotifications,
   markReservationGroupNotificationSent
 } = require(
@@ -159,34 +148,36 @@ function formatReservationGroupNotification(notification) {
     notification.reservations || [];
   const heading =
     reservations.length === 1
-      ? "*RESERVA REGISTRADA*"
-      : `*RESERVAS IMPORTADAS (${reservations.length})*`;
+      ? "🏨 NUEVA RESERVA"
+      : `🏨 NUEVAS RESERVAS IMPORTADAS (${reservations.length})`;
   const details =
     reservations.map((reservation, index) => {
-      const title =
-        reservations.length === 1
-          ? `*Cliente:* ${reservation.nombre}`
-          : `*${index + 1}. ${reservation.nombre}*`;
       const dates =
         Array.isArray(reservation.dates) && reservation.dates.length
           ? reservation.dates.join(" al ")
           : reservation.fecha;
-      const guests =
-        `${reservation.adultos || 0} adulto(s), ${reservation.ninos || 0} menor(es)`;
+      const nights =
+        Math.max(
+          (reservation.dates || []).length - 1,
+          1
+        );
       const lines = [
-        title,
-        `Fecha: ${dates}`,
-        `Habitaciones: ${reservation.habitaciones || 1}`,
-        `Huespedes: ${guests}`
+        reservations.length > 1 ? `*${index + 1}.*` : "",
+        reservation.folio ? `🎟️ #${reservation.folio}` : "",
+        `📝 ${reservation.nombre}`,
+        `📅 ${dates}`,
+        `🌙 Noches: ${nights}`,
+        `🏨 Habitaciones: ${reservation.habitaciones || 1}`,
+        `👥 Huespedes: ${reservation.adultos || 0} adulto(s), ${reservation.ninos || 0} niño(s)`,
+        reservation.tipo ? `🛏️ ${reservation.tipo}` : "",
+        reservation.roomNumber ? `🔑 Habitacion asignada: ${reservation.roomNumber}` : "",
+        reservation.telefono ? `📞 ${reservation.telefono}` : "",
+        reservation.hora ? `⏰ ${reservation.hora}` : "",
+        reservation.tarifa ? `💰 ${reservation.tarifa}` : "",
+        reservation.note ? `📝 Nota: ${reservation.note}` : ""
       ];
 
-      if (reservation.tipo) lines.push(`Tipo: ${reservation.tipo}`);
-      if (reservation.hora) lines.push(`Hora de llegada: ${reservation.hora}`);
-      if (reservation.telefono) lines.push(`Telefono: ${reservation.telefono}`);
-      if (reservation.tarifa) lines.push(`Tarifa: ${reservation.tarifa}`);
-      if (reservation.folio) lines.push(`Folio: #${reservation.folio}`);
-
-      return lines.join("\n");
+      return lines.filter(Boolean).join("\n");
     });
 
   return [heading, ...details].join("\n\n");
@@ -718,30 +709,6 @@ async function startBot() {
           const timestamp =
             new Date()
               .toLocaleString();
-
-          saveGroupMessage({
-            messageKey:
-              msg.key.id,
-            groupId:
-              from,
-            timestamp,
-            text
-          });
-
-          const reservation =
-            parseReservationEvent({
-              user:
-                from,
-              module:
-                "Chat Grupal",
-              timestamp,
-              action:
-                text
-            });
-
-          if (reservation) {
-            saveCalendarReservation(reservation);
-          }
 
           return;
 

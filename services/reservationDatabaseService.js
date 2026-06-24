@@ -151,6 +151,8 @@ function initSqlite() {
       hora TEXT,
       raw TEXT,
       status TEXT NOT NULL DEFAULT 'activa',
+      arrival_at TEXT,
+      room_number TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -163,6 +165,22 @@ function initSqlite() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  const reservationColumns =
+    querySql("PRAGMA table_info(calendar_reservations);")
+      .map(column => column.name);
+
+  if (!reservationColumns.includes("arrival_at")) {
+    runSql(
+      "ALTER TABLE calendar_reservations ADD COLUMN arrival_at TEXT;"
+    );
+  }
+
+  if (!reservationColumns.includes("room_number")) {
+    runSql(
+      "ALTER TABLE calendar_reservations ADD COLUMN room_number TEXT;"
+    );
+  }
 
   initialized =
     true;
@@ -269,6 +287,10 @@ function normalizeReservation(reservation) {
       reservation.telefono || "",
     hora:
       reservation.hora || "",
+    arrivalAt:
+      reservation.arrivalAt || "",
+    roomNumber:
+      reservation.roomNumber || "",
     raw:
       reservation.raw || "",
     status:
@@ -289,7 +311,7 @@ function saveCalendarReservation(reservation) {
       INSERT INTO calendar_reservations (
         source_key, source, folio, group_id, timestamp, nombre, fecha,
         dates_json, habitaciones, adultos, ninos, tipo, tarifa, telefono,
-        hora, raw, status, updated_at
+        hora, raw, status, arrival_at, room_number, updated_at
       ) VALUES (
         ${quote(row.sourceKey)}, ${quote(row.source)}, ${quote(row.folio)},
         ${quote(row.groupId)}, ${quote(row.timestamp)}, ${quote(row.nombre)},
@@ -297,6 +319,7 @@ function saveCalendarReservation(reservation) {
         ${row.habitaciones}, ${row.adultos}, ${row.ninos},
         ${quote(row.tipo)}, ${quote(row.tarifa)}, ${quote(row.telefono)},
         ${quote(row.hora)}, ${quote(row.raw)}, ${quote(row.status)},
+        ${quote(row.arrivalAt)}, ${quote(row.roomNumber)},
         CURRENT_TIMESTAMP
       )
       ON CONFLICT(source_key) DO UPDATE SET
@@ -316,6 +339,8 @@ function saveCalendarReservation(reservation) {
         hora = excluded.hora,
         raw = excluded.raw,
         status = excluded.status,
+        arrival_at = excluded.arrival_at,
+        room_number = excluded.room_number,
         updated_at = CURRENT_TIMESTAMP;
     `);
 
@@ -358,6 +383,8 @@ function readCalendarReservations() {
         tarifa,
         telefono,
         hora,
+        arrival_at AS arrivalAt,
+        room_number AS roomNumber,
         raw,
         status
       FROM calendar_reservations

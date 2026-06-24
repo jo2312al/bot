@@ -892,9 +892,11 @@ function readGroupReservations() {
       .filter(Boolean);
 
   return dedupeReservations([
-    ...readCalendarReservations(),
-    ...stored,
-    ...readLogReservations()
+    ...readCalendarReservations()
+      .filter(reservation =>
+        ["bot", "manual", "excel"].includes(reservation.source)
+      ),
+    ...stored
   ]);
 }
 
