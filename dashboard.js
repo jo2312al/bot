@@ -2617,6 +2617,18 @@ function pageHtml() {
       background: #ecfdf5;
       border-color: #99f6e4;
     }
+    .rack-room.available-type-king {
+      background: #ede9fe;
+      border-color: #c4b5fd;
+    }
+    .rack-room.available-type-double {
+      background: #dbeafe;
+      border-color: #93c5fd;
+    }
+    .rack-room.available-type-suite {
+      background: #fef3c7;
+      border-color: #fcd34d;
+    }
     .rack-room.blocked {
       background: #f3f4f6;
       border-color: #cbd5e1;
@@ -2796,6 +2808,37 @@ function pageHtml() {
       gap: 10px;
       align-items: center;
     }
+    .arrival-item.arrived,
+    .day-reservation-item.arrived {
+      background: #dcfce7;
+      border-color: #86efac;
+    }
+    .arrival-item.pending,
+    .day-reservation-item.pending {
+      background: #eff6ff;
+      border-color: #bfdbfe;
+    }
+    .arrival-item.delayed,
+    .day-reservation-item.delayed {
+      background: #fee2e2;
+      border-color: #fca5a5;
+    }
+    .rack-type-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0 -2px;
+    }
+    .rack-type-legend span {
+      border-radius: 999px;
+      padding: 5px 9px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid var(--line);
+    }
+    .rack-type-legend .king { background: #ede9fe; border-color: #c4b5fd; }
+    .rack-type-legend .double { background: #dbeafe; border-color: #93c5fd; }
+    .rack-type-legend .suite { background: #fef3c7; border-color: #fcd34d; }
     .note-row {
       display: grid;
       grid-template-columns: minmax(160px, 1fr) auto;
@@ -3847,8 +3890,9 @@ function pageHtml() {
       }
 
       return '<div class="arrival-list">' +
-        rows.map(row =>
-          '<div class="arrival-item">' +
+        rows.map(row => {
+          const arrival = getReservationArrivalState(row);
+          return '<div class="arrival-item ' + arrival.className + '">' +
             '<div>' +
               '<strong>' + escapeHtml(row.nombre || 'Sin nombre') + '</strong>' +
               '<div class="muted">' +
@@ -3858,10 +3902,54 @@ function pageHtml() {
               '</div>' +
               (row.note ? '<div class="muted">Nota: ' + escapeHtml(row.note) + '</div>' : '') +
             '</div>' +
-            '<span class="pill">' + escapeHtml(row.source || '-') + '</span>' +
-          '</div>'
-        ).join('') +
+            '<span class="pill ' + arrival.className + '">' + arrival.label + '</span>' +
+          '</div>';
+        }).join('') +
       '</div>';
+    }
+
+    function getReservationArrivalState(reservation) {
+      if (reservation.arrivalAt) {
+        return { className: 'arrived', label: 'Llegó' };
+      }
+
+      const dates = reservation.dates || [reservation.fecha];
+      const reservationDate = dates[0] || reservation.fecha;
+      const today = dashboardData ? isoToDisplay(dashboardData.today) : dateToDisplay(new Date());
+
+      const toDate = value => {
+        const [day, month, year] = String(value || '').split('/').map(Number);
+        return new Date(year, month - 1, day).getTime();
+      };
+
+      if (toDate(reservationDate) < toDate(today)) {
+        return { className: 'delayed', label: 'Retrasada' };
+      }
+
+      if (toDate(reservationDate) !== toDate(today) || !reservation.hora) {
+        return { className: 'pending', label: 'Pendiente' };
+      }
+
+      const time = String(reservation.hora).toLowerCase().replace(/\s/g, '');
+      const match = time.match(/(\d{1,2})(?::(\d{2}))?\s*(a\.?(?:m\.?|m)|p\.?(?:m\.?|m))?/);
+
+      if (!match) {
+        return { className: 'pending', label: 'Pendiente' };
+      }
+
+      let hours = Number(match[1]);
+      const minutes = Number(match[2] || 0);
+      const meridiem = match[3] || '';
+
+      if (meridiem.startsWith('p') && hours < 12) hours += 12;
+      if (meridiem.startsWith('a') && hours === 12) hours = 0;
+
+      const [day, month, year] = reservationDate.split('/').map(Number);
+      const expected = new Date(year, month - 1, day, hours, minutes);
+
+      return new Date() > expected
+        ? { className: 'delayed', label: 'Retrasada' }
+        : { className: 'pending', label: 'Pendiente' };
     }
 
     function renderQuoteSections() {
@@ -4332,10 +4420,16 @@ function pageHtml() {
       }
 
       rackRoomGrid.innerHTML =
+        '<div class="rack-type-legend">' +
+          '<span class="king">Vacías King</span>' +
+          '<span class="double">Vacías Dobles</span>' +
+          '<span class="suite">Vacías Suites</span>' +
+        '</div>' +
         '<div class="rack-room-grid">' +
         status.rooms.map(room => {
           const category = getRackRoomCategory(room.status);
-          return '<button class="rack-room ' + category + '" onclick="setRackRoomOccupied(\\'' + escapeHtml(room.room) + '\\')">' +
+          const typeClass = getRackRoomTypeClass(room, category);
+          return '<button class="rack-room ' + category + ' ' + typeClass + '" onclick="setRackRoomOccupied(\\'' + escapeHtml(room.room) + '\\')">' +
             '<strong>' + escapeHtml(room.room) + '</strong>' +
             '<span>' + escapeHtml(room.type || '-') + '</span>' +
             '<span>' + escapeHtml(room.status || '-') + '</span>' +
@@ -4354,6 +4448,15 @@ function pageHtml() {
       }
 
       return 'blocked';
+    }
+
+    function getRackRoomTypeClass(room, category) {
+      if (category !== 'available') return '';
+
+      const type = String(room.type || '').toLowerCase();
+      if (type.includes('suite')) return 'available-type-suite';
+      if (type.includes('king')) return 'available-type-king';
+      return 'available-type-double';
     }
 
     function setRackRoomOccupied(room) {
@@ -5019,12 +5122,13 @@ function pageHtml() {
             '<span class="chip">Manual/Excel ' + totals.manual + '</span>' +
           '</div>' +
           '<div class="day-reservation-list">' +
-          row.reservations.map((item, index) =>
-            '<article class="day-reservation-item">' +
+          row.reservations.map((item, index) => {
+            const arrival = getReservationArrivalState(item);
+            return '<article class="day-reservation-item ' + arrival.className + '">' +
               '<div class="day-reservation-head">' +
                 '<div><strong>' + escapeHtml(item.nombre || 'Sin nombre') + '</strong><div class="muted">' + escapeHtml(item.timestamp || '') + '</div></div>' +
                 '<div class="summary-chips"><span class="pill">' + escapeHtml(item.source || '-') + '</span><span class="pill ' + escapeHtml(item.status || '') + '">' + escapeHtml(item.status || 'activa') + '</span>' +
-                  (item.arrivalAt ? '<span class="pill activa">Llego' + (item.roomNumber ? ' ' + escapeHtml(item.roomNumber) : '') + '</span>' : '') +
+                  '<span class="pill ' + arrival.className + '">' + arrival.label + (item.arrivalAt && item.roomNumber ? ' ' + escapeHtml(item.roomNumber) : '') + '</span>' +
                 '</div>' +
               '</div>' +
               '<div class="day-reservation-details">' +
@@ -5038,8 +5142,8 @@ function pageHtml() {
                 renderNoteEditor(item) +
                 '<div><button class="compact" onclick="openReservationArrival(' + index + ')">' + (item.arrivalAt ? 'Ver llegada' : 'Registrar llegada') + '</button> <button class="compact" onclick="openReservationEdit(' + index + ')">Editar</button> <button class="danger compact" onclick="confirmDeleteReservation(' + index + ')">Eliminar</button></div>' +
               '</div>' +
-            '</article>'
-          ).join('') +
+            '</article>';
+          }).join('') +
           '</div>';
       }
 
