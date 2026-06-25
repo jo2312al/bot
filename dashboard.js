@@ -4549,6 +4549,38 @@ function pageHtml() {
       </div>
     </div>
   </div>
+  <div id="quoteEventModalBackdrop" class="modal-backdrop hidden" onclick="closeQuoteEventModal()">
+    <div class="modal reservation-edit-modal" role="dialog" aria-modal="true" aria-labelledby="quoteEventModalTitle" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <strong id="quoteEventModalTitle">Apartar salon desde cotizacion</strong>
+          <div id="quoteEventModalSubtitle" class="muted"></div>
+        </div>
+        <button onclick="closeQuoteEventModal()">Cerrar</button>
+      </div>
+      <div class="modal-body">
+        <div class="reservation-edit-grid">
+          <label>Fecha evento<input id="quoteEventModalDate" type="date"></label>
+          <label>Salon<select id="quoteEventModalHall"></select></label>
+          <label>Estado
+            <select id="quoteEventModalStatus">
+              <option value="cotizacion">En cotizacion</option>
+              <option value="apartado" selected>Apartado</option>
+              <option value="pago_completo">Pago completo</option>
+            </select>
+          </label>
+          <label>Total<input id="quoteEventModalTotal" type="number" min="0" step="0.01"></label>
+          <label>Pagado<input id="quoteEventModalPaid" type="number" min="0" step="0.01" value="0"></label>
+          <label class="wide">Notas<textarea id="quoteEventModalNotes" rows="3" placeholder="Notas internas del evento o pago"></textarea></label>
+        </div>
+        <div id="quoteEventModalStatusText" class="muted" style="margin-top:10px"></div>
+        <div class="confirm-actions">
+          <button onclick="closeQuoteEventModal()">Cancelar</button>
+          <button class="primary" onclick="saveQuoteEventFromModal()">Apartar salon</button>
+        </div>
+      </div>
+    </div>
+  </div>
   <script>
     let dashboardData = null;
     let calendarDate = new Date();
@@ -4573,6 +4605,7 @@ function pageHtml() {
     let quoteMenuItems = [];
     let eventHalls = [];
     let eventBookings = [];
+    let pendingQuoteEvent = null;
 
     const helpTopics = {
       whatsapp: {
@@ -5387,6 +5420,10 @@ function pageHtml() {
         eventHall.innerHTML = options;
       }
 
+      if (quoteEventModalHall && !quoteEventModalHall.options.length) {
+        quoteEventModalHall.innerHTML = options;
+      }
+
       if (eventMonth && !eventMonth.value) {
         eventMonth.value = new Date().toISOString().slice(0, 7);
       }
@@ -5530,30 +5567,67 @@ function pageHtml() {
       }
     }
 
-    async function createEventFromQuotation(quotationId) {
+    function createEventFromQuotation(quotationId) {
       const quote = (dashboardData?.quotations || []).find(row => row.id === quotationId);
       if (!quote) {
         alert('No encontre la cotizacion.');
         return;
       }
-      const hallCode = quote.hallCode || quoteHall.value;
-      const eventDateValue = quote.eventDate || quoteEventDate.value;
-      if (!hallCode || !eventDateValue) {
-        alert('La cotizacion necesita salon y fecha de evento.');
+
+      pendingQuoteEvent = quote;
+      renderHallSelects();
+      quoteEventModalTitle.textContent = 'Apartar salon: ' + quote.id;
+      quoteEventModalSubtitle.textContent = (quote.client || 'Sin cliente') + ' · ' + (quote.eventName || quote.headline || 'Sin evento');
+      quoteEventModalDate.value = quote.eventDate || quoteEventDate.value || '';
+      quoteEventModalHall.value = quote.hallCode || quoteHall.value || '';
+      quoteEventModalStatus.value = quote.eventDate || quote.hallCode ? 'apartado' : 'cotizacion';
+      quoteEventModalTotal.value = Number(quote.total || 0);
+      quoteEventModalPaid.value = 0;
+      quoteEventModalNotes.value = quote.notes || '';
+      quoteEventModalStatusText.textContent = '';
+      quoteEventModalBackdrop.classList.remove('hidden');
+      document.body.classList.add('modal-open');
+    }
+
+    function closeQuoteEventModal() {
+      quoteEventModalBackdrop.classList.add('hidden');
+      pendingQuoteEvent = null;
+
+      if (
+        dayModalBackdrop.classList.contains('hidden') &&
+        quoteMenuModalBackdrop.classList.contains('hidden') &&
+        helpModalBackdrop.classList.contains('hidden')
+      ) {
+        document.body.classList.remove('modal-open');
+      }
+    }
+
+    async function saveQuoteEventFromModal() {
+      const quote = pendingQuoteEvent;
+      if (!quote) {
+        closeQuoteEventModal();
         return;
       }
+
+      if (!quoteEventModalDate.value || !quoteEventModalHall.value) {
+        quoteEventModalStatusText.textContent = 'Selecciona salon y fecha para apartar.';
+        return;
+      }
+
+      quoteEventModalStatusText.textContent = 'Guardando evento...';
       await saveEventPayload({
         quotationId: quote.id,
         client: quote.client,
         contact: quote.contact,
         eventName: quote.eventName || quote.headline,
-        eventDate: eventDateValue,
-        hallCode,
-        status: 'apartado',
-        totalAmount: Number(quote.total || 0),
-        paidAmount: 0,
-        notes: quote.notes || ''
+        eventDate: quoteEventModalDate.value,
+        hallCode: quoteEventModalHall.value,
+        status: quoteEventModalStatus.value,
+        totalAmount: Number(quoteEventModalTotal.value || quote.total || 0),
+        paidAmount: Number(quoteEventModalPaid.value || 0),
+        notes: quoteEventModalNotes.value.trim()
       });
+      closeQuoteEventModal();
     }
 
     function readFileAsDataUrl(file) {
@@ -7115,6 +7189,8 @@ function pageHtml() {
       if (event.key === 'Escape') {
         if (!confirmRackBackdrop.classList.contains('hidden')) {
           closeRackConfirm();
+        } else if (!quoteEventModalBackdrop.classList.contains('hidden')) {
+          closeQuoteEventModal();
         } else if (!quoteMenuModalBackdrop.classList.contains('hidden')) {
           closeQuoteMenuModal();
         } else if (!groupSendConfirmBackdrop.classList.contains('hidden')) {
