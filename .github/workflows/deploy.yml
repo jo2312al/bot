@@ -50,7 +50,13 @@ jobs:
 
           chmod 600 ~/.ssh/id_ed25519
 
-          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          for attempt in 1 2 3 4 5; do
+            ssh-keyscan -T 20 -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts && break
+            echo "ssh-keyscan failed, retry $attempt"
+            sleep 5
+          done
+
+          test -s ~/.ssh/known_hosts
 
       - name: Deploy files
         if: env.HAS_EC2_KEY == 'true'
