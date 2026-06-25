@@ -2773,6 +2773,24 @@ function pageHtml() {
       padding: 6px 8px;
       font-size: 12px;
     }
+    .help-button {
+      border-radius: 999px;
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      border-color: #99b9d8;
+      color: #1e6091;
+      background: #eef6ff;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    .help-button:hover {
+      background: #dbeafe;
+    }
     input,
     select {
       border: 1px solid var(--line);
@@ -3685,6 +3703,12 @@ function pageHtml() {
     .modal-body {
       padding: 16px;
     }
+    .help-content {
+      white-space: pre-line;
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: 15px;
+    }
     .confirm-modal {
       width: min(460px, 100%);
     }
@@ -3891,7 +3915,7 @@ function pageHtml() {
     <section class="panel">
       <div class="toolbar">
         <div>
-          <strong>Estado de WhatsApp</strong>
+          <strong>Estado de WhatsApp</strong><button class="help-button" onclick="openHelp('whatsapp')" title="Ayuda">?</button>
           <div class="muted">Cada bot usa su propio numero, sesion y QR.</div>
         </div>
       </div>
@@ -3901,7 +3925,7 @@ function pageHtml() {
     <section class="panel">
       <div class="toolbar">
         <div>
-          <strong>Alertas de sobreventa</strong>
+          <strong>Alertas de sobreventa</strong><button class="help-button" onclick="openHelp('overbooking')" title="Ayuda">?</button>
           <div class="muted">Fechas donde las reservas superan el limite por tipo.</div>
         </div>
       </div>
@@ -3911,7 +3935,7 @@ function pageHtml() {
     <section class="panel">
       <div class="toolbar">
         <div>
-          <strong>Llegadas de hoy</strong>
+          <strong>Llegadas de hoy</strong><button class="help-button" onclick="openHelp('arrivals')" title="Ayuda">?</button>
           <div class="muted">Reservas cuya entrada es hoy.</div>
         </div>
       </div>
@@ -3921,7 +3945,7 @@ function pageHtml() {
     <section class="panel">
       <div class="toolbar">
         <div>
-          <strong>Rack global</strong>
+          <strong>Rack global</strong><button class="help-button" onclick="openHelp('rackGlobal')" title="Ayuda">?</button>
           <div id="rackGlobalUpdated" class="muted">Sin rack CSV guardado.</div>
         </div>
       </div>
@@ -3931,7 +3955,7 @@ function pageHtml() {
     <section class="panel">
       <div class="toolbar">
         <div>
-          <strong>Proximas reservas por fecha</strong>
+          <strong>Proximas reservas por fecha</strong><button class="help-button" onclick="openHelp('upcoming')" title="Ayuda">?</button>
           <div id="updatedAt" class="muted"></div>
         </div>
         <button class="primary" onclick="loadDashboard()">Actualizar</button>
@@ -3944,7 +3968,7 @@ function pageHtml() {
     <section class="panel">
       <div class="toolbar">
         <div>
-          <strong>Calendario de reservas</strong>
+          <strong>Calendario de reservas</strong><button class="help-button" onclick="openHelp('calendar')" title="Ayuda">?</button>
           <div class="muted">Cada dia muestra reservas del bot, manuales y de Excel sobre 69 habitaciones. Da clic en un dia para ver el desglose.</div>
         </div>
         <button class="primary" onclick="closeToday()">Cerrar hoy</button>
@@ -3976,7 +4000,7 @@ function pageHtml() {
     <section class="panel">
       <div class="toolbar">
         <div>
-          <strong>Agregar reservas</strong>
+          <strong>Agregar reservas</strong><button class="help-button" onclick="openHelp('reservations')" title="Ayuda">?</button>
           <div class="muted">Captura manual o importa un CSV que puedas editar en Excel.</div>
         </div>
         <button onclick="downloadReservationsCsv()">Descargar CSV</button>
@@ -4052,7 +4076,7 @@ function pageHtml() {
     <section class="panel">
       <div class="toolbar">
         <div>
-          <strong>Reservas registradas</strong>
+          <strong>Reservas registradas</strong><button class="help-button" onclick="openHelp('reservationList')" title="Ayuda">?</button>
           <div class="muted">Cancelar un folio libera inventario.</div>
         </div>
         <div>
@@ -4068,7 +4092,7 @@ function pageHtml() {
     <section class="panel quote-workspace">
       <div class="toolbar">
         <div>
-          <strong>Cotizaciones para eventos y grupos</strong>
+          <strong>Cotizaciones para eventos y grupos</strong><button class="help-button" onclick="openHelp('quotes')" title="Ayuda">?</button>
           <div class="muted">Diseña una cotizacion visual con apartados por dia, menu, salon u hospedaje.</div>
         </div>
       </div>
@@ -4081,7 +4105,7 @@ function pageHtml() {
       </div>
       <div class="quote-layout">
         <div>
-          <div class="quote-fieldset-title">Datos del cliente</div>
+          <div class="quote-fieldset-title">Datos del cliente <button class="help-button" onclick="openHelp('quoteClient')" title="Ayuda">?</button></div>
           <div class="date-controls">
             <label>
               Cliente
@@ -4110,7 +4134,7 @@ function pageHtml() {
               <input id="quoteValidUntil" type="date">
             </label>
           </div>
-          <div class="quote-fieldset-title">Presentacion del documento</div>
+          <div class="quote-fieldset-title">Presentacion del documento <button class="help-button" onclick="openHelp('quoteDocument')" title="Ayuda">?</button></div>
           <div class="quote-template-toggle">
             <label class="quote-template-option">
               <input type="radio" name="quoteTemplate" value="visual" checked>
@@ -4155,7 +4179,7 @@ function pageHtml() {
           </label>
           <div class="toolbar" style="margin-top:14px">
             <div>
-              <strong>Apartados</strong>
+              <strong>Apartados</strong><button class="help-button" onclick="openHelp('quoteSections')" title="Ayuda">?</button>
               <div class="muted">Cada apartado puede ser un dia, menu, salon u hospedaje.</div>
             </div>
             <div class="quote-presets">
@@ -4199,7 +4223,7 @@ function pageHtml() {
     <section class="panel event-board">
         <div class="toolbar">
           <div>
-            <strong>Calendario de salones</strong>
+            <strong>Calendario de salones</strong><button class="help-button" onclick="openHelp('events')" title="Ayuda">?</button>
             <div class="muted">Margaritas, Tulipanes y Girasoles. El color indica el estado del evento y la barra lo pagado.</div>
           </div>
           <label>
@@ -4208,7 +4232,7 @@ function pageHtml() {
           </label>
         </div>
         <div id="eventCalendar" class="event-calendar"></div>
-        <div class="quote-fieldset-title">Apartar evento desde cero</div>
+        <div class="quote-fieldset-title">Apartar evento desde cero <button class="help-button" onclick="openHelp('manualEvent')" title="Ayuda">?</button></div>
         <div class="date-controls">
           <label>
             Cliente
@@ -4263,7 +4287,7 @@ function pageHtml() {
     <section class="panel">
       <div class="toolbar">
         <div>
-          <strong>Lector de rack</strong>
+          <strong>Lector de rack</strong><button class="help-button" onclick="openHelp('rack')" title="Ayuda">?</button>
           <div class="muted">Importa el CSV del sistema para leer ocupadas, disponibles y bloqueadas. La foto queda como respaldo.</div>
         </div>
       </div>
@@ -4298,7 +4322,7 @@ function pageHtml() {
     <section class="panel">
       <div class="toolbar">
         <div>
-          <strong>Reportes operativos</strong>
+          <strong>Reportes operativos</strong><button class="help-button" onclick="openHelp('reports')" title="Ayuda">?</button>
           <div class="muted">Ocupacion, rotacion de habitaciones, mantenimiento y notas historicas.</div>
         </div>
         <button class="primary" onclick="loadReports()">Actualizar reportes</button>
@@ -4369,6 +4393,18 @@ function pageHtml() {
     </section>
     </div>
   </main>
+  <div id="helpModalBackdrop" class="modal-backdrop hidden" onclick="closeHelp()">
+    <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="helpModalTitle" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <strong id="helpModalTitle">Ayuda</strong>
+          <div class="muted">Guia rapida de uso</div>
+        </div>
+        <button onclick="closeHelp()">Cerrar</button>
+      </div>
+      <div id="helpModalBody" class="modal-body help-content"></div>
+    </div>
+  </div>
   <div id="dayModalBackdrop" class="modal-backdrop hidden" onclick="closeDayModal()">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="dayModalTitle" onclick="event.stopPropagation()">
       <div class="modal-head">
@@ -4537,6 +4573,87 @@ function pageHtml() {
     let quoteMenuItems = [];
     let eventHalls = [];
     let eventBookings = [];
+
+    const helpTopics = {
+      whatsapp: {
+        title: 'Estado de WhatsApp',
+        body: 'Aqui ves si cada bot esta conectado o esperando QR.\\n\\nBot principal: atiende reservas y mensajes normales.\\nBot nocturno: se usa fuera de horario si esta configurado.\\n\\nSi aparece QR, escanealo desde WhatsApp para volver a conectar esa sesion. Si dice conectado, no tienes que hacer nada.'
+      },
+      overbooking: {
+        title: 'Alertas de sobreventa',
+        body: 'Te avisa cuando una fecha supera el limite por tipo de habitacion.\\n\\nEjemplo: si hay mas Dobles reservadas que el limite disponible, aparece aqui.\\n\\nUsalo antes de aceptar grupos grandes o importar Excel para detectar fechas peligrosas.'
+      },
+      arrivals: {
+        title: 'Llegadas de hoy',
+        body: 'Muestra reservas cuya entrada es hoy.\\n\\nDesde cada reserva puedes registrar llegada y, si quieres, asignar habitacion. Al asignarla, el rack marca esa habitacion como ocupada.\\n\\nNo manda aviso al grupo por llegada; solo actualiza el sistema.'
+      },
+      rackGlobal: {
+        title: 'Rack global',
+        body: 'Resume el ultimo rack guardado: ocupadas, vacias limpias, vacias sucias y bloqueadas.\\n\\nLos colores por tipo ayudan a ubicar rapido King, Dobles y Suites.\\n\\nSi el rack no coincide con recepcion, importa el CSV actualizado en el tab Rack.'
+      },
+      upcoming: {
+        title: 'Proximas reservas por fecha',
+        body: 'Lista las fechas con reservas proximas y su ocupacion.\\n\\nDa una vista rapida sin abrir todo el calendario. Sirve para revisar fines de semana, grupos o dias con carga alta.'
+      },
+      calendar: {
+        title: 'Calendario de reservas',
+        body: 'Cada dia muestra cuantas habitaciones estan reservadas de las 69.\\n\\nDa clic en Ver para abrir el detalle del dia: huespedes, tipo, hora, telefono, tarifa, notas, llegada y habitacion asignada.\\n\\nManual/Excel y Bot se separan para saber de donde vino cada reserva.'
+      },
+      reservations: {
+        title: 'Agregar reservas',
+        body: 'Captura manual: llena huesped, telefono, entrada/salida, habitaciones, personas, tipo, hora, tarifa y nota.\\n\\nImportar CSV: pega o sube un archivo con reservas; el sistema las convierte al calendario.\\n\\nDespues de agregar, puedes decidir si mandar la reserva al grupo. Si tiene nota, tambien se incluye.'
+      },
+      reservationList: {
+        title: 'Reservas registradas',
+        body: 'Aqui aparecen las reservas del bot tradicional.\\n\\nPuedes guardar notas internas, cancelar folios o registrar llegada.\\n\\nLas notas son internas del dashboard y ayudan a recepcion: anticipo, llegada tarde, peticiones, etc.'
+      },
+      quotes: {
+        title: 'Cotizaciones',
+        body: 'Sirve para crear documentos de cotizacion listos para imprimir o guardar como PDF.\\n\\n1. Llena cliente/contacto/evento.\\n2. Elige fecha y salon si aplica.\\n3. Agrega apartados: salon, menu, hospedaje u otros.\\n4. Guarda y abre el PDF.\\n\\nSi la cotizacion se confirma, usa Apartar salon para mandarla al tab Eventos.'
+      },
+      quoteClient: {
+        title: 'Datos del cliente en cotizacion',
+        body: 'Cliente y contacto identifican a quien se le entrega la cotizacion.\\n\\nFecha evento y Salon son importantes si despues quieres apartar el salon desde esa cotizacion.\\n\\nVigencia indica hasta cuando respetas precios o disponibilidad.'
+      },
+      quoteDocument: {
+        title: 'Presentacion del documento',
+        body: 'Visual hotel: formato mas comercial, con estilo de folleto.\\n\\nFormal: mas sobrio, tipo carta/cotizacion.\\n\\nFechas/estancia se imprime como texto visible para el cliente. Personas ayuda a calcular menus por persona.'
+      },
+      quoteSections: {
+        title: 'Apartados de cotizacion',
+        body: 'Cada apartado suma al total.\\n\\nHospedaje: habitaciones o noches.\\nSalon: renta o paquete del salon.\\nMenu/persona: alimentos; si activas servicio %, se calcula sobre alimentos.\\nOtro: cargos especiales, extras o descuentos positivos/negativos si los manejas como linea.'
+      },
+      events: {
+        title: 'Eventos y salones',
+        body: 'Calendario operativo de Margaritas, Tulipanes y Girasoles.\\n\\nEstados:\\n- En cotizacion: aun no confirmado.\\n- Apartado: fecha/salon reservado con anticipo o confirmacion.\\n- Pago completo: liquidado.\\n\\nLa barra muestra porcentaje pagado contra el total. Los comprobantes quedan guardados en el evento.'
+      },
+      manualEvent: {
+        title: 'Apartar evento desde cero',
+        body: 'Usalo cuando el evento no viene de una cotizacion guardada.\\n\\nLlena cliente, fecha, salon, estado, total y pagado.\\n\\nDespues puedes subir imagenes de vouchers o comprobantes. Si ya existe una cotizacion, es mejor apartar desde la cotizacion para que quede vinculada.'
+      },
+      rack: {
+        title: 'Rack',
+        body: 'Importa el CSV del sistema para actualizar ocupadas, vacias y bloqueadas.\\n\\nTambien puedes analizar una foto del rack, pero el CSV es mas confiable.\\n\\nCuando registras llegada con habitacion, el sistema puede marcar esa habitacion como ocupada en el ultimo rack.'
+      },
+      reports: {
+        title: 'Reportes',
+        body: 'Reportes operativos para administracion.\\n\\nOcupacion diaria: cuartos ocupados por fecha.\\nRotacion: dias ocupados por habitacion en el mes.\\nMantenimiento/notas: limpieza profunda, climas, pintura o pendientes por habitacion.\\n\\nSirve para decidir que habitaciones rotar y cuales requieren mantenimiento.'
+      }
+    };
+
+    function openHelp(topic) {
+      const help = helpTopics[topic] || {
+        title: 'Ayuda',
+        body: 'Sin ayuda registrada para esta seccion.'
+      };
+      helpModalTitle.textContent = help.title;
+      helpModalBody.textContent = help.body;
+      helpModalBackdrop.classList.remove('hidden');
+    }
+
+    function closeHelp() {
+      helpModalBackdrop.classList.add('hidden');
+    }
 
     async function loadBotStatus() {
       try {
