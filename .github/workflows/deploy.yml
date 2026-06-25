@@ -78,18 +78,17 @@ jobs:
           cd '$DEPLOY_PATH' &&
           sudo apt-get update &&
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y tesseract-ocr imagemagick sqlite3 default-mysql-client default-mysql-server &&
-          sudo systemctl enable --now mysql || sudo systemctl enable --now mariadb &&
+          (sudo systemctl enable --now mysql || sudo systemctl enable --now mariadb) &&
           if [ ! -f .env ]; then
             MYSQL_APP_PASSWORD=\$(openssl rand -hex 16)
             umask 077
-            cat > .env <<EOF
-USE_MYSQL=1
-MYSQL_HOST=127.0.0.1
-MYSQL_PORT=3306
-MYSQL_DATABASE=hotel_bot
-MYSQL_USER=hotel_bot
-MYSQL_PASSWORD=\$MYSQL_APP_PASSWORD
-EOF
+            printf '%s\n' \
+              'USE_MYSQL=1' \
+              'MYSQL_HOST=127.0.0.1' \
+              'MYSQL_PORT=3306' \
+              'MYSQL_DATABASE=hotel_bot' \
+              'MYSQL_USER=hotel_bot' \
+              \"MYSQL_PASSWORD=\$MYSQL_APP_PASSWORD\" > .env
           fi &&
           grep -q '^USE_MYSQL=' .env || echo 'USE_MYSQL=1' >> .env &&
           grep -q '^MYSQL_HOST=' .env || echo 'MYSQL_HOST=127.0.0.1' >> .env &&
