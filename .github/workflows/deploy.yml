@@ -61,7 +61,11 @@ jobs:
         if: env.HAS_EC2_KEY == 'true'
         run: |
 
-          rsync -avz --delete \
+          rsync -az --delete --omit-dir-times --no-perms \
+          --exclude=.git \
+          --exclude=.env \
+          --exclude=backups \
+          --exclude=outputs \
           --exclude=node_modules \
           --exclude=auth \
           --exclude=data/reservas.json \
