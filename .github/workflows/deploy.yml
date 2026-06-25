@@ -61,22 +61,34 @@ jobs:
         if: env.HAS_EC2_KEY == 'true'
         run: |
 
-          rsync -az --delete --omit-dir-times --no-perms \
-          --exclude=.git \
-          --exclude=.env \
-          --exclude=backups \
-          --exclude=outputs \
-          --exclude=node_modules \
-          --exclude=auth \
-          --exclude=data/reservas.json \
-          --exclude=data/closedDates.json \
-          --exclude=data/calendarReservations.json \
-          --exclude=data/groupMessages.json \
-          --exclude=data/rackStatus.json \
-          --exclude=data/*.db \
-          --exclude=data/*.db-* \
-          --exclude=logs \
-          ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
+          ssh -o ConnectTimeout=30 "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH' && echo SSH_OK"
+
+          tar \
+            --exclude=.git \
+            --exclude=.env \
+            --exclude=backups \
+            --exclude=outputs \
+            --exclude=node_modules \
+            --exclude=auth \
+            --exclude=data/reservas.json \
+            --exclude=data/closedDates.json \
+            --exclude=data/calendarReservations.json \
+            --exclude=data/groupMessages.json \
+            --exclude=data/rackStatus.json \
+            --exclude=data/*.db \
+            --exclude=data/*.db-* \
+            --exclude=logs \
+            -czf /tmp/hotel-bot-deploy.tgz .
+
+          scp -o ConnectTimeout=30 /tmp/hotel-bot-deploy.tgz "$DEPLOY_USER@$DEPLOY_HOST:/tmp/hotel-bot-deploy.tgz"
+
+          ssh -o ConnectTimeout=30 "$DEPLOY_USER@$DEPLOY_HOST" "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+          set -eo pipefail
+          mkdir -p "$DEPLOY_PATH"
+          cd "$DEPLOY_PATH"
+          tar -xzf /tmp/hotel-bot-deploy.tgz
+          rm -f /tmp/hotel-bot-deploy.tgz
+          REMOTE
 
       - name: Prepare MySQL on VM
         if: env.HAS_EC2_KEY == 'true'
