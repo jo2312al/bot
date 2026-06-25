@@ -230,6 +230,8 @@ CREATE TABLE IF NOT EXISTS quotations (
   client VARCHAR(180) NOT NULL,
   contact VARCHAR(120) NOT NULL DEFAULT '',
   event_name VARCHAR(180) NOT NULL DEFAULT '',
+  event_date DATE NULL,
+  hall_id BIGINT UNSIGNED NULL,
   template VARCHAR(40) NOT NULL DEFAULT 'visual',
   headline VARCHAR(220) NOT NULL DEFAULT '',
   stay_dates VARCHAR(180) NOT NULL DEFAULT '',
@@ -247,7 +249,62 @@ CREATE TABLE IF NOT EXISTS quotations (
   created_at DATETIME NOT NULL,
   updated_at DATETIME NOT NULL,
   PRIMARY KEY (id),
-  KEY ix_quotations_updated_at (updated_at)
+  KEY ix_quotations_updated_at (updated_at),
+  KEY ix_quotations_event_date (event_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS event_halls (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  code VARCHAR(40) NOT NULL,
+  name VARCHAR(120) NOT NULL,
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  sort_order INT UNSIGNED NOT NULL DEFAULT 0,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY ux_event_halls_code (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS quote_events (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  quotation_id VARCHAR(80) NULL,
+  hall_id BIGINT UNSIGNED NOT NULL,
+  event_date DATE NOT NULL,
+  client VARCHAR(180) NOT NULL DEFAULT '',
+  contact VARCHAR(120) NOT NULL DEFAULT '',
+  event_name VARCHAR(180) NOT NULL DEFAULT '',
+  status ENUM('cotizacion', 'apartado', 'pago_completo') NOT NULL DEFAULT 'cotizacion',
+  total_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  paid_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  notes TEXT NOT NULL,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  PRIMARY KEY (id),
+  KEY ix_quote_events_date_hall (event_date, hall_id),
+  KEY ix_quote_events_status (status),
+  KEY ix_quote_events_quotation (quotation_id),
+  CONSTRAINT fk_quote_events_quotation
+    FOREIGN KEY (quotation_id) REFERENCES quotations(id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT fk_quote_events_hall
+    FOREIGN KEY (hall_id) REFERENCES event_halls(id)
+    ON UPDATE CASCADE ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS event_payment_vouchers (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  quote_event_id BIGINT UNSIGNED NOT NULL,
+  file_name VARCHAR(220) NOT NULL,
+  mime_type VARCHAR(120) NOT NULL DEFAULT '',
+  file_path VARCHAR(500) NOT NULL,
+  amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  notes TEXT NOT NULL,
+  uploaded_at DATETIME NOT NULL,
+  PRIMARY KEY (id),
+  KEY ix_event_payment_vouchers_event (quote_event_id),
+  CONSTRAINT fk_event_payment_vouchers_event
+    FOREIGN KEY (quote_event_id) REFERENCES quote_events(id)
+    ON UPDATE CASCADE ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE OR REPLACE VIEW report_daily_occupancy AS

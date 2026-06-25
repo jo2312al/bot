@@ -27,6 +27,34 @@ const QUOTATION_MENU_FILE =
     "quotationMenu.json"
   );
 
+const EVENT_BOOKINGS_FILE =
+  path.join(
+    DATA_DIR,
+    "eventBookings.json"
+  );
+
+const EVENT_VOUCHERS_DIR =
+  path.join(
+    DATA_DIR,
+    "event-vouchers"
+  );
+
+const EVENT_HALLS =
+  [
+    {
+      code: "MARGARITAS",
+      name: "Margaritas"
+    },
+    {
+      code: "TULIPANES",
+      name: "Tulipanes"
+    },
+    {
+      code: "GIRASOLES",
+      name: "Girasoles"
+    }
+  ];
+
 const DEFAULT_QUOTATION_MENU =
   [
     {
@@ -258,29 +286,33 @@ function readQuotations() {
   if (mysql.ensureSchema()) {
     return mysql.queryJson(`
       SELECT JSON_OBJECT(
-        'id', id,
-        'client', client,
-        'contact', contact,
-        'eventName', event_name,
-        'template', template,
-        'headline', headline,
-        'stayDates', stay_dates,
-        'people', people_count,
-        'checkIn', check_in_text,
-        'checkOut', check_out_text,
-        'validUntil', valid_until,
-        'notes', notes,
-        'serviceChargePercent', service_charge_percent,
-        'sections', sections_json,
-        'subtotal', subtotal,
-        'serviceCharge', service_charge,
-        'serviceChargeBase', service_charge_base,
-        'total', total,
-        'createdAt', DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s.000Z'),
-        'updatedAt', DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s.000Z')
+        'id', q.id,
+        'client', q.client,
+        'contact', q.contact,
+        'eventName', q.event_name,
+        'eventDate', IFNULL(DATE_FORMAT(q.event_date, '%Y-%m-%d'), ''),
+        'hallCode', COALESCE(hall.code, ''),
+        'hallName', COALESCE(hall.name, ''),
+        'template', q.template,
+        'headline', q.headline,
+        'stayDates', q.stay_dates,
+        'people', q.people_count,
+        'checkIn', q.check_in_text,
+        'checkOut', q.check_out_text,
+        'validUntil', q.valid_until,
+        'notes', q.notes,
+        'serviceChargePercent', q.service_charge_percent,
+        'sections', q.sections_json,
+        'subtotal', q.subtotal,
+        'serviceCharge', q.service_charge,
+        'serviceChargeBase', q.service_charge_base,
+        'total', q.total,
+        'createdAt', DATE_FORMAT(q.created_at, '%Y-%m-%dT%H:%i:%s.000Z'),
+        'updatedAt', DATE_FORMAT(q.updated_at, '%Y-%m-%dT%H:%i:%s.000Z')
       )
-      FROM quotations
-      ORDER BY updated_at DESC;
+      FROM quotations q
+      LEFT JOIN event_halls hall ON hall.id = q.hall_id
+      ORDER BY q.updated_at DESC;
     `);
   }
 
@@ -378,6 +410,47 @@ function saveQuotationMenu(items) {
 
 function money(value) {
   return Number(value || 0);
+}
+
+function normalizeEventStatus(status) {
+  const value =
+    String(status || "cotizacion")
+      .trim()
+      .toLowerCase();
+
+  if (
+    [
+      "cotizacion",
+      "apartado",
+      "pago_completo"
+    ].includes(value)
+  ) {
+    return value;
+  }
+
+  return "cotizacion";
+}
+
+function normalizeHallCode(hallCode) {
+  const value =
+    String(hallCode || "")
+      .trim()
+      .toUpperCase();
+
+  return EVENT_HALLS.some(hall =>
+    hall.code === value
+  )
+    ? value
+    : "";
+}
+
+function sanitizeFileName(name) {
+  return String(name || "comprobante")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120) || "comprobante";
 }
 
 function roundMoney(value) {
@@ -478,6 +551,10 @@ function normalizeQuotation(input) {
       String(input.contact || "").trim(),
     eventName:
       String(input.eventName || "").trim(),
+    eventDate:
+      String(input.eventDate || "").trim(),
+    hallCode:
+      normalizeHallCode(input.hallCode),
     template:
       String(input.template || "visual").trim(),
     headline:
@@ -529,6 +606,8 @@ function saveQuotation(input) {
         client,
         contact,
         event_name,
+        event_date,
+        hall_id,
         template,
         headline,
         stay_dates,
@@ -550,6 +629,8 @@ function saveQuotation(input) {
         ${mysql.quote(quotation.client)},
         ${mysql.quote(quotation.contact)},
         ${mysql.quote(quotation.eventName)},
+        ${quotation.eventDate ? mysql.quote(quotation.eventDate) : "NULL"},
+        ${quotation.hallCode ? `(SELECT id FROM event_halls WHERE code = ${mysql.quote(quotation.hallCode)})` : "NULL"},
         ${mysql.quote(quotation.template)},
         ${mysql.quote(quotation.headline)},
         ${mysql.quote(quotation.stayDates)},
@@ -571,6 +652,8 @@ function saveQuotation(input) {
         client = VALUES(client),
         contact = VALUES(contact),
         event_name = VALUES(event_name),
+        event_date = VALUES(event_date),
+        hall_id = VALUES(hall_id),
         template = VALUES(template),
         headline = VALUES(headline),
         stay_dates = VALUES(stay_dates),
@@ -616,12 +699,331 @@ function getQuotation(id) {
     );
 }
 
+function readEventBookings() {
+  if (mysql.ensureSchema()) {
+    return mysql.queryJson(`
+      SELECT JSON_OBJECT(
+        'id', event.id,
+        'quotationId', IFNULL(event.quotation_id, ''),
+        'hallCode', hall.code,
+        'hallName', hall.name,
+        'eventDate', DATE_FORMAT(event.event_date, '%Y-%m-%d'),
+        'client', event.client,
+        'contact', event.contact,
+        'eventName', event.event_name,
+        'status', event.status,
+        'totalAmount', event.total_amount,
+        'paidAmount', event.paid_amount,
+        'paymentPercent', LEAST(100, ROUND(event.paid_amount / NULLIF(event.total_amount, 0) * 100, 2)),
+        'notes', event.notes,
+        'createdAt', DATE_FORMAT(event.created_at, '%Y-%m-%dT%H:%i:%s.000Z'),
+        'updatedAt', DATE_FORMAT(event.updated_at, '%Y-%m-%dT%H:%i:%s.000Z'),
+        'vouchers', COALESCE(
+          (
+            SELECT JSON_ARRAYAGG(
+              JSON_OBJECT(
+                'id', voucher.id,
+                'fileName', voucher.file_name,
+                'mimeType', voucher.mime_type,
+                'url', CONCAT('/api/events/vouchers/', voucher.id),
+                'amount', voucher.amount,
+                'notes', voucher.notes,
+                'uploadedAt', DATE_FORMAT(voucher.uploaded_at, '%Y-%m-%dT%H:%i:%s.000Z')
+              )
+            )
+            FROM event_payment_vouchers voucher
+            WHERE voucher.quote_event_id = event.id
+          ),
+          JSON_ARRAY()
+        )
+      )
+      FROM quote_events event
+      JOIN event_halls hall ON hall.id = event.hall_id
+      ORDER BY event.event_date DESC, hall.sort_order, event.updated_at DESC;
+    `)
+      .map(event => ({
+        ...event,
+        paymentPercent:
+          Number(event.paymentPercent || 0)
+      }));
+  }
+
+  return readJson(
+    EVENT_BOOKINGS_FILE,
+    []
+  );
+}
+
+function saveEventBooking(input) {
+  const hallCode =
+    normalizeHallCode(input.hallCode);
+  const eventDate =
+    String(input.eventDate || "").trim();
+
+  if (!hallCode) {
+    throw new Error("Selecciona un salon");
+  }
+
+  if (!eventDate) {
+    throw new Error("Selecciona la fecha del evento");
+  }
+
+  const quotation =
+    input.quotationId
+      ? getQuotation(String(input.quotationId))
+      : null;
+
+  const totalAmount =
+    Math.max(
+      money(input.totalAmount ?? quotation?.total),
+      0
+    );
+  const paidAmount =
+    Math.max(
+      money(input.paidAmount),
+      0
+    );
+
+  const booking = {
+    id:
+      input.id || `EV-${Date.now()}-${Math.random().toString(16).slice(2, 6).toUpperCase()}`,
+    quotationId:
+      quotation?.id || String(input.quotationId || "").trim(),
+    hallCode,
+    hallName:
+      EVENT_HALLS.find(hall => hall.code === hallCode)?.name || hallCode,
+    eventDate,
+    client:
+      String(input.client || quotation?.client || "").trim(),
+    contact:
+      String(input.contact || quotation?.contact || "").trim(),
+    eventName:
+      String(input.eventName || quotation?.eventName || quotation?.headline || "").trim(),
+    status:
+      normalizeEventStatus(input.status),
+    totalAmount,
+    paidAmount,
+    notes:
+      String(input.notes || "").trim(),
+    createdAt:
+      input.createdAt || new Date().toISOString(),
+    updatedAt:
+      new Date().toISOString(),
+    vouchers:
+      Array.isArray(input.vouchers) ? input.vouchers : []
+  };
+
+  if (mysql.ensureSchema()) {
+    const idSql =
+      /^\d+$/.test(String(input.id || ""))
+        ? Number(input.id)
+        : "NULL";
+
+    mysql.runSql(`
+      INSERT INTO quote_events (
+        id,
+        quotation_id,
+        hall_id,
+        event_date,
+        client,
+        contact,
+        event_name,
+        status,
+        total_amount,
+        paid_amount,
+        notes,
+        created_at,
+        updated_at
+      ) VALUES (
+        ${idSql},
+        ${booking.quotationId ? mysql.quote(booking.quotationId) : "NULL"},
+        (SELECT id FROM event_halls WHERE code = ${mysql.quote(booking.hallCode)}),
+        ${mysql.quote(booking.eventDate)},
+        ${mysql.quote(booking.client)},
+        ${mysql.quote(booking.contact)},
+        ${mysql.quote(booking.eventName)},
+        ${mysql.quote(booking.status)},
+        ${Number(booking.totalAmount)},
+        ${Number(booking.paidAmount)},
+        ${mysql.quote(booking.notes)},
+        ${mysql.quote(mysql.timestampToSql(booking.createdAt) || new Date().toISOString().slice(0, 19).replace("T", " "))},
+        ${mysql.quote(mysql.timestampToSql(booking.updatedAt) || new Date().toISOString().slice(0, 19).replace("T", " "))}
+      )
+      ON DUPLICATE KEY UPDATE
+        quotation_id = VALUES(quotation_id),
+        hall_id = VALUES(hall_id),
+        event_date = VALUES(event_date),
+        client = VALUES(client),
+        contact = VALUES(contact),
+        event_name = VALUES(event_name),
+        status = VALUES(status),
+        total_amount = VALUES(total_amount),
+        paid_amount = VALUES(paid_amount),
+        notes = VALUES(notes),
+        updated_at = VALUES(updated_at);
+    `);
+
+    const rows =
+      mysql.queryJson(`
+        SELECT JSON_OBJECT(
+          'id', id
+        )
+        FROM quote_events
+        WHERE hall_id = (SELECT id FROM event_halls WHERE code = ${mysql.quote(booking.hallCode)})
+          AND event_date = ${mysql.quote(booking.eventDate)}
+          AND client = ${mysql.quote(booking.client)}
+          AND event_name = ${mysql.quote(booking.eventName)}
+        ORDER BY updated_at DESC, id DESC
+        LIMIT 1;
+      `);
+
+    return {
+      ...booking,
+      id:
+        rows[0]?.id || input.id
+    };
+  }
+
+  const bookings =
+    readEventBookings()
+      .filter(item =>
+        String(item.id) !== String(booking.id)
+      );
+
+  bookings.push(booking);
+  writeJson(
+    EVENT_BOOKINGS_FILE,
+    bookings
+  );
+
+  return booking;
+}
+
+function saveEventVoucher(input) {
+  const eventId =
+    Number(input.eventId || 0);
+  const dataUrl =
+    String(input.dataUrl || "");
+  const match =
+    dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+
+  if (!eventId) {
+    throw new Error("Evento requerido");
+  }
+
+  if (!match) {
+    throw new Error("Comprobante invalido");
+  }
+
+  const mimeType =
+    match[1];
+  const extension =
+    mimeType.includes("png")
+      ? ".png"
+      : mimeType.includes("webp")
+        ? ".webp"
+        : ".jpg";
+  const fileName =
+    `${Date.now()}-${sanitizeFileName(input.fileName)}${path.extname(input.fileName || "") ? "" : extension}`;
+
+  ensureDataDir();
+  fs.mkdirSync(
+    EVENT_VOUCHERS_DIR,
+    {
+      recursive: true
+    }
+  );
+
+  const filePath =
+    path.join(
+      EVENT_VOUCHERS_DIR,
+      fileName
+    );
+
+  fs.writeFileSync(
+    filePath,
+    Buffer.from(
+      match[2],
+      "base64"
+    )
+  );
+
+  if (!mysql.ensureSchema()) {
+    throw new Error("Los comprobantes requieren MySQL activo");
+  }
+
+  const uploadedAt =
+    new Date().toISOString();
+
+  mysql.runSql(`
+    INSERT INTO event_payment_vouchers (
+      quote_event_id,
+      file_name,
+      mime_type,
+      file_path,
+      amount,
+      notes,
+      uploaded_at
+    ) VALUES (
+      ${eventId},
+      ${mysql.quote(fileName)},
+      ${mysql.quote(mimeType)},
+      ${mysql.quote(filePath)},
+      ${Number(money(input.amount))},
+      ${mysql.quote(String(input.notes || "").trim())},
+      ${mysql.quote(mysql.timestampToSql(uploadedAt))}
+    );
+  `);
+
+  const rows =
+    mysql.queryJson(`
+      SELECT JSON_OBJECT(
+        'id', id,
+        'fileName', file_name,
+        'mimeType', mime_type,
+        'url', CONCAT('/api/events/vouchers/', id),
+        'amount', amount,
+        'notes', notes,
+        'uploadedAt', DATE_FORMAT(uploaded_at, '%Y-%m-%dT%H:%i:%s.000Z')
+      )
+      FROM event_payment_vouchers
+      WHERE quote_event_id = ${eventId}
+      ORDER BY id DESC
+      LIMIT 1;
+    `);
+
+  return rows[0];
+}
+
+function getEventVoucher(id) {
+  if (!mysql.ensureSchema()) {
+    return null;
+  }
+
+  return mysql.queryJson(`
+    SELECT JSON_OBJECT(
+      'id', id,
+      'fileName', file_name,
+      'mimeType', mime_type,
+      'filePath', file_path
+    )
+    FROM event_payment_vouchers
+    WHERE id = ${Number(id || 0)}
+    LIMIT 1;
+  `)[0] || null;
+}
+
 module.exports = {
+  EVENT_HALLS,
   getQuotation,
+  getEventVoucher,
   getReservationNoteKey,
+  readEventBookings,
   readQuotationMenu,
   readQuotations,
   readReservationNotes,
+  saveEventBooking,
+  saveEventVoucher,
   saveQuotationMenu,
   saveQuotation,
   saveReservationNote

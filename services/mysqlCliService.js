@@ -387,6 +387,38 @@ function seedReferenceData() {
       affects_rotation = VALUES(affects_rotation),
       default_interval_days = VALUES(default_interval_days);
   `);
+
+  const halls = [
+    [
+      "MARGARITAS",
+      "Margaritas",
+      1
+    ],
+    [
+      "TULIPANES",
+      "Tulipanes",
+      2
+    ],
+    [
+      "GIRASOLES",
+      "Girasoles",
+      3
+    ]
+  ];
+
+  runSql(`
+    INSERT INTO event_halls (
+      code,
+      name,
+      sort_order
+    ) VALUES ${halls.map(([code, name, order]) =>
+      `(${quote(code)}, ${quote(name)}, ${Number(order)})`
+    ).join(",")}
+    ON DUPLICATE KEY UPDATE
+      name = VALUES(name),
+      sort_order = VALUES(sort_order),
+      active = 1;
+  `);
 }
 
 module.exports = {

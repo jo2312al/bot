@@ -46,11 +46,16 @@ const {
   enqueueReservationGroupNotification
 } = require("./services/groupReservationNotificationService");
 const {
+  EVENT_HALLS,
+  getEventVoucher,
   getQuotation,
   getReservationNoteKey,
+  readEventBookings,
   readQuotationMenu,
   readQuotations,
   readReservationNotes,
+  saveEventBooking,
+  saveEventVoucher,
   saveQuotationMenu,
   saveQuotation,
   saveReservationNote
@@ -2093,6 +2098,10 @@ function getSummary() {
       readQuotations(),
     quotationMenu:
       readQuotationMenu(),
+    eventHalls:
+      EVENT_HALLS,
+    eventBookings:
+      readEventBookings(),
     totalRooms:
       TOTAL_ROOMS,
     rackStatus:
@@ -3518,6 +3527,92 @@ function pageHtml() {
       font-size: 13px;
       margin-top: 8px;
     }
+    .event-board {
+      margin-top: 16px;
+    }
+    .event-calendar {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(120px, 1fr));
+      gap: 8px;
+      margin: 12px 0 18px;
+    }
+    .event-day {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      min-height: 106px;
+      padding: 9px;
+    }
+    .event-day.today {
+      outline: 2px solid var(--primary);
+    }
+    .event-day.empty {
+      background: transparent;
+      border-color: transparent;
+    }
+    .event-date-label {
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+    .event-pill {
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      padding: 6px;
+      margin-top: 5px;
+      font-size: 12px;
+      background: #f8fafc;
+    }
+    .event-pill.cotizacion {
+      background: #fff7ed;
+      border-color: #fed7aa;
+    }
+    .event-pill.apartado {
+      background: #eff6ff;
+      border-color: #93c5fd;
+    }
+    .event-pill.pago_completo {
+      background: #ecfdf5;
+      border-color: #86efac;
+    }
+    .payment-bar {
+      background: #e2e8f0;
+      border-radius: 999px;
+      height: 8px;
+      overflow: hidden;
+      margin-top: 5px;
+    }
+    .payment-bar span {
+      display: block;
+      height: 100%;
+      background: linear-gradient(90deg, #0f766e, #22c55e);
+    }
+    .event-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .event-card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      padding: 12px;
+    }
+    .event-card-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .voucher-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-top: 10px;
+    }
+    .voucher-row input[type="file"] {
+      max-width: 260px;
+    }
     .quote-catalog-modal {
       width: min(900px, 100%);
     }
@@ -4000,6 +4095,16 @@ function pageHtml() {
               <input id="quoteEventName" placeholder="Boda, grupo, capacitacion">
             </label>
             <label>
+              Fecha evento
+              <input id="quoteEventDate" type="date">
+            </label>
+            <label>
+              Salon
+              <select id="quoteHall">
+                <option value="">Sin salon</option>
+              </select>
+            </label>
+            <label>
               Vigencia
               <input id="quoteValidUntil" type="date">
             </label>
@@ -4085,6 +4190,67 @@ function pageHtml() {
           <strong>Ultimas cotizaciones</strong>
           <div id="quoteList" class="quote-list" style="margin-top:10px"></div>
         </div>
+      </div>
+      <div class="panel event-board">
+        <div class="toolbar">
+          <div>
+            <strong>Calendario de salones</strong>
+            <div class="muted">Margaritas, Tulipanes y Girasoles. El color indica el estado del evento y la barra lo pagado.</div>
+          </div>
+          <label>
+            Mes
+            <input id="eventMonth" type="month" onchange="renderEventCalendar()">
+          </label>
+        </div>
+        <div id="eventCalendar" class="event-calendar"></div>
+        <div class="quote-fieldset-title">Apartar evento desde cero</div>
+        <div class="date-controls">
+          <label>
+            Cliente
+            <input id="eventClient" placeholder="Cliente">
+          </label>
+          <label>
+            Contacto
+            <input id="eventContact" placeholder="Telefono o correo">
+          </label>
+          <label>
+            Evento
+            <input id="eventName" placeholder="Nombre del evento">
+          </label>
+          <label>
+            Fecha
+            <input id="eventDate" type="date">
+          </label>
+          <label>
+            Salon
+            <select id="eventHall"></select>
+          </label>
+          <label>
+            Estado
+            <select id="eventStatus">
+              <option value="cotizacion">En cotizacion</option>
+              <option value="apartado">Apartado</option>
+              <option value="pago_completo">Pago completo</option>
+            </select>
+          </label>
+          <label>
+            Total
+            <input id="eventTotal" type="number" min="0" step="0.01" placeholder="0">
+          </label>
+          <label>
+            Pagado
+            <input id="eventPaid" type="number" min="0" step="0.01" placeholder="0">
+          </label>
+        </div>
+        <label>
+          Notas
+          <textarea id="eventNotes" placeholder="Notas internas del evento, pagos, condiciones o pendientes."></textarea>
+        </label>
+        <div class="toolbar">
+          <button class="primary" onclick="saveManualEvent()">Guardar evento</button>
+          <div id="eventStatusText" class="muted"></div>
+        </div>
+        <div id="eventList" class="event-list"></div>
       </div>
     </section>
     </div>
@@ -4365,6 +4531,8 @@ function pageHtml() {
       }
     ];
     let quoteMenuItems = [];
+    let eventHalls = [];
+    let eventBookings = [];
 
     async function loadBotStatus() {
       try {
@@ -4445,10 +4613,15 @@ function pageHtml() {
       overbookingAlerts.innerHTML = renderOverbookingAlerts(data.overbookingAlerts || []);
       todayArrivals.innerHTML = renderTodayArrivals(data.todayArrivals || []);
       quoteMenuItems = Array.isArray(data.quotationMenu) ? data.quotationMenu : [];
+      eventHalls = Array.isArray(data.eventHalls) ? data.eventHalls : [];
+      eventBookings = Array.isArray(data.eventBookings) ? data.eventBookings : [];
       renderQuoteMenuOptions();
       renderQuoteMenuEditor();
       renderQuoteSections();
       renderQuotationList(data.quotations || []);
+      renderHallSelects();
+      renderEventCalendar();
+      renderEventList();
       occupancy.innerHTML = renderOccupancy(data.occupancy);
       reservations.innerHTML = renderReservations(data.reservations);
       updateSelectionSummary();
@@ -5080,6 +5253,229 @@ function pageHtml() {
       quoteTotal.textContent = formatMoney(subtotal + service);
     }
 
+    function renderHallSelects() {
+      const options = eventHalls.map(hall =>
+        '<option value="' + escapeHtml(hall.code) + '">' + escapeHtml(hall.name) + '</option>'
+      ).join('');
+
+      if (quoteHall && quoteHall.options.length <= 1) {
+        quoteHall.innerHTML = '<option value="">Sin salon</option>' + options;
+      }
+
+      if (eventHall && !eventHall.options.length) {
+        eventHall.innerHTML = options;
+      }
+
+      if (eventMonth && !eventMonth.value) {
+        eventMonth.value = new Date().toISOString().slice(0, 7);
+      }
+    }
+
+    function eventStatusLabel(status) {
+      return {
+        cotizacion: 'En cotizacion',
+        apartado: 'Apartado',
+        pago_completo: 'Pago completo'
+      }[status] || status || 'En cotizacion';
+    }
+
+    function eventPercent(event) {
+      if (event.paymentPercent !== undefined && event.paymentPercent !== null) {
+        return Math.max(0, Math.min(100, Number(event.paymentPercent || 0)));
+      }
+      return event.totalAmount
+        ? Math.max(0, Math.min(100, Number(event.paidAmount || 0) / Number(event.totalAmount || 1) * 100))
+        : 0;
+    }
+
+    function renderEventCalendar() {
+      if (!eventCalendar) {
+        return;
+      }
+
+      const month = eventMonth?.value || new Date().toISOString().slice(0, 7);
+      const start = new Date(month + '-01T00:00:00');
+      const days = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+      const firstWeekday = start.getDay();
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const cells = [];
+
+      for (let index = 0; index < firstWeekday; index++) {
+        cells.push('<div class="event-day empty"></div>');
+      }
+
+      for (let day = 1; day <= days; day++) {
+        const iso = month + '-' + String(day).padStart(2, '0');
+        const events = eventBookings.filter(event => event.eventDate === iso);
+        cells.push(
+          '<div class="event-day ' + (iso === todayIso ? 'today' : '') + '">' +
+            '<div class="event-date-label">' + day + '</div>' +
+            (events.length
+              ? events.map(event =>
+                '<div class="event-pill ' + escapeHtml(event.status || 'cotizacion') + '">' +
+                  '<strong>' + escapeHtml(event.hallName || event.hallCode || '') + '</strong>' +
+                  '<div>' + escapeHtml(event.eventName || event.client || 'Evento') + '</div>' +
+                  '<div class="muted">' + eventStatusLabel(event.status) + ' · ' + Math.round(eventPercent(event)) + '%</div>' +
+                  '<div class="payment-bar"><span style="width:' + eventPercent(event) + '%"></span></div>' +
+                '</div>'
+              ).join('')
+              : '<div class="muted">Libre</div>') +
+          '</div>'
+        );
+      }
+
+      eventCalendar.innerHTML = cells.join('');
+    }
+
+    function renderEventList() {
+      if (!eventList) {
+        return;
+      }
+
+      if (!eventBookings.length) {
+        eventList.innerHTML = '<div class="muted">Sin eventos registrados.</div>';
+        return;
+      }
+
+      eventList.innerHTML = eventBookings.slice(0, 20).map(event =>
+        '<div class="event-card">' +
+          '<div class="event-card-head">' +
+            '<div>' +
+              '<strong>' + escapeHtml(event.eventDate || '') + ' · ' + escapeHtml(event.hallName || event.hallCode || '') + '</strong>' +
+              '<div>' + escapeHtml(event.eventName || event.client || 'Evento') + '</div>' +
+              '<div class="muted">' + escapeHtml(event.client || '') + ' · ' + eventStatusLabel(event.status) + '</div>' +
+            '</div>' +
+            '<div style="min-width:160px">' +
+              '<div class="muted">' + formatMoney(event.paidAmount || 0) + ' / ' + formatMoney(event.totalAmount || 0) + '</div>' +
+              '<div class="payment-bar"><span style="width:' + eventPercent(event) + '%"></span></div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="summary-chips" style="margin-top:8px">' +
+            (event.vouchers || []).map(voucher =>
+              '<a class="chip" target="_blank" href="' + escapeHtml(voucher.url || '#') + '">Comprobante ' + escapeHtml(voucher.id || '') + '</a>'
+            ).join('') +
+          '</div>' +
+          '<div class="voucher-row">' +
+            '<input id="voucherFile_' + escapeHtml(event.id) + '" type="file" accept="image/*,application/pdf">' +
+            '<input id="voucherAmount_' + escapeHtml(event.id) + '" type="number" min="0" step="0.01" placeholder="Monto">' +
+            '<input id="voucherNotes_' + escapeHtml(event.id) + '" placeholder="Nota del comprobante">' +
+            '<button onclick="uploadEventVoucher(\\'' + escapeHtml(event.id) + '\\')">Subir comprobante</button>' +
+          '</div>' +
+        '</div>'
+      ).join('');
+    }
+
+    async function saveEventPayload(payload) {
+      const response = await fetch('/api/events', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      if (!data.ok) {
+        throw new Error(data.error || 'No se pudo guardar el evento.');
+      }
+      await loadDashboard();
+      showView('quotes');
+      return data.event;
+    }
+
+    async function saveManualEvent() {
+      try {
+        eventStatusText.textContent = 'Guardando evento...';
+        await saveEventPayload({
+          client: eventClient.value.trim(),
+          contact: eventContact.value.trim(),
+          eventName: eventName.value.trim(),
+          eventDate: eventDate.value,
+          hallCode: eventHall.value,
+          status: eventStatus.value,
+          totalAmount: Number(eventTotal.value || 0),
+          paidAmount: Number(eventPaid.value || 0),
+          notes: eventNotes.value.trim()
+        });
+        eventStatusText.textContent = 'Evento guardado.';
+        eventClient.value = '';
+        eventContact.value = '';
+        eventName.value = '';
+        eventDate.value = '';
+        eventTotal.value = '';
+        eventPaid.value = '';
+        eventNotes.value = '';
+      } catch (error) {
+        eventStatusText.textContent = error.message || 'No se pudo guardar.';
+      }
+    }
+
+    async function createEventFromQuotation(quotationId) {
+      const quote = (dashboardData?.quotations || []).find(row => row.id === quotationId);
+      if (!quote) {
+        alert('No encontre la cotizacion.');
+        return;
+      }
+      const hallCode = quote.hallCode || quoteHall.value;
+      const eventDateValue = quote.eventDate || quoteEventDate.value;
+      if (!hallCode || !eventDateValue) {
+        alert('La cotizacion necesita salon y fecha de evento.');
+        return;
+      }
+      await saveEventPayload({
+        quotationId: quote.id,
+        client: quote.client,
+        contact: quote.contact,
+        eventName: quote.eventName || quote.headline,
+        eventDate: eventDateValue,
+        hallCode,
+        status: 'apartado',
+        totalAmount: Number(quote.total || 0),
+        paidAmount: 0,
+        notes: quote.notes || ''
+      });
+    }
+
+    function readFileAsDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function uploadEventVoucher(eventId) {
+      const fileInput = document.getElementById('voucherFile_' + eventId);
+      const amountInput = document.getElementById('voucherAmount_' + eventId);
+      const notesInput = document.getElementById('voucherNotes_' + eventId);
+      const file = fileInput?.files?.[0];
+      if (!file) {
+        alert('Selecciona una imagen o comprobante.');
+        return;
+      }
+      const dataUrl = await readFileAsDataUrl(file);
+      const response = await fetch('/api/events/vouchers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          eventId,
+          fileName: file.name,
+          dataUrl,
+          amount: Number(amountInput?.value || 0),
+          notes: notesInput?.value || ''
+        })
+      });
+      const data = await response.json();
+      if (!data.ok) {
+        alert(data.error || 'No se pudo subir el comprobante.');
+        return;
+      }
+      await loadDashboard();
+      showView('quotes');
+    }
+
     function renderQuotationList(rows) {
       if (!rows.length) {
         quoteList.innerHTML = '<div class="muted">Sin cotizaciones guardadas.</div>';
@@ -5091,9 +5487,11 @@ function pageHtml() {
           '<strong>' + escapeHtml(row.id) + '</strong>' +
           '<div>' + escapeHtml(row.client || '') + '</div>' +
           '<div class="muted">' + escapeHtml(row.headline || row.eventName || 'Sin evento') + ' / ' + formatMoney(row.total || 0) + '</div>' +
+          '<div class="muted">' + escapeHtml(row.eventDate || 'Sin fecha') + ' · ' + escapeHtml(row.hallName || row.hallCode || 'Sin salon') + '</div>' +
           '<div class="muted">Formato: ' + escapeHtml(row.template === 'formal' ? 'Formal' : 'Visual hotel') + '</div>' +
           '<div class="summary-chips">' +
             '<button class="compact" onclick="window.open(\\'/api/quotations/' + encodeURIComponent(row.id) + '/print\\', \\'_blank\\')">Abrir PDF</button>' +
+            '<button class="compact" onclick="createEventFromQuotation(\\'' + escapeHtml(row.id) + '\\')">Apartar salon</button>' +
           '</div>' +
         '</div>'
       ).join('');
@@ -5104,6 +5502,8 @@ function pageHtml() {
         client: quoteClient.value.trim(),
         contact: quoteContact.value.trim(),
         eventName: quoteEventName.value.trim(),
+        eventDate: quoteEventDate.value,
+        hallCode: quoteHall.value,
         template: document.querySelector('input[name="quoteTemplate"]:checked')?.value || 'visual',
         headline: quoteHeadline.value.trim(),
         stayDates: quoteStayDates.value.trim(),
@@ -5142,6 +5542,8 @@ function pageHtml() {
       quoteClient.value = '';
       quoteContact.value = '';
       quoteEventName.value = '';
+      quoteEventDate.value = '';
+      quoteHall.value = '';
       quoteHeadline.value = '';
       quoteStayDates.value = '';
       quotePeople.value = '';
@@ -6773,6 +7175,47 @@ const server =
       return;
     }
 
+    const eventVoucherMatch =
+      url.pathname.match(/^\/api\/events\/vouchers\/(\d+)$/);
+
+    if (
+      req.method === "GET"
+      &&
+      eventVoucherMatch
+    ) {
+      const voucher =
+        getEventVoucher(
+          eventVoucherMatch[1]
+        );
+
+      if (
+        !voucher
+        ||
+        !voucher.filePath
+        ||
+        !fs.existsSync(voucher.filePath)
+      ) {
+        sendJson(res, 404, {
+          ok:
+            false,
+          error:
+            "Comprobante no encontrado"
+        });
+        return;
+      }
+
+      res.writeHead(200, {
+        "Content-Type":
+          voucher.mimeType || "application/octet-stream",
+        "Cache-Control":
+          "private, max-age=3600"
+      });
+      res.end(
+        fs.readFileSync(voucher.filePath)
+      );
+      return;
+    }
+
     if (
       req.method === "GET"
       &&
@@ -6872,6 +7315,62 @@ const server =
           qrDataUrl: null,
           detail:
             error.message || "No se pudo generar el QR"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/events"
+    ) {
+      try {
+        const body =
+          await readBody(req);
+        const event =
+          saveEventBooking(body);
+
+        sendJson(res, 200, {
+          ok:
+            true,
+          event
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok:
+            false,
+          error:
+            error.message || "No se pudo guardar el evento"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/events/vouchers"
+    ) {
+      try {
+        const body =
+          await readBody(req);
+        const voucher =
+          saveEventVoucher(body);
+
+        sendJson(res, 200, {
+          ok:
+            true,
+          voucher
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok:
+            false,
+          error:
+            error.message || "No se pudo guardar el comprobante"
         });
       }
 
