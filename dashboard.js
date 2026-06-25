@@ -3579,6 +3579,7 @@ function pageHtml() {
       margin-top: 5px;
       font-size: 12px;
       background: #f8fafc;
+      cursor: pointer;
     }
     .event-pill.cotizacion {
       background: #fff7ed;
@@ -3614,6 +3615,44 @@ function pageHtml() {
       border-radius: 12px;
       background: #fff;
       padding: 12px;
+      cursor: pointer;
+    }
+    .event-card:hover,
+    .event-pill:hover {
+      box-shadow: 0 8px 24px rgba(15, 23, 42, .12);
+    }
+    .event-detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .event-detail-box {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      background: #f8fafc;
+    }
+    .event-detail-box span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+    .voucher-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .voucher-item {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      background: #fff;
     }
     .event-card-head {
       display: flex;
@@ -4581,6 +4620,18 @@ function pageHtml() {
       </div>
     </div>
   </div>
+  <div id="eventDetailModalBackdrop" class="modal-backdrop hidden" onclick="closeEventDetailModal()">
+    <div class="modal reservation-edit-modal" role="dialog" aria-modal="true" aria-labelledby="eventDetailTitle" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <strong id="eventDetailTitle">Evento</strong>
+          <div id="eventDetailSubtitle" class="muted"></div>
+        </div>
+        <button onclick="closeEventDetailModal()">Cerrar</button>
+      </div>
+      <div id="eventDetailBody" class="modal-body"></div>
+    </div>
+  </div>
   <script>
     let dashboardData = null;
     let calendarDate = new Date();
@@ -5470,7 +5521,7 @@ function pageHtml() {
             '<div class="event-date-label">' + day + '</div>' +
             (events.length
               ? events.map(event =>
-                '<div class="event-pill ' + escapeHtml(event.status || 'cotizacion') + '">' +
+                '<div class="event-pill ' + escapeHtml(event.status || 'cotizacion') + '" onclick="openEventDetail(\\'' + escapeHtml(event.id) + '\\')">' +
                   '<strong>' + escapeHtml(event.hallName || event.hallCode || '') + '</strong>' +
                   '<div>' + escapeHtml(event.eventName || event.client || 'Evento') + '</div>' +
                   '<div class="muted">' + eventStatusLabel(event.status) + ' · ' + Math.round(eventPercent(event)) + '%</div>' +
@@ -5496,7 +5547,7 @@ function pageHtml() {
       }
 
       eventList.innerHTML = eventBookings.slice(0, 20).map(event =>
-        '<div class="event-card">' +
+        '<div class="event-card" onclick="openEventDetail(\\'' + escapeHtml(event.id) + '\\')">' +
           '<div class="event-card-head">' +
             '<div>' +
               '<strong>' + escapeHtml(event.eventDate || '') + ' · ' + escapeHtml(event.hallName || event.hallCode || '') + '</strong>' +
@@ -5514,13 +5565,61 @@ function pageHtml() {
             ).join('') +
           '</div>' +
           '<div class="voucher-row">' +
-            '<input id="voucherFile_' + escapeHtml(event.id) + '" type="file" accept="image/*,application/pdf">' +
-            '<input id="voucherAmount_' + escapeHtml(event.id) + '" type="number" min="0" step="0.01" placeholder="Monto">' +
-            '<input id="voucherNotes_' + escapeHtml(event.id) + '" placeholder="Nota del comprobante">' +
-            '<button onclick="uploadEventVoucher(\\'' + escapeHtml(event.id) + '\\')">Subir comprobante</button>' +
+            '<input id="voucherFile_' + escapeHtml(event.id) + '" type="file" accept="image/*,application/pdf" multiple onclick="event.stopPropagation()">' +
+            '<input id="voucherAmount_' + escapeHtml(event.id) + '" type="number" min="0" step="0.01" placeholder="Monto" onclick="event.stopPropagation()">' +
+            '<input id="voucherNotes_' + escapeHtml(event.id) + '" placeholder="Nota del comprobante" onclick="event.stopPropagation()">' +
+            '<button onclick="event.stopPropagation(); uploadEventVoucher(\\'' + escapeHtml(event.id) + '\\')">Subir comprobante(s)</button>' +
           '</div>' +
         '</div>'
       ).join('');
+    }
+
+    function openEventDetail(eventId) {
+      const event = eventBookings.find(item => String(item.id) === String(eventId));
+      if (!event) {
+        return;
+      }
+
+      const percent = eventPercent(event);
+      eventDetailTitle.textContent = event.eventName || event.client || 'Evento';
+      eventDetailSubtitle.textContent = (event.eventDate || '-') + ' · ' + (event.hallName || event.hallCode || '-') + ' · ' + eventStatusLabel(event.status);
+      eventDetailBody.innerHTML =
+        '<div class="event-detail-grid">' +
+          '<div class="event-detail-box"><span>Cliente</span><strong>' + escapeHtml(event.client || '-') + '</strong></div>' +
+          '<div class="event-detail-box"><span>Contacto</span><strong>' + escapeHtml(event.contact || '-') + '</strong></div>' +
+          '<div class="event-detail-box"><span>Fecha</span><strong>' + escapeHtml(event.eventDate || '-') + '</strong></div>' +
+          '<div class="event-detail-box"><span>Salon</span><strong>' + escapeHtml(event.hallName || event.hallCode || '-') + '</strong></div>' +
+          '<div class="event-detail-box"><span>Estado</span><strong>' + escapeHtml(eventStatusLabel(event.status)) + '</strong></div>' +
+          '<div class="event-detail-box"><span>Cotizacion</span><strong>' + escapeHtml(event.quotationId || '-') + '</strong></div>' +
+          '<div class="event-detail-box"><span>Total</span><strong>' + formatMoney(event.totalAmount || 0) + '</strong></div>' +
+          '<div class="event-detail-box"><span>Pagado</span><strong>' + formatMoney(event.paidAmount || 0) + ' (' + Math.round(percent) + '%)</strong><div class="payment-bar"><span style="width:' + percent + '%"></span></div></div>' +
+        '</div>' +
+        '<div class="event-detail-box"><span>Notas</span><div>' + escapeHtml(event.notes || 'Sin notas') + '</div></div>' +
+        '<h3 style="margin:16px 0 8px">Comprobantes</h3>' +
+        ((event.vouchers || []).length
+          ? '<div class="voucher-list">' + (event.vouchers || []).map(voucher =>
+            '<div class="voucher-item">' +
+              '<div><strong>' + escapeHtml(voucher.fileName || ('Comprobante ' + voucher.id)) + '</strong><div class="muted">' + formatMoney(voucher.amount || 0) + ' · ' + escapeHtml(voucher.notes || '') + '</div></div>' +
+              '<a class="chip" target="_blank" href="' + escapeHtml(voucher.url || '#') + '">Ver</a>' +
+            '</div>'
+          ).join('') + '</div>'
+          : '<div class="muted">Sin comprobantes guardados.</div>');
+
+      eventDetailModalBackdrop.classList.remove('hidden');
+      document.body.classList.add('modal-open');
+    }
+
+    function closeEventDetailModal() {
+      eventDetailModalBackdrop.classList.add('hidden');
+
+      if (
+        dayModalBackdrop.classList.contains('hidden') &&
+        quoteMenuModalBackdrop.classList.contains('hidden') &&
+        quoteEventModalBackdrop.classList.contains('hidden') &&
+        helpModalBackdrop.classList.contains('hidden')
+      ) {
+        document.body.classList.remove('modal-open');
+      }
     }
 
     async function saveEventPayload(payload) {
@@ -5643,30 +5742,34 @@ function pageHtml() {
       const fileInput = document.getElementById('voucherFile_' + eventId);
       const amountInput = document.getElementById('voucherAmount_' + eventId);
       const notesInput = document.getElementById('voucherNotes_' + eventId);
-      const file = fileInput?.files?.[0];
-      if (!file) {
-        alert('Selecciona una imagen o comprobante.');
+      const files = Array.from(fileInput?.files || []);
+      if (!files.length) {
+        alert('Selecciona una o varias imagenes/comprobantes.');
         return;
       }
-      const dataUrl = await readFileAsDataUrl(file);
-      const response = await fetch('/api/events/vouchers', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          eventId,
-          fileName: file.name,
-          dataUrl,
-          amount: Number(amountInput?.value || 0),
-          notes: notesInput?.value || ''
-        })
-      });
-      const data = await response.json();
-      if (!data.ok) {
-        alert(data.error || 'No se pudo subir el comprobante.');
-        return;
+
+      for (const file of files) {
+        const dataUrl = await readFileAsDataUrl(file);
+        const response = await fetch('/api/events/vouchers', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            eventId,
+            fileName: file.name,
+            dataUrl,
+            amount: Number(amountInput?.value || 0),
+            notes: notesInput?.value || ''
+          })
+        });
+        const data = await response.json();
+        if (!data.ok) {
+          alert(data.error || 'No se pudo subir el comprobante ' + file.name + '.');
+          return;
+        }
       }
+
       await loadDashboard();
       showView('events');
     }
@@ -7189,6 +7292,8 @@ function pageHtml() {
       if (event.key === 'Escape') {
         if (!confirmRackBackdrop.classList.contains('hidden')) {
           closeRackConfirm();
+        } else if (!eventDetailModalBackdrop.classList.contains('hidden')) {
+          closeEventDetailModal();
         } else if (!quoteEventModalBackdrop.classList.contains('hidden')) {
           closeQuoteEventModal();
         } else if (!quoteMenuModalBackdrop.classList.contains('hidden')) {
