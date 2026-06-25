@@ -125,7 +125,19 @@ jobs:
             exit 1
           fi
 
-          mysqladmin ping --silent || sudo mysqladmin ping --silent
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            if sudo mysql -e "SELECT 1;" >/dev/null 2>&1; then
+              echo "MySQL is ready"
+              exit 0
+            fi
+            echo "Waiting for MySQL, attempt $attempt"
+            sleep 5
+          done
+
+          echo "MySQL did not become ready"
+          systemctl --no-pager --full status mysql mariadb mysqld || true
+          journalctl -u mysql -u mariadb -u mysqld --no-pager -n 80 || true
+          exit 1
           REMOTE
 
       - name: Write app environment on VM
