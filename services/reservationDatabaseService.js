@@ -5,6 +5,8 @@ const {
   execFileSync,
   spawnSync
 } = require("child_process");
+const mysql =
+  require("./mysqlCliService");
 
 const DATA_DIR =
   path.join(
@@ -306,6 +308,11 @@ function saveCalendarReservation(reservation) {
     return false;
   }
 
+  if (mysql.ensureSchema()) {
+    saveCalendarReservationMysql(row);
+    return true;
+  }
+
   if (initSqlite()) {
     runSql(`
       INSERT INTO calendar_reservations (
@@ -365,6 +372,10 @@ function saveCalendarReservation(reservation) {
 }
 
 function readCalendarReservations() {
+  if (mysql.ensureSchema()) {
+    return readCalendarReservationsMysql(false);
+  }
+
   if (initSqlite()) {
     return querySql(`
       SELECT
@@ -448,6 +459,22 @@ function updateCalendarReservation(sourceKey, updates = {}) {
 }
 
 function readCanceledCalendarReservationKeys() {
+  if (mysql.ensureSchema()) {
+    return new Set(
+      mysql.queryJson(`
+        SELECT JSON_OBJECT(
+          'sourceKey', source_key
+        )
+        FROM reservations
+        WHERE status = 'cancelada';
+      `)
+        .map(row =>
+          row.sourceKey
+        )
+        .filter(Boolean)
+    );
+  }
+
   if (initSqlite()) {
     return new Set(
       querySql(`
@@ -476,6 +503,15 @@ function readCanceledCalendarReservationKeys() {
 
 function cancelCalendarReservationByFolio(folio) {
   if (!folio) {
+    return;
+  }
+
+  if (mysql.ensureSchema()) {
+    mysql.runSql(`
+      UPDATE reservations
+      SET status = 'cancelada'
+      WHERE folio = ${mysql.quote(folio)};
+    `);
     return;
   }
 
@@ -510,6 +546,15 @@ function cancelCalendarReservationByFolio(folio) {
 
 function cancelCalendarReservationByKey(sourceKey) {
   if (!sourceKey) {
+    return;
+  }
+
+  if (mysql.ensureSchema()) {
+    mysql.runSql(`
+      UPDATE reservations
+      SET status = 'cancelada'
+      WHERE source_key = ${mysql.quote(sourceKey)};
+    `);
     return;
   }
 
@@ -557,6 +602,23 @@ function saveGroupMessage({
       text
     ]);
 
+  if (mysql.ensureSchema()) {
+    mysql.runSql(`
+      INSERT IGNORE INTO group_messages (
+        message_key,
+        group_id,
+        message_timestamp,
+        text
+      ) VALUES (
+        ${mysql.quote(key)},
+        ${mysql.quote(groupId)},
+        ${mysql.quote(timestamp)},
+        ${mysql.quote(text)}
+      );
+    `);
+    return key;
+  }
+
   if (initSqlite()) {
     runSql(`
       INSERT OR IGNORE INTO group_messages (
@@ -592,6 +654,216 @@ function saveGroupMessage({
   }
 
   return key;
+}
+
+function getGuestKey(row) {
+  return mysql.stableKey([
+    String(row.nombre || "").trim().toLowerCase(),
+    String(row.telefono || "").replace(/\D/g, "")
+  ]);
+}
+
+function getRoomTypeCode(type) {
+  const clean =
+    String(type || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+
+  if (
+    clean.includes("suite")
+    &&
+    clean.includes("king")
+  ) {
+    return "SUITE_KING";
+  }
+
+  if (clean.includes("suite")) {
+    return "DOBLE_SUITE";
+  }
+
+  if (clean.includes("king")) {
+    return "KING";
+  }
+
+  if (clean.includes("doble")) {
+    return "DOBLE";
+  }
+
+  return "";
+}
+
+function saveCalendarReservationMysql(row) {
+  const guestKey =
+    getGuestKey(row);
+  const roomTypeCode =
+    getRoomTypeCode(row.tipo);
+  const startDate =
+    mysql.displayToSqlDate(row.fecha);
+  const dates =
+    (Array.isArray(row.dates) && row.dates.length
+      ? row.dates
+      : [row.fecha]
+    )
+      .map(mysql.displayToSqlDate)
+      .filter(Boolean);
+  const arrivalAt =
+    mysql.timestampToSql(row.arrivalAt);
+
+  if (!startDate || !dates.length) {
+    throw new Error("Fechas invalidas para MySQL");
+  }
+
+  mysql.runSql(`
+    INSERT INTO guests (
+      guest_key,
+      name,
+      phone
+    ) VALUES (
+      ${mysql.quote(guestKey)},
+      ${mysql.quote(row.nombre)},
+      ${mysql.quote(row.telefono)}
+    )
+    ON DUPLICATE KEY UPDATE
+      name = VALUES(name),
+      phone = VALUES(phone);
+
+    INSERT INTO reservations (
+      source_key,
+      source,
+      folio,
+      guest_id,
+      group_id,
+      message_timestamp,
+      start_date,
+      rooms_count,
+      adults_count,
+      children_count,
+      room_type_id,
+      rate_text,
+      phone_snapshot,
+      arrival_time_text,
+      raw_text,
+      status,
+      arrival_at,
+      assigned_room_id
+    ) VALUES (
+      ${mysql.quote(row.sourceKey)},
+      ${mysql.quote(row.source)},
+      ${mysql.quote(row.folio)},
+      (SELECT id FROM guests WHERE guest_key = ${mysql.quote(guestKey)}),
+      ${mysql.quote(row.groupId)},
+      ${mysql.quote(row.timestamp)},
+      ${mysql.quote(startDate)},
+      ${Number(row.habitaciones)},
+      ${Number(row.adultos)},
+      ${Number(row.ninos)},
+      ${roomTypeCode ? `(SELECT id FROM room_types WHERE code = ${mysql.quote(roomTypeCode)})` : "NULL"},
+      ${mysql.quote(row.tarifa)},
+      ${mysql.quote(row.telefono)},
+      ${mysql.quote(row.hora)},
+      ${mysql.quote(row.raw)},
+      ${mysql.quote(row.status)},
+      ${arrivalAt ? mysql.quote(arrivalAt) : "NULL"},
+      ${row.roomNumber ? `(SELECT id FROM rooms WHERE room_number = ${mysql.quote(row.roomNumber)})` : "NULL"}
+    )
+    ON DUPLICATE KEY UPDATE
+      source = VALUES(source),
+      folio = VALUES(folio),
+      guest_id = VALUES(guest_id),
+      group_id = VALUES(group_id),
+      message_timestamp = VALUES(message_timestamp),
+      start_date = VALUES(start_date),
+      rooms_count = VALUES(rooms_count),
+      adults_count = VALUES(adults_count),
+      children_count = VALUES(children_count),
+      room_type_id = VALUES(room_type_id),
+      rate_text = VALUES(rate_text),
+      phone_snapshot = VALUES(phone_snapshot),
+      arrival_time_text = VALUES(arrival_time_text),
+      raw_text = VALUES(raw_text),
+      status = VALUES(status),
+      arrival_at = VALUES(arrival_at),
+      assigned_room_id = VALUES(assigned_room_id);
+
+    DELETE FROM reservation_dates
+    WHERE reservation_id = (
+      SELECT id FROM reservations WHERE source_key = ${mysql.quote(row.sourceKey)}
+    );
+
+    INSERT INTO reservation_dates (
+      reservation_id,
+      stay_date
+    ) VALUES
+      ${dates.map(date => `((SELECT id FROM reservations WHERE source_key = ${mysql.quote(row.sourceKey)}), ${mysql.quote(date)})`).join(",")};
+  `);
+
+  if (row.roomNumber) {
+    mysql.runSql(`
+      DELETE FROM reservation_room_nights
+      WHERE reservation_id = (
+        SELECT id FROM reservations WHERE source_key = ${mysql.quote(row.sourceKey)}
+      );
+
+      INSERT INTO reservation_room_nights (
+        reservation_id,
+        room_id,
+        stay_date,
+        occupancy_status,
+        source
+      ) VALUES
+        ${dates.map(date => `(
+          (SELECT id FROM reservations WHERE source_key = ${mysql.quote(row.sourceKey)}),
+          (SELECT id FROM rooms WHERE room_number = ${mysql.quote(row.roomNumber)}),
+          ${mysql.quote(date)},
+          'ocupada',
+          'arrival'
+        )`).join(",")}
+      ON DUPLICATE KEY UPDATE
+        reservation_id = VALUES(reservation_id),
+        occupancy_status = VALUES(occupancy_status),
+        source = VALUES(source);
+    `);
+  }
+}
+
+function readCalendarReservationsMysql(includeCanceled) {
+  return mysql.queryJson(`
+    SELECT JSON_OBJECT(
+      'sourceKey', r.source_key,
+      'source', r.source,
+      'folio', r.folio,
+      'groupId', r.group_id,
+      'timestamp', r.message_timestamp,
+      'nombre', g.name,
+      'fecha', DATE_FORMAT(r.start_date, '%d/%m/%Y'),
+      'dates', COALESCE(
+        (
+          SELECT JSON_ARRAYAGG(DATE_FORMAT(d.stay_date, '%d/%m/%Y') ORDER BY d.stay_date)
+          FROM reservation_dates d
+          WHERE d.reservation_id = r.id
+        ),
+        JSON_ARRAY()
+      ),
+      'habitaciones', r.rooms_count,
+      'adultos', r.adults_count,
+      'ninos', r.children_count,
+      'tipo', COALESCE(rt.name, ''),
+      'tarifa', r.rate_text,
+      'telefono', COALESCE(NULLIF(r.phone_snapshot, ''), g.phone),
+      'hora', r.arrival_time_text,
+      'arrivalAt', IFNULL(DATE_FORMAT(r.arrival_at, '%Y-%m-%dT%H:%i:%s.000Z'), ''),
+      'roomNumber', COALESCE(room.room_number, ''),
+      'raw', COALESCE(r.raw_text, ''),
+      'status', r.status
+    )
+    FROM reservations r
+    JOIN guests g ON g.id = r.guest_id
+    LEFT JOIN room_types rt ON rt.id = r.room_type_id
+    LEFT JOIN rooms room ON room.id = r.assigned_room_id
+    ${includeCanceled ? "" : "WHERE r.status != 'cancelada'"}
+    ORDER BY r.start_date, r.created_at;
+  `);
 }
 
 module.exports = {

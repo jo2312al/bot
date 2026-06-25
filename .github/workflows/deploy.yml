@@ -77,7 +77,7 @@ jobs:
           set -e &&
           cd '$DEPLOY_PATH' &&
           sudo apt-get update &&
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y tesseract-ocr imagemagick sqlite3 &&
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y tesseract-ocr imagemagick sqlite3 default-mysql-client &&
           npm install --omit=dev &&
           sudo install -m 644 deploy/hotel-bot.service /etc/systemd/system/hotel-bot.service &&
           sudo install -m 644 deploy/hotel-night-bot.service /etc/systemd/system/hotel-night-bot.service &&

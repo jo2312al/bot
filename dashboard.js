@@ -55,6 +55,8 @@ const {
   saveQuotation,
   saveReservationNote
 } = require("./services/dashboardExtrasService");
+const mysql =
+  require("./services/mysqlCliService");
 
 const PORT =
   Number(process.env.DASHBOARD_PORT || 3333);
@@ -2102,6 +2104,452 @@ function getSummary() {
   };
 }
 
+function normalizeReportMonth(value) {
+  const match =
+    String(value || "")
+      .match(/^(\d{4})-(\d{2})$/);
+
+  if (match) {
+    return `${match[1]}-${match[2]}`;
+  }
+
+  return getMexicoTodayIso()
+    .slice(0, 7);
+}
+
+function displayDateToIso(value) {
+  const [
+    day,
+    month,
+    year
+  ] =
+    String(value || "")
+      .split("/")
+      .map(Number);
+
+  if (!day || !month || !year) {
+    return "";
+  }
+
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function getMonthRange(month) {
+  const [year, monthNumber] =
+    normalizeReportMonth(month)
+      .split("-")
+      .map(Number);
+  const start =
+    new Date(
+      year,
+      monthNumber - 1,
+      1
+    );
+  const end =
+    new Date(
+      year,
+      monthNumber,
+      0
+    );
+
+  return {
+    month:
+      `${year}-${String(monthNumber).padStart(2, "0")}`,
+    startIso:
+      `${year}-${String(monthNumber).padStart(2, "0")}-01`,
+    endIso:
+      `${year}-${String(monthNumber).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`,
+    start,
+    end
+  };
+}
+
+function getReports({ month } = {}) {
+  const range =
+    getMonthRange(month);
+
+  if (mysql.ensureSchema()) {
+    return getMysqlReports(range);
+  }
+
+  return getFallbackReports(range);
+}
+
+function getMysqlReports(range) {
+  const monthStart =
+    `${range.month}-01`;
+
+  return {
+    mode:
+      "mysql",
+    month:
+      range.month,
+    generatedAt:
+      new Date().toISOString(),
+    dailyOccupancy:
+      mysql.queryJson(`
+        SELECT JSON_OBJECT(
+          'date', DATE_FORMAT(stay_date, '%d/%m/%Y'),
+          'occupiedRoomNights', occupied_room_nights,
+          'occupiedRooms', occupied_rooms,
+          'occupancyPercent', occupancy_percent
+        )
+        FROM report_daily_occupancy
+        WHERE stay_date BETWEEN ${mysql.quote(range.startIso)} AND ${mysql.quote(range.endIso)}
+        ORDER BY stay_date;
+      `),
+    roomRotation:
+      mysql.queryJson(`
+        SELECT JSON_OBJECT(
+          'monthStart', ${mysql.quote(monthStart)},
+          'roomNumber', room.room_number,
+          'roomType', rt.name,
+          'occupiedNights', COUNT(DISTINCT rn.id),
+          'lastOccupiedDate', IFNULL(DATE_FORMAT(MAX(rn.stay_date), '%d/%m/%Y'), ''),
+          'lastDeepCleanDate', IFNULL(DATE_FORMAT(MAX(CASE WHEN ret.code = 'DEEP_CLEAN' THEN re.event_date END), '%d/%m/%Y'), ''),
+          'lastAcMaintenanceDate', IFNULL(DATE_FORMAT(MAX(CASE WHEN ret.code = 'AC_MAINTENANCE' THEN re.event_date END), '%d/%m/%Y'), ''),
+          'lastMaintenanceDate', IFNULL(DATE_FORMAT(MAX(CASE WHEN ret.code = 'MAINTENANCE' THEN re.event_date END), '%d/%m/%Y'), '')
+        )
+        FROM rooms room
+        LEFT JOIN room_types rt ON rt.id = room.room_type_id
+        LEFT JOIN reservation_room_nights rn
+          ON rn.room_id = room.id
+          AND rn.stay_date BETWEEN ${mysql.quote(range.startIso)} AND ${mysql.quote(range.endIso)}
+        LEFT JOIN room_events re ON re.room_id = room.id
+        LEFT JOIN room_event_types ret ON ret.id = re.event_type_id
+        GROUP BY room.id, room.room_number, rt.name
+        ORDER BY COUNT(DISTINCT rn.id) DESC, room.room_number;
+      `),
+    serviceDue:
+      mysql.queryJson(`
+        SELECT JSON_OBJECT(
+          'roomNumber', room_number,
+          'roomType', room_type,
+          'lastDeepCleanDate', IFNULL(DATE_FORMAT(last_deep_clean_date, '%d/%m/%Y'), ''),
+          'daysSinceDeepClean', IFNULL(days_since_deep_clean, 9999),
+          'lastAcMaintenanceDate', IFNULL(DATE_FORMAT(last_ac_maintenance_date, '%d/%m/%Y'), ''),
+          'daysSinceAcMaintenance', IFNULL(days_since_ac_maintenance, 9999),
+          'occupiedNightsLast30Days', occupied_nights_last_30_days
+        )
+        FROM report_room_service_due
+        ORDER BY occupied_nights_last_30_days DESC, days_since_deep_clean DESC, room_number;
+      `),
+    reservationsBySource:
+      mysql.queryJson(`
+        SELECT JSON_OBJECT(
+          'monthStart', month_start,
+          'source', source,
+          'reservationsCount', reservations_count,
+          'roomsReserved', rooms_reserved,
+          'adultsCount', adults_count,
+          'childrenCount', children_count
+        )
+        FROM report_reservations_by_source_month
+        WHERE month_start = ${mysql.quote(monthStart)}
+        ORDER BY reservations_count DESC;
+      `),
+    todayOccupancy:
+      mysql.queryJson(`
+        SELECT JSON_OBJECT(
+          'roomNumber', room_number,
+          'roomType', room_type,
+          'occupancyStatus', occupancy_status,
+          'folio', folio,
+          'guestName', guest_name,
+          'arrivalAt', IFNULL(DATE_FORMAT(arrival_at, '%Y-%m-%dT%H:%i:%s.000Z'), '')
+        )
+        FROM report_today_occupancy
+        ORDER BY room_number;
+      `),
+    roomEvents:
+      mysql.queryJson(`
+        SELECT JSON_OBJECT(
+          'id', e.id,
+          'roomNumber', room.room_number,
+          'eventType', t.name,
+          'eventCode', t.code,
+          'eventDate', DATE_FORMAT(e.event_date, '%d/%m/%Y'),
+          'status', e.status,
+          'title', e.title,
+          'notes', e.notes,
+          'cost', e.cost,
+          'createdBy', e.created_by
+        )
+        FROM room_events e
+        JOIN rooms room ON room.id = e.room_id
+        JOIN room_event_types t ON t.id = e.event_type_id
+        WHERE e.event_date BETWEEN ${mysql.quote(range.startIso)} AND ${mysql.quote(range.endIso)}
+        ORDER BY e.event_date DESC, room.room_number;
+      `),
+    roomEventTypes:
+      mysql.queryJson(`
+        SELECT JSON_OBJECT(
+          'code', code,
+          'name', name,
+          'defaultIntervalDays', default_interval_days
+        )
+        FROM room_event_types
+        ORDER BY name;
+      `),
+    rooms:
+      mysql.queryJson(`
+        SELECT JSON_OBJECT(
+          'roomNumber', room_number
+        )
+        FROM rooms
+        ORDER BY room_number;
+      `)
+  };
+}
+
+function getFallbackReports(range) {
+  const summary =
+    getSummary();
+  const reservations =
+    summary.groupReservations || [];
+  const byDate =
+    new Map();
+  const roomRotation =
+    new Map();
+
+  reservations
+    .filter(reservation =>
+      reservation.status !== "cancelada"
+    )
+    .forEach(reservation => {
+      const dates =
+        Array.isArray(reservation.dates)
+          ? reservation.dates
+          : [reservation.fecha].filter(Boolean);
+      const roomsCount =
+        Number(reservation.habitaciones || 1);
+
+      dates.forEach(displayDate => {
+        const iso =
+          displayDateToIso(displayDate);
+
+        if (iso < range.startIso || iso > range.endIso) {
+          return;
+        }
+
+        const current =
+          byDate.get(displayDate)
+          ||
+          {
+            date:
+              displayDate,
+            occupiedRoomNights:
+              0,
+            occupiedRooms:
+              0,
+            occupancyPercent:
+              0
+          };
+
+        current.occupiedRoomNights += roomsCount;
+        current.occupiedRooms += roomsCount;
+        current.occupancyPercent =
+          Number(((current.occupiedRooms / TOTAL_ROOMS) * 100).toFixed(2));
+        byDate.set(
+          displayDate,
+          current
+        );
+
+        if (reservation.roomNumber) {
+          const row =
+            roomRotation.get(reservation.roomNumber)
+            ||
+            {
+              roomNumber:
+                reservation.roomNumber,
+              roomType:
+                reservation.tipo || "",
+              occupiedNights:
+                0,
+              lastOccupiedDate:
+                "",
+              lastDeepCleanDate:
+                "",
+              lastAcMaintenanceDate:
+                "",
+              lastMaintenanceDate:
+                ""
+            };
+
+          row.occupiedNights += 1;
+          row.lastOccupiedDate =
+            displayDate;
+          roomRotation.set(
+            reservation.roomNumber,
+            row
+          );
+        }
+      });
+    });
+
+  const rackRooms =
+    readLatestRackStatus()?.rooms || [];
+
+  return {
+    mode:
+      "fallback",
+    month:
+      range.month,
+    generatedAt:
+      new Date().toISOString(),
+    dailyOccupancy:
+      Array.from(byDate.values())
+        .sort((left, right) =>
+          dateValue(left.date) - dateValue(right.date)
+        ),
+    roomRotation:
+      Array.from(roomRotation.values())
+        .sort((left, right) =>
+          Number(right.occupiedNights || 0) - Number(left.occupiedNights || 0)
+        ),
+    serviceDue:
+      rackRooms.map(room => ({
+        roomNumber:
+          room.room,
+        roomType:
+          room.type,
+        lastDeepCleanDate:
+          "",
+        daysSinceDeepClean:
+          null,
+        lastAcMaintenanceDate:
+          "",
+        daysSinceAcMaintenance:
+          null,
+        occupiedNightsLast30Days:
+          0
+      })),
+    reservationsBySource:
+      Object.values(
+        reservations.reduce((acc, reservation) => {
+          const source =
+            reservation.source || "-";
+          if (!acc[source]) {
+            acc[source] = {
+              source,
+              reservationsCount:
+                0,
+              roomsReserved:
+                0,
+              adultsCount:
+                0,
+              childrenCount:
+                0
+            };
+          }
+          acc[source].reservationsCount++;
+          acc[source].roomsReserved += Number(reservation.habitaciones || 1);
+          acc[source].adultsCount += Number(reservation.adultos || 0);
+          acc[source].childrenCount += Number(reservation.ninos || 0);
+          return acc;
+        }, {})
+      ),
+    todayOccupancy:
+      rackRooms.map(room => ({
+        roomNumber:
+          room.room,
+        roomType:
+          room.type,
+        occupancyStatus:
+          ["OC", "OS", "OL", "OR", "OSE", "ND"].includes(room.status)
+            ? "ocupada"
+            : "libre",
+        folio:
+          "",
+        guestName:
+          "",
+        arrivalAt:
+          ""
+      })),
+    roomEvents:
+      [],
+    roomEventTypes:
+      [
+        {
+          code:
+            "DEEP_CLEAN",
+          name:
+            "Limpieza profunda"
+        },
+        {
+          code:
+            "MAINTENANCE",
+          name:
+            "Mantenimiento general"
+        },
+        {
+          code:
+            "AC_MAINTENANCE",
+          name:
+            "Mantenimiento de clima"
+        },
+        {
+          code:
+            "OBSERVATION",
+          name:
+            "Nota de habitacion"
+        }
+      ],
+    rooms:
+      HOTEL_ROOM_NUMBERS.map(roomNumber => ({
+        roomNumber
+      }))
+  };
+}
+
+function saveRoomEvent(input) {
+  if (!mysql.ensureSchema()) {
+    throw new Error("Activa MySQL para guardar historial de habitaciones");
+  }
+
+  const room =
+    String(input.roomNumber || "")
+      .replace(/\D/g, "");
+  const eventCode =
+    String(input.eventCode || "")
+      .trim()
+      .toUpperCase();
+  const eventDate =
+    String(input.eventDate || "")
+      .trim();
+
+  if (!room || !eventCode || !eventDate) {
+    throw new Error("Habitacion, tipo y fecha son requeridos");
+  }
+
+  mysql.runSql(`
+    INSERT INTO room_events (
+      room_id,
+      event_type_id,
+      event_date,
+      status,
+      title,
+      notes,
+      cost,
+      created_by
+    ) VALUES (
+      (SELECT id FROM rooms WHERE room_number = ${mysql.quote(room)}),
+      (SELECT id FROM room_event_types WHERE code = ${mysql.quote(eventCode)}),
+      ${mysql.quote(eventDate)},
+      ${mysql.quote(input.status || "hecho")},
+      ${mysql.quote(input.title || "")},
+      ${mysql.quote(input.notes || "")},
+      ${input.cost ? Number(input.cost) : "NULL"},
+      ${mysql.quote(input.createdBy || "dashboard")}
+    );
+  `);
+
+  return {
+    ok:
+      true
+  };
+}
+
 async function getBotStatus() {
   const statuses =
     readBotStatuses();
@@ -2840,6 +3288,76 @@ function pageHtml() {
     .rack-type-legend .king { background: #ede9fe; border-color: #c4b5fd; }
     .rack-type-legend .double { background: #dbeafe; border-color: #60a5fa; }
     .rack-type-legend .suite { background: #fef3c7; border-color: #fcd34d; }
+    .report-toolbar {
+      display: flex;
+      gap: 10px;
+      align-items: end;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .report-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .report-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 12px;
+      min-width: 0;
+    }
+    .report-card.wide {
+      grid-column: 1 / -1;
+    }
+    .report-card h3 {
+      margin: 0 0 4px;
+      font-size: 16px;
+    }
+    .report-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 13px;
+    }
+    .report-table th,
+    .report-table td {
+      border-bottom: 1px solid var(--line);
+      padding: 7px 6px;
+      text-align: left;
+      vertical-align: top;
+    }
+    .report-table th {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+    .report-kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .report-kpi {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 10px;
+    }
+    .report-kpi strong {
+      display: block;
+      font-size: 24px;
+      margin-top: 4px;
+    }
+    .room-event-form {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      align-items: end;
+    }
+    .room-event-form .wide {
+      grid-column: span 2;
+    }
     .note-row {
       display: grid;
       grid-template-columns: minmax(160px, 1fr) auto;
@@ -3246,6 +3764,7 @@ function pageHtml() {
       <button id="tab-reservations" onclick="showView('reservations')">Reservas</button>
       <button id="tab-quotes" onclick="showView('quotes')">Cotizaciones</button>
       <button id="tab-rack" onclick="showView('rack')">Rack</button>
+      <button id="tab-reports" onclick="showView('reports')">Reportes</button>
     </nav>
 
     <div id="view-main" class="view-panel">
@@ -3604,6 +4123,81 @@ function pageHtml() {
       <div id="rackRoomGrid"></div>
     </section>
     </div>
+
+    <div id="view-reports" class="view-panel hidden">
+    <section class="panel">
+      <div class="toolbar">
+        <div>
+          <strong>Reportes operativos</strong>
+          <div class="muted">Ocupacion, rotacion de habitaciones, mantenimiento y notas historicas.</div>
+        </div>
+        <button class="primary" onclick="loadReports()">Actualizar reportes</button>
+      </div>
+      <div class="report-toolbar">
+        <label>
+          Mes
+          <input id="reportMonth" type="month" onchange="loadReports()">
+        </label>
+        <div id="reportMode" class="muted"></div>
+      </div>
+      <div id="reportKpis" class="report-kpis"></div>
+      <div class="report-grid">
+        <div class="report-card wide">
+          <h3>Ocupacion diaria del mes</h3>
+          <div class="muted">Habitaciones ocupadas por fecha.</div>
+          <div id="dailyOccupancyReport"></div>
+        </div>
+        <div class="report-card wide">
+          <h3>Rotacion por habitacion</h3>
+          <div class="muted">Noches ocupadas por cuarto y ultimos mantenimientos.</div>
+          <div id="roomRotationReport"></div>
+        </div>
+        <div class="report-card">
+          <h3>Mantenimiento / limpieza pendiente</h3>
+          <div class="muted">Prioriza cuartos usados recientemente o con servicios vencidos.</div>
+          <div id="serviceDueReport"></div>
+        </div>
+        <div class="report-card">
+          <h3>Reservas por fuente</h3>
+          <div class="muted">Manual, Excel, bot.</div>
+          <div id="sourceReport"></div>
+        </div>
+        <div class="report-card wide">
+          <h3>Registrar nota o mantenimiento de habitacion</h3>
+          <div class="room-event-form">
+            <label>
+              Habitacion
+              <input id="roomEventRoom" list="roomEventRoomOptions" placeholder="Ej. 101">
+              <datalist id="roomEventRoomOptions"></datalist>
+            </label>
+            <label>
+              Tipo
+              <select id="roomEventType"></select>
+            </label>
+            <label>
+              Fecha
+              <input id="roomEventDate" type="date">
+            </label>
+            <label>
+              Costo
+              <input id="roomEventCost" type="number" min="0" placeholder="Opcional">
+            </label>
+            <label class="wide">
+              Titulo
+              <input id="roomEventTitle" placeholder="Ej. Limpieza profunda, cambio de filtro">
+            </label>
+            <label class="wide">
+              Notas
+              <input id="roomEventNotes" placeholder="Detalle del trabajo o pendiente">
+            </label>
+            <button class="primary" onclick="saveRoomEvent()">Guardar evento</button>
+            <div id="roomEventStatus" class="muted"></div>
+          </div>
+          <div id="roomEventsReport" style="margin-top:14px"></div>
+        </div>
+      </div>
+    </section>
+    </div>
   </main>
   <div id="dayModalBackdrop" class="modal-backdrop hidden" onclick="closeDayModal()">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="dayModalTitle" onclick="event.stopPropagation()">
@@ -3760,6 +4354,7 @@ function pageHtml() {
     let pendingGroupReservations = [];
     let pendingRackRoom = null;
     let activeModalIsoDate = "";
+    let reportsData = null;
     let quoteSectionsData = [
       {
         title: 'Hospedaje',
@@ -3838,6 +4433,12 @@ function pageHtml() {
         .map(([type, limit]) => '<span><b>' + escapeHtml(type) + '</b><b>' + limit + '</b></span>')
         .join('');
       updatedAt.textContent = 'Actualizado: ' + new Date(data.generatedAt).toLocaleString();
+      if (!reportMonth.value) {
+        reportMonth.value = String(data.today || '').slice(0, 7);
+      }
+      if (!roomEventDate.value) {
+        roomEventDate.value = data.today;
+      }
 
       renderRackDashboard(data.rackStatus);
       renderRackRoomGrid(data.rackStatus);
@@ -3856,7 +4457,7 @@ function pageHtml() {
     }
 
     function showView(name) {
-      ['main', 'calendar', 'reservations', 'quotes', 'rack'].forEach(view => {
+      ['main', 'calendar', 'reservations', 'quotes', 'rack', 'reports'].forEach(view => {
         const panel = document.getElementById('view-' + view);
         const tab = document.getElementById('tab-' + view);
 
@@ -3868,6 +4469,183 @@ function pageHtml() {
           tab.classList.toggle('active', view === name);
         }
       });
+
+      if (name === 'reports') {
+        loadReports();
+      }
+    }
+
+    async function loadReports() {
+      const month = reportMonth.value || String(dashboardData?.today || '').slice(0, 7);
+      const response = await fetch('/api/reports?month=' + encodeURIComponent(month));
+      const data = await response.json();
+
+      if (!data.ok) {
+        reportMode.textContent = data.error || 'No se pudieron cargar reportes.';
+        return;
+      }
+
+      reportsData = data.reports;
+      renderReports(reportsData);
+    }
+
+    function renderReports(report) {
+      const daily = report.dailyOccupancy || [];
+      const totalOccupied = daily.reduce((total, row) => total + Number(row.occupiedRooms || 0), 0);
+      const avgOccupancy = daily.length
+        ? Math.round(daily.reduce((total, row) => total + Number(row.occupancyPercent || 0), 0) / daily.length)
+        : 0;
+      const topRoom = (report.roomRotation || [])[0];
+      const dueCount = (report.serviceDue || []).filter(row =>
+        Number(row.daysSinceDeepClean || 0) >= 30 || Number(row.daysSinceAcMaintenance || 0) >= 90
+      ).length;
+
+      reportMode.textContent = report.mode === 'mysql'
+        ? 'Datos desde MySQL normalizado.'
+        : 'Modo parcial: activa MySQL para historial exacto por habitacion y mantenimiento.';
+      reportKpis.innerHTML =
+        renderReportKpi('Dias con ocupacion', daily.length) +
+        renderReportKpi('Room nights mes', totalOccupied) +
+        renderReportKpi('Ocupacion promedio', avgOccupancy + '%') +
+        renderReportKpi('Cuartos por revisar', dueCount);
+
+      dailyOccupancyReport.innerHTML = renderDailyOccupancyTable(daily);
+      roomRotationReport.innerHTML = renderRoomRotationTable(report.roomRotation || []);
+      serviceDueReport.innerHTML = renderServiceDueTable(report.serviceDue || []);
+      sourceReport.innerHTML = renderSourceReport(report.reservationsBySource || []);
+      roomEventsReport.innerHTML = renderRoomEventsTable(report.roomEvents || []);
+      renderRoomEventOptions(report);
+    }
+
+    function renderReportKpi(label, value) {
+      return '<div class="report-kpi"><span class="muted">' + escapeHtml(label) + '</span><strong>' + escapeHtml(value) + '</strong></div>';
+    }
+
+    function renderDailyOccupancyTable(rows) {
+      if (!rows.length) {
+        return '<div class="muted">Sin ocupacion para este mes.</div>';
+      }
+
+      return '<table class="report-table"><thead><tr><th>Fecha</th><th>Ocupadas</th><th>%</th></tr></thead><tbody>' +
+        rows.map(row =>
+          '<tr><td>' + escapeHtml(row.date) + '</td><td>' + escapeHtml(row.occupiedRooms || 0) + '</td><td>' + escapeHtml(row.occupancyPercent || 0) + '%</td></tr>'
+        ).join('') +
+      '</tbody></table>';
+    }
+
+    function renderRoomRotationTable(rows) {
+      if (!rows.length) {
+        return '<div class="muted">Sin habitaciones asignadas en este mes. El historico exacto se llena cuando se registra llegada con habitacion.</div>';
+      }
+
+      return '<table class="report-table"><thead><tr><th>Hab</th><th>Tipo</th><th>Noches</th><th>Ultima ocupacion</th><th>Limpieza profunda</th><th>Clima</th><th>Mantenimiento</th></tr></thead><tbody>' +
+        rows.map(row =>
+          '<tr>' +
+            '<td><strong>' + escapeHtml(row.roomNumber || '-') + '</strong></td>' +
+            '<td>' + escapeHtml(row.roomType || '-') + '</td>' +
+            '<td>' + escapeHtml(row.occupiedNights || 0) + '</td>' +
+            '<td>' + escapeHtml(row.lastOccupiedDate || '-') + '</td>' +
+            '<td>' + escapeHtml(row.lastDeepCleanDate || '-') + '</td>' +
+            '<td>' + escapeHtml(row.lastAcMaintenanceDate || '-') + '</td>' +
+            '<td>' + escapeHtml(row.lastMaintenanceDate || '-') + '</td>' +
+          '</tr>'
+        ).join('') +
+      '</tbody></table>';
+    }
+
+    function renderServiceDueTable(rows) {
+      if (!rows.length) {
+        return '<div class="muted">Sin datos de habitaciones.</div>';
+      }
+
+      return '<table class="report-table"><thead><tr><th>Hab</th><th>30 dias</th><th>Clima</th><th>Uso 30d</th></tr></thead><tbody>' +
+        rows.slice(0, 18).map(row => {
+          const deep = row.daysSinceDeepClean === null || row.daysSinceDeepClean === undefined
+            ? '-'
+            : row.daysSinceDeepClean + ' dias';
+          const ac = row.daysSinceAcMaintenance === null || row.daysSinceAcMaintenance === undefined
+            ? '-'
+            : row.daysSinceAcMaintenance + ' dias';
+          return '<tr>' +
+            '<td><strong>' + escapeHtml(row.roomNumber || '-') + '</strong><br><span class="muted">' + escapeHtml(row.roomType || '') + '</span></td>' +
+            '<td>' + escapeHtml(deep) + '<br><span class="muted">' + escapeHtml(row.lastDeepCleanDate || 'Sin fecha') + '</span></td>' +
+            '<td>' + escapeHtml(ac) + '<br><span class="muted">' + escapeHtml(row.lastAcMaintenanceDate || 'Sin fecha') + '</span></td>' +
+            '<td>' + escapeHtml(row.occupiedNightsLast30Days || 0) + '</td>' +
+          '</tr>';
+        }).join('') +
+      '</tbody></table>';
+    }
+
+    function renderSourceReport(rows) {
+      if (!rows.length) {
+        return '<div class="muted">Sin datos de fuentes.</div>';
+      }
+
+      return '<table class="report-table"><thead><tr><th>Fuente</th><th>Reservas</th><th>Habs</th><th>Huespedes</th></tr></thead><tbody>' +
+        rows.map(row =>
+          '<tr><td>' + escapeHtml(row.source || '-') + '</td><td>' + escapeHtml(row.reservationsCount || 0) + '</td><td>' + escapeHtml(row.roomsReserved || 0) + '</td><td>' + escapeHtml(Number(row.adultsCount || 0) + Number(row.childrenCount || 0)) + '</td></tr>'
+        ).join('') +
+      '</tbody></table>';
+    }
+
+    function renderRoomEventsTable(rows) {
+      if (!rows.length) {
+        return '<div class="muted">Sin eventos registrados en este mes.</div>';
+      }
+
+      return '<table class="report-table"><thead><tr><th>Fecha</th><th>Hab</th><th>Tipo</th><th>Detalle</th></tr></thead><tbody>' +
+        rows.map(row =>
+          '<tr>' +
+            '<td>' + escapeHtml(row.eventDate || '-') + '</td>' +
+            '<td><strong>' + escapeHtml(row.roomNumber || '-') + '</strong></td>' +
+            '<td>' + escapeHtml(row.eventType || row.eventCode || '-') + '</td>' +
+            '<td><strong>' + escapeHtml(row.title || '-') + '</strong><br><span class="muted">' + escapeHtml(row.notes || '') + '</span></td>' +
+          '</tr>'
+        ).join('') +
+      '</tbody></table>';
+    }
+
+    function renderRoomEventOptions(report) {
+      roomEventRoomOptions.innerHTML = (report.rooms || [])
+        .map(room => '<option value="' + escapeHtml(room.roomNumber || '') + '"></option>')
+        .join('');
+      const previousType = roomEventType.value;
+      roomEventType.innerHTML = (report.roomEventTypes || [])
+        .map(type => '<option value="' + escapeHtml(type.code || '') + '">' + escapeHtml(type.name || type.code || '') + '</option>')
+        .join('');
+      if (previousType) {
+        roomEventType.value = previousType;
+      }
+    }
+
+    async function saveRoomEvent() {
+      roomEventStatus.textContent = 'Guardando...';
+      const response = await fetch('/api/rooms/events', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          roomNumber: roomEventRoom.value,
+          eventCode: roomEventType.value,
+          eventDate: roomEventDate.value,
+          title: roomEventTitle.value,
+          notes: roomEventNotes.value,
+          cost: roomEventCost.value
+        })
+      });
+      const data = await response.json();
+
+      if (!data.ok) {
+        roomEventStatus.textContent = data.error || 'No se pudo guardar. Requiere MySQL activo.';
+        return;
+      }
+
+      roomEventTitle.value = '';
+      roomEventNotes.value = '';
+      roomEventCost.value = '';
+      roomEventStatus.textContent = 'Evento guardado.';
+      await loadReports();
     }
 
     function renderOverbookingAlerts(alerts) {
@@ -5903,6 +6681,60 @@ const server =
       url.pathname === "/api/summary"
     ) {
       sendJson(res, 200, getSummary());
+      return;
+    }
+
+    if (
+      req.method === "GET"
+      &&
+      url.pathname === "/api/reports"
+    ) {
+      try {
+        sendJson(res, 200, {
+          ok:
+            true,
+          reports:
+            getReports({
+              month:
+                url.searchParams.get("month")
+            })
+        });
+      } catch (error) {
+        sendJson(res, 500, {
+          ok:
+            false,
+          error:
+            error.message || "No se pudieron generar reportes"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/rooms/events"
+    ) {
+      try {
+        const body =
+          await readBody(req);
+
+        sendJson(res, 200, {
+          ok:
+            true,
+          event:
+            saveRoomEvent(body)
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok:
+            false,
+          error:
+            error.message || "No se pudo guardar el evento de habitacion"
+        });
+      }
+
       return;
     }
 

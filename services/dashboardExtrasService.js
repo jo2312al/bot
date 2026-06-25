@@ -1,5 +1,7 @@
 const fs = require("fs");
 const path = require("path");
+const mysql =
+  require("./mysqlCliService");
 
 const DATA_DIR =
   path.join(
@@ -171,6 +173,28 @@ function getReservationNoteKey(reservation) {
 }
 
 function readReservationNotes() {
+  if (mysql.ensureSchema()) {
+    return Object.fromEntries(
+      mysql.queryJson(`
+        SELECT JSON_OBJECT(
+          'reservationKey', reservation_key,
+          'note', note,
+          'updatedAt', DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s.000Z')
+        )
+        FROM reservation_notes;
+      `)
+        .map(row => [
+          row.reservationKey,
+          {
+            note:
+              row.note || "",
+            updatedAt:
+              row.updatedAt || ""
+          }
+        ])
+    );
+  }
+
   return readJson(
     NOTES_FILE,
     {}
@@ -186,6 +210,30 @@ function saveReservationNote({
 
   if (!key) {
     throw new Error("Reserva requerida");
+  }
+
+  if (mysql.ensureSchema()) {
+    mysql.runSql(`
+      INSERT INTO reservation_notes (
+        reservation_key,
+        reservation_id,
+        note
+      ) VALUES (
+        ${mysql.quote(key)},
+        (SELECT id FROM reservations WHERE source_key = ${mysql.quote(key)}),
+        ${mysql.quote(String(note || "").trim())}
+      )
+      ON DUPLICATE KEY UPDATE
+        reservation_id = VALUES(reservation_id),
+        note = VALUES(note);
+    `);
+
+    return {
+      note:
+        String(note || "").trim(),
+      updatedAt:
+        new Date().toISOString()
+    };
   }
 
   const notes =
@@ -207,6 +255,35 @@ function saveReservationNote({
 }
 
 function readQuotations() {
+  if (mysql.ensureSchema()) {
+    return mysql.queryJson(`
+      SELECT JSON_OBJECT(
+        'id', id,
+        'client', client,
+        'contact', contact,
+        'eventName', event_name,
+        'template', template,
+        'headline', headline,
+        'stayDates', stay_dates,
+        'people', people_count,
+        'checkIn', check_in_text,
+        'checkOut', check_out_text,
+        'validUntil', valid_until,
+        'notes', notes,
+        'serviceChargePercent', service_charge_percent,
+        'sections', sections_json,
+        'subtotal', subtotal,
+        'serviceCharge', service_charge,
+        'serviceChargeBase', service_charge_base,
+        'total', total,
+        'createdAt', DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s.000Z'),
+        'updatedAt', DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s.000Z')
+      )
+      FROM quotations
+      ORDER BY updated_at DESC;
+    `);
+  }
+
   return readJson(
     QUOTES_FILE,
     []
@@ -232,6 +309,24 @@ function normalizeQuotationMenu(items) {
 }
 
 function readQuotationMenu() {
+  if (mysql.ensureSchema()) {
+    const rows =
+      mysql.queryJson(`
+        SELECT JSON_OBJECT(
+          'title', title,
+          'price', price,
+          'description', description
+        )
+        FROM quotation_menu_items
+        WHERE active = 1
+        ORDER BY sort_order, title;
+      `);
+
+    return rows.length
+      ? rows
+      : DEFAULT_QUOTATION_MENU;
+  }
+
   const menu =
     normalizeQuotationMenu(
       readJson(
@@ -251,6 +346,26 @@ function saveQuotationMenu(items) {
 
   if (!menu.length) {
     throw new Error("Agrega al menos un platillo");
+  }
+
+  if (mysql.ensureSchema()) {
+    mysql.runSql("UPDATE quotation_menu_items SET active = 0;");
+    mysql.runSql(`
+      INSERT INTO quotation_menu_items (
+        title,
+        price,
+        description,
+        sort_order,
+        active
+      ) VALUES
+        ${menu.map((item, index) => `(${mysql.quote(item.title)}, ${Number(item.price)}, ${mysql.quote(item.description)}, ${index}, 1)`).join(",")}
+      ON DUPLICATE KEY UPDATE
+        price = VALUES(price),
+        description = VALUES(description),
+        sort_order = VALUES(sort_order),
+        active = 1;
+    `);
+    return menu;
   }
 
   writeJson(
@@ -406,6 +521,74 @@ function normalizeQuotation(input) {
 function saveQuotation(input) {
   const quotation =
     normalizeQuotation(input);
+
+  if (mysql.ensureSchema()) {
+    mysql.runSql(`
+      INSERT INTO quotations (
+        id,
+        client,
+        contact,
+        event_name,
+        template,
+        headline,
+        stay_dates,
+        people_count,
+        check_in_text,
+        check_out_text,
+        valid_until,
+        notes,
+        service_charge_percent,
+        service_charge_base,
+        subtotal,
+        service_charge,
+        total,
+        sections_json,
+        created_at,
+        updated_at
+      ) VALUES (
+        ${mysql.quote(quotation.id)},
+        ${mysql.quote(quotation.client)},
+        ${mysql.quote(quotation.contact)},
+        ${mysql.quote(quotation.eventName)},
+        ${mysql.quote(quotation.template)},
+        ${mysql.quote(quotation.headline)},
+        ${mysql.quote(quotation.stayDates)},
+        ${Number(quotation.people)},
+        ${mysql.quote(quotation.checkIn)},
+        ${mysql.quote(quotation.checkOut)},
+        ${mysql.quote(quotation.validUntil)},
+        ${mysql.quote(quotation.notes)},
+        ${Number(quotation.serviceChargePercent)},
+        ${Number(quotation.serviceChargeBase)},
+        ${Number(quotation.subtotal)},
+        ${Number(quotation.serviceCharge)},
+        ${Number(quotation.total)},
+        ${mysql.quote(JSON.stringify(quotation.sections))},
+        ${mysql.quote(mysql.timestampToSql(quotation.createdAt) || new Date().toISOString().slice(0, 19).replace("T", " "))},
+        ${mysql.quote(mysql.timestampToSql(quotation.updatedAt) || new Date().toISOString().slice(0, 19).replace("T", " "))}
+      )
+      ON DUPLICATE KEY UPDATE
+        client = VALUES(client),
+        contact = VALUES(contact),
+        event_name = VALUES(event_name),
+        template = VALUES(template),
+        headline = VALUES(headline),
+        stay_dates = VALUES(stay_dates),
+        people_count = VALUES(people_count),
+        check_in_text = VALUES(check_in_text),
+        check_out_text = VALUES(check_out_text),
+        valid_until = VALUES(valid_until),
+        notes = VALUES(notes),
+        service_charge_percent = VALUES(service_charge_percent),
+        service_charge_base = VALUES(service_charge_base),
+        subtotal = VALUES(subtotal),
+        service_charge = VALUES(service_charge),
+        total = VALUES(total),
+        sections_json = VALUES(sections_json),
+        updated_at = VALUES(updated_at);
+    `);
+    return quotation;
+  }
 
   const quotations =
     readQuotations()

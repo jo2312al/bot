@@ -11,6 +11,7 @@ ExecStart=/usr/bin/node dashboard.js
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
+EnvironmentFile=-/opt/hotel-bot/.env
 Environment=DASHBOARD_PORT=3333
 
 [Install]

@@ -9,3 +9,5 @@ data/groupReservationNotifications.json
 data/*.db
 data/*.db-*
 logs/*.log
+backups/
+outputs/

@@ -11,6 +11,7 @@ ExecStart=/usr/bin/node index.js
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
+EnvironmentFile=-/opt/hotel-bot/.env
 Environment=BOT_ID=nocturno
 Environment=BOT_LABEL=Bot nocturno
 Environment=BOT_AUTH_DIR=auth-nocturno

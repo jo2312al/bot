@@ -1,6 +1,8 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const mysql =
+  require("./mysqlCliService");
 
 const QUEUE_FILE =
   path.join(
@@ -100,6 +102,27 @@ function enqueueReservationGroupNotification(reservations, origin = "dashboard")
       new Date().toISOString(),
     sentAt: null
   };
+
+  if (mysql.ensureSchema()) {
+    mysql.runSql(`
+      INSERT INTO reservation_group_notifications (
+        id,
+        origin,
+        reservations_json,
+        created_at,
+        sent_at
+      ) VALUES (
+        ${mysql.quote(notification.id)},
+        ${mysql.quote(notification.origin)},
+        ${mysql.quote(JSON.stringify(notification.reservations))},
+        ${mysql.quote(notification.createdAt.slice(0, 19).replace("T", " "))},
+        NULL
+      );
+    `);
+
+    return notification;
+  }
+
   const queue =
     readQueue();
 
@@ -109,6 +132,26 @@ function enqueueReservationGroupNotification(reservations, origin = "dashboard")
 }
 
 function readPendingReservationGroupNotifications() {
+  if (mysql.ensureSchema()) {
+    return mysql.queryJson(`
+      SELECT JSON_OBJECT(
+        'id', id,
+        'origin', origin,
+        'reservations', reservations_json,
+        'createdAt', DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s.000Z'),
+        'sentAt', IFNULL(DATE_FORMAT(sent_at, '%Y-%m-%dT%H:%i:%s.000Z'), '')
+      )
+      FROM reservation_group_notifications
+      WHERE sent_at IS NULL
+      ORDER BY created_at;
+    `)
+      .map(row => ({
+        ...row,
+        sentAt:
+          row.sentAt || null
+      }));
+  }
+
   return readQueue()
     .filter(notification =>
       !notification.sentAt
@@ -116,6 +159,15 @@ function readPendingReservationGroupNotifications() {
 }
 
 function markReservationGroupNotificationSent(id) {
+  if (mysql.ensureSchema()) {
+    mysql.runSql(`
+      UPDATE reservation_group_notifications
+      SET sent_at = CURRENT_TIMESTAMP
+      WHERE id = ${mysql.quote(id)};
+    `);
+    return;
+  }
+
   const rows =
     readQueue()
       .map(notification =>

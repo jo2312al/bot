@@ -1,5 +1,7 @@
 const fs = require("fs");
 const path = require("path");
+const mysql =
+  require("./mysqlCliService");
 
 const DATA_FILE =
   path.join(
@@ -132,6 +134,19 @@ function normalizeDate(value) {
 }
 
 function readClosedDates() {
+  if (mysql.ensureSchema()) {
+    return mysql.queryJson(`
+      SELECT JSON_OBJECT(
+        'date', DATE_FORMAT(closed_date, '%d/%m/%Y')
+      )
+      FROM closed_dates
+      ORDER BY closed_date;
+    `)
+      .map(row =>
+        row.date
+      );
+  }
+
   ensureDataFile();
 
   try {
@@ -158,6 +173,26 @@ function readClosedDates() {
 }
 
 function writeClosedDates(dates) {
+  if (mysql.ensureSchema()) {
+    mysql.runSql("DELETE FROM closed_dates;");
+
+    const normalized =
+      dates
+        .map(normalizeDate)
+        .filter(Boolean)
+        .map(mysql.displayToSqlDate)
+        .filter(Boolean);
+
+    if (normalized.length) {
+      mysql.runSql(`
+        INSERT INTO closed_dates (closed_date)
+        VALUES ${normalized.map(date => `(${mysql.quote(date)})`).join(",")};
+      `);
+    }
+
+    return;
+  }
+
   ensureDataFile();
 
   fs.writeFileSync(

@@ -4,6 +4,8 @@ const path = require("path");
 const {
   execFile
 } = require("child_process");
+const mysql =
+  require("./mysqlCliService");
 
 const RACK_STATUS_FILE =
   path.join(
@@ -247,6 +249,20 @@ function validateRackReportDate(reportDateTime) {
 }
 
 function readLatestRackStatus() {
+  if (mysql.ensureSchema()) {
+    const rows =
+      mysql.queryJson(`
+        SELECT JSON_OBJECT(
+          'payload', payload_json
+        )
+        FROM rack_snapshots
+        ORDER BY uploaded_at DESC, id DESC
+        LIMIT 1;
+      `);
+
+    return rows[0]?.payload || null;
+  }
+
   ensureDataDir();
 
   if (!fs.existsSync(RACK_STATUS_FILE)) {
@@ -266,6 +282,100 @@ function readLatestRackStatus() {
 }
 
 function saveLatestRackStatus(nextStatus) {
+  if (mysql.ensureSchema()) {
+    const current =
+      readLatestRackStatus();
+
+    const currentTime =
+      current?.reportDateTime
+        ? new Date(current.reportDateTime).getTime()
+        : 0;
+
+    const nextTime =
+      nextStatus?.reportDateTime
+        ? new Date(nextStatus.reportDateTime).getTime()
+        : Date.now();
+
+    if (
+      current
+      &&
+      currentTime > nextTime
+    ) {
+      return {
+        saved:
+          false,
+        latest:
+          current
+      };
+    }
+
+    mysql.runSql(`
+      INSERT INTO rack_snapshots (
+        report_date,
+        report_time,
+        uploaded_at,
+        uploaded_by,
+        file_name,
+        payload_json
+      ) VALUES (
+        ${nextStatus.reportDate ? mysql.quote(mysql.displayToSqlDate(nextStatus.reportDate)) : "NULL"},
+        ${nextStatus.reportTime ? mysql.quote(String(nextStatus.reportTime).slice(0, 8)) : "NULL"},
+        ${mysql.quote(mysql.timestampToSql(nextStatus.uploadedAt) || new Date().toISOString().slice(0, 19).replace("T", " "))},
+        ${mysql.quote(nextStatus.uploadedBy || "")},
+        ${mysql.quote(nextStatus.fileName || "")},
+        ${mysql.quote(JSON.stringify(nextStatus))}
+      );
+    `);
+
+    const snapshotRows =
+      mysql.queryJson(`
+        SELECT JSON_OBJECT(
+          'id', id
+        )
+        FROM rack_snapshots
+        ORDER BY id DESC
+        LIMIT 1;
+      `);
+    const snapshotId =
+      snapshotRows[0]?.id;
+
+    if (
+      snapshotId
+      &&
+      Array.isArray(nextStatus.rooms)
+      &&
+      nextStatus.rooms.length
+    ) {
+      mysql.runSql(`
+        INSERT INTO rack_snapshot_rooms (
+          rack_snapshot_id,
+          room_id,
+          room_status,
+          status_label,
+          room_type_snapshot
+        ) VALUES
+          ${nextStatus.rooms.map(room => `(
+            ${Number(snapshotId)},
+            (SELECT id FROM rooms WHERE room_number = ${mysql.quote(room.room)}),
+            ${mysql.quote(room.status || "")},
+            ${mysql.quote(room.statusLabel || "")},
+            ${mysql.quote(room.type || "")}
+          )`).join(",")}
+        ON DUPLICATE KEY UPDATE
+          room_status = VALUES(room_status),
+          status_label = VALUES(status_label),
+          room_type_snapshot = VALUES(room_type_snapshot);
+      `);
+    }
+
+    return {
+      saved:
+        true,
+      latest:
+        nextStatus
+    };
+  }
+
   ensureDataDir();
 
   const current =
@@ -390,6 +500,11 @@ function updateRackRoomStatus({
       ...current,
       rooms
     });
+
+  if (mysql.ensureSchema()) {
+    saveLatestRackStatus(next);
+    return next;
+  }
 
   fs.writeFileSync(
     RACK_STATUS_FILE,
