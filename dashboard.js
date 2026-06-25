@@ -3858,6 +3858,7 @@ function pageHtml() {
       <button id="tab-calendar" onclick="showView('calendar')">Calendario</button>
       <button id="tab-reservations" onclick="showView('reservations')">Reservas</button>
       <button id="tab-quotes" onclick="showView('quotes')">Cotizaciones</button>
+      <button id="tab-events" onclick="showView('events')">Eventos</button>
       <button id="tab-rack" onclick="showView('rack')">Rack</button>
       <button id="tab-reports" onclick="showView('reports')">Reportes</button>
     </nav>
@@ -4191,7 +4192,11 @@ function pageHtml() {
           <div id="quoteList" class="quote-list" style="margin-top:10px"></div>
         </div>
       </div>
-      <div class="panel event-board">
+    </section>
+    </div>
+
+    <div id="view-events" class="view-panel hidden">
+    <section class="panel event-board">
         <div class="toolbar">
           <div>
             <strong>Calendario de salones</strong>
@@ -4251,7 +4256,6 @@ function pageHtml() {
           <div id="eventStatusText" class="muted"></div>
         </div>
         <div id="eventList" class="event-list"></div>
-      </div>
     </section>
     </div>
 
@@ -4630,7 +4634,7 @@ function pageHtml() {
     }
 
     function showView(name) {
-      ['main', 'calendar', 'reservations', 'quotes', 'rack', 'reports'].forEach(view => {
+      ['main', 'calendar', 'reservations', 'quotes', 'events', 'rack', 'reports'].forEach(view => {
         const panel = document.getElementById('view-' + view);
         const tab = document.getElementById('tab-' + view);
 
@@ -5378,7 +5382,7 @@ function pageHtml() {
         throw new Error(data.error || 'No se pudo guardar el evento.');
       }
       await loadDashboard();
-      showView('quotes');
+      showView('events');
       return data.event;
     }
 
@@ -5473,7 +5477,7 @@ function pageHtml() {
         return;
       }
       await loadDashboard();
-      showView('quotes');
+      showView('events');
     }
 
     function renderQuotationList(rows) {
