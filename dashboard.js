@@ -1898,8 +1898,8 @@ function importReservationsFromCsv(csv) {
               "excel",
             sourceKey:
               data.folio
-                ? `excel:${data.folio}`
-                : `excel:${data.nombre}:${data.fecha}:${data.telefono}`,
+                ? `excel:${data.folio}:${index + 2}`
+                : `excel:${data.nombre}:${data.fecha}:${data.telefono}:${index + 2}`,
             folio:
               data.folio,
             nombre:
@@ -2815,8 +2815,9 @@ function pageHtml() {
     }
     .arrival-item.pending,
     .day-reservation-item.pending {
-      background: #eff6ff;
-      border-color: #bfdbfe;
+      background: #dbeafe;
+      border-color: #2563eb;
+      box-shadow: inset 4px 0 0 #2563eb;
     }
     .arrival-item.delayed,
     .day-reservation-item.delayed {
@@ -2837,7 +2838,7 @@ function pageHtml() {
       border: 1px solid var(--line);
     }
     .rack-type-legend .king { background: #ede9fe; border-color: #c4b5fd; }
-    .rack-type-legend .double { background: #dbeafe; border-color: #93c5fd; }
+    .rack-type-legend .double { background: #dbeafe; border-color: #60a5fa; }
     .rack-type-legend .suite { background: #fef3c7; border-color: #fcd34d; }
     .note-row {
       display: grid;
@@ -3898,7 +3899,7 @@ function pageHtml() {
               '<div class="muted">' +
                 escapeHtml(row.habitaciones || 1) + ' hab(s)' +
                 (row.tipo ? ' / ' + escapeHtml(row.tipo) : '') +
-                (row.hora ? ' / ' + escapeHtml(row.hora) : '') +
+                (row.hora ? ' / ' + escapeHtml(getReservationTimeDisplay(row.hora)) : '') +
               '</div>' +
               (row.note ? '<div class="muted">Nota: ' + escapeHtml(row.note) + '</div>' : '') +
             '</div>' +
@@ -3930,26 +3931,82 @@ function pageHtml() {
         return { className: 'pending', label: 'Pendiente' };
       }
 
-      const time = String(reservation.hora).toLowerCase().replace(/\s/g, '');
-      const match = time.match(/(\d{1,2})(?::(\d{2}))?\s*(a\.?(?:m\.?|m)|p\.?(?:m\.?|m))?/);
+      const arrivalTime = parseReservationArrivalTime(reservation.hora);
 
-      if (!match) {
+      if (!arrivalTime) {
         return { className: 'pending', label: 'Pendiente' };
       }
 
-      let hours = Number(match[1]);
-      const minutes = Number(match[2] || 0);
-      const meridiem = match[3] || '';
-
-      if (meridiem.startsWith('p') && hours < 12) hours += 12;
-      if (meridiem.startsWith('a') && hours === 12) hours = 0;
-
       const [day, month, year] = reservationDate.split('/').map(Number);
-      const expected = new Date(year, month - 1, day, hours, minutes);
+      const expected = new Date(year, month - 1, day, arrivalTime.hours, arrivalTime.minutes);
 
       return new Date() > expected
         ? { className: 'delayed', label: 'Retrasada' }
         : { className: 'pending', label: 'Pendiente' };
+    }
+
+    function parseReservationArrivalTime(value) {
+      const original = String(value || '').trim();
+
+      if (!original) {
+        return null;
+      }
+
+      const normalized = original
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\ba\.?\s*m\.?\b/g, 'am')
+        .replace(/\bp\.?\s*m\.?\b/g, 'pm')
+        .replace(/\bhrs?\b|\bhoras?\b/g, '')
+        .replace(/\s+/g, ' ');
+
+      const match =
+        normalized.match(/(?:llegada|ingresa|entrada|a las|alas)\D{0,24}(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/)
+        ||
+        normalized.match(/\b(\d{1,2})(?::(\d{2}))\s*(am|pm)?\b/)
+        ||
+        normalized.match(/\b(\d{1,2})\s*(am|pm)\b/);
+
+      if (!match) {
+        return null;
+      }
+
+      let hours = Number(match[1]);
+      const minutesText = /^\d+$/.test(match[2] || '') ? match[2] : '0';
+      const minutes = Number(minutesText);
+      const meridiem = match[3] || (/^(am|pm)$/.test(match[2] || '') ? match[2] : '');
+
+      if (minutes > 59 || hours > 23) {
+        return null;
+      }
+
+      if (meridiem) {
+        if (hours < 1 || hours > 12) {
+          return null;
+        }
+        if (meridiem === 'pm' && hours < 12) hours += 12;
+        if (meridiem === 'am' && hours === 12) hours = 0;
+      }
+
+      return {
+        hours,
+        minutes,
+        display:
+          String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0')
+      };
+    }
+
+    function getReservationTimeDisplay(value) {
+      const parsed = parseReservationArrivalTime(value);
+
+      if (!value) {
+        return '-';
+      }
+
+      return parsed
+        ? value + ' (sistema ' + parsed.display + ')'
+        : value + ' (hora no detectada)';
     }
 
     function renderQuoteSections() {
@@ -4419,11 +4476,12 @@ function pageHtml() {
         return;
       }
 
+      const availableCounts = getAvailableRoomColorCounts(status.rooms);
       rackRoomGrid.innerHTML =
         '<div class="rack-type-legend">' +
-          '<span class="king">Vacías King</span>' +
-          '<span class="double">Vacías Dobles</span>' +
-          '<span class="suite">Vacías Suites</span>' +
+          '<span class="king">Vacias King: ' + availableCounts.king + '</span>' +
+          '<span class="double">Vacias Dobles: ' + availableCounts.double + '</span>' +
+          '<span class="suite">Vacias Suites: ' + availableCounts.suite + '</span>' +
         '</div>' +
         '<div class="rack-room-grid">' +
         status.rooms.map(room => {
@@ -4457,6 +4515,30 @@ function pageHtml() {
       if (type.includes('suite')) return 'available-type-suite';
       if (type.includes('king')) return 'available-type-king';
       return 'available-type-double';
+    }
+
+    function getAvailableRoomColorCounts(rooms) {
+      return rooms.reduce((counts, room) => {
+        if (getRackRoomCategory(room.status) !== 'available') {
+          return counts;
+        }
+
+        const type = String(room.type || '').toLowerCase();
+
+        if (type.includes('suite')) {
+          counts.suite++;
+        } else if (type.includes('king')) {
+          counts.king++;
+        } else {
+          counts.double++;
+        }
+
+        return counts;
+      }, {
+        king: 0,
+        double: 0,
+        suite: 0
+      });
     }
 
     function setRackRoomOccupied(room) {
@@ -5134,7 +5216,7 @@ function pageHtml() {
               '<div class="day-reservation-details">' +
                 '<div><span class="muted">Habitaciones</span><strong>' + escapeHtml(item.habitaciones || 1) + '</strong></div>' +
                 '<div><span class="muted">Huespedes</span><strong>' + escapeHtml((item.adultos || 0) + ' adulto(s), ' + (item.ninos || 0) + ' menor(es)') + '</strong></div>' +
-                '<div><span class="muted">Tipo / hora</span><strong>' + escapeHtml(item.tipo || '-') + ' / ' + escapeHtml(item.hora || '-') + '</strong></div>' +
+                '<div><span class="muted">Tipo / hora sistema</span><strong>' + escapeHtml(item.tipo || '-') + ' / ' + escapeHtml(getReservationTimeDisplay(item.hora)) + '</strong></div>' +
                 '<div><span class="muted">Telefono / tarifa</span><strong>' + escapeHtml(item.telefono || '-') + ' / ' + escapeHtml(item.tarifa || '-') + '</strong></div>' +
                 '<div><span class="muted">Llegada / habitacion</span><strong>' + escapeHtml(item.arrivalAt ? new Date(item.arrivalAt).toLocaleString() : 'Pendiente') + ' / ' + escapeHtml(item.roomNumber || '-') + '</strong></div>' +
               '</div>' +

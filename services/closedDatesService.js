@@ -7,12 +7,7 @@ const DATA_FILE =
     "../data/closedDates.json"
   );
 
-const DEFAULT_CLOSED_DATES = [
-  "01/07/2026",
-  "02/07/2026",
-  "03/07/2026",
-  "04/07/2026"
-];
+const DEFAULT_CLOSED_DATES = [];
 
 function ensureDataFile() {
   const dataDir =

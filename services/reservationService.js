@@ -3,11 +3,26 @@ const {
 } = require("../utils/helpers");
 
 function parseHoraLlegada(horaTexto) {
-  const match =
-    horaTexto
+  const normalized =
+    String(horaTexto || "")
       .trim()
       .toLowerCase()
-      .match(/^(\d{1,2})\s*(am|pm)$/);
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\ba\.?\s*m\.?\b/g, "am")
+      .replace(/\bp\.?\s*m\.?\b/g, "pm")
+      .replace(/\bhrs?\b|\bhoras?\b/g, "")
+      .replace(/\s+/g, " ");
+
+  const match =
+    normalized
+      .match(/(?:llegada|ingresa|entrada|a las|alas)\D{0,24}(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/)
+    ||
+    normalized
+      .match(/\b(\d{1,2})(?::(\d{2}))\s*(am|pm)?\b/)
+    ||
+    normalized
+      .match(/\b(\d{1,2})\s*(am|pm)\b/);
 
   if (!match) return null;
 
@@ -15,7 +30,37 @@ function parseHoraLlegada(horaTexto) {
     parseInt(match[1], 10);
 
   const periodo =
-    match[2];
+    match[3]
+    ||
+    (
+      /^(am|pm)$/.test(match[2] || "")
+        ? match[2]
+        : ""
+    );
+
+  const minuteText =
+    /^\d+$/.test(match[2] || "")
+      ? match[2]
+      : "0";
+
+  const minutos =
+    Number(minuteText);
+
+  if (minutos > 59 || hora > 23) {
+    return null;
+  }
+
+  if (
+    periodo
+    &&
+    (
+      hora < 1
+      ||
+      hora > 12
+    )
+  ) {
+    return null;
+  }
 
   if (
     periodo === "pm"
@@ -41,10 +86,46 @@ function parseHoraLlegada(horaTexto) {
 }
 
 function normalizarHoraLlegada(horaTexto) {
-  return horaTexto
-    .trim()
-    .toLowerCase()
-    .replace(/^(\d{1,2})\s*(am|pm)$/, "$1 $2");
+  const normalized =
+    String(horaTexto || "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\ba\.?\s*m\.?\b/g, "am")
+    .replace(/\bp\.?\s*m\.?\b/g, "pm")
+      .replace(/\bhrs?\b|\bhoras?\b/g, "")
+      .replace(/\s+/g, " ");
+
+  const match =
+    normalized
+      .match(/(?:llegada|ingresa|entrada|a las|alas)\D{0,24}(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/)
+    ||
+    normalized
+      .match(/\b(\d{1,2})(?::(\d{2}))\s*(am|pm)?\b/)
+    ||
+    normalized
+      .match(/\b(\d{1,2})\s*(am|pm)\b/);
+
+  if (!match) {
+    return normalized;
+  }
+
+  const minute =
+    /^\d+$/.test(match[2] || "")
+      ? `:${match[2]}`
+      : "";
+
+  const period =
+    match[3]
+    ||
+    (
+      /^(am|pm)$/.test(match[2] || "")
+        ? match[2]
+        : ""
+    );
+
+  return `${match[1]}${minute}${period ? ` ${period}` : ""}`;
 }
 
 // ==========================================
