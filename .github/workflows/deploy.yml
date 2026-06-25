@@ -108,14 +108,24 @@ jobs:
 
           ssh "$DEPLOY_USER@$DEPLOY_HOST" "bash -s" <<'REMOTE'
           set -eo pipefail
-          if systemctl list-unit-files | grep -q '^mysql\.service'; then
-            sudo systemctl enable --now mysql
-          elif systemctl list-unit-files | grep -q '^mariadb\.service'; then
-            sudo systemctl enable --now mariadb
+          if sudo systemctl start mysql 2>/dev/null; then
+            sudo systemctl enable mysql 2>/dev/null || true
+          elif sudo systemctl start mariadb 2>/dev/null; then
+            sudo systemctl enable mariadb 2>/dev/null || true
+          elif sudo systemctl start mysqld 2>/dev/null; then
+            sudo systemctl enable mysqld 2>/dev/null || true
+          elif sudo service mysql start 2>/dev/null; then
+            true
+          elif sudo service mariadb start 2>/dev/null; then
+            true
           else
-            echo "No mysql.service or mariadb.service found after install"
+            echo "No pude iniciar servicio MySQL/MariaDB"
+            systemctl list-unit-files | grep -Ei 'mysql|maria|mysqld' || true
+            systemctl --no-pager --full status mysql mariadb mysqld || true
             exit 1
           fi
+
+          mysqladmin ping --silent || sudo mysqladmin ping --silent
           REMOTE
 
       - name: Write app environment on VM
