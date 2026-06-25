@@ -11,9 +11,6 @@ const {
   saveReservationNote
 } = require("../services/dashboardExtrasService");
 const {
-  enqueueReservationGroupNotification
-} = require("../services/groupReservationNotificationService");
-const {
   saveLatestRackStatus
 } = require("../services/rackAnalysisService");
 const {
@@ -249,10 +246,24 @@ function migrateNotifications(report) {
           sent_at = VALUES(sent_at);
       `);
     } else if (notification.reservations?.length) {
-      enqueueReservationGroupNotification(
-        notification.reservations,
-        notification.origin || "dashboard"
-      );
+      mysql.runSql(`
+        INSERT INTO reservation_group_notifications (
+          id,
+          origin,
+          reservations_json,
+          created_at,
+          sent_at
+        ) VALUES (
+          ${mysql.quote(notification.id)},
+          ${mysql.quote(notification.origin || "dashboard")},
+          ${mysql.quote(JSON.stringify(notification.reservations || []))},
+          ${mysql.quote(mysql.timestampToSql(notification.createdAt) || new Date().toISOString().slice(0, 19).replace("T", " "))},
+          NULL
+        )
+        ON DUPLICATE KEY UPDATE
+          reservations_json = VALUES(reservations_json),
+          sent_at = NULL;
+      `);
     }
 
     report.notifications++;
