@@ -108,6 +108,11 @@ jobs:
 
           ssh "$DEPLOY_USER@$DEPLOY_HOST" "bash -s" <<'REMOTE'
           set -eo pipefail
+          if sudo mysql -e "SELECT 1;" >/dev/null 2>&1; then
+            echo "MySQL already responds"
+            exit 0
+          fi
+
           if sudo systemctl start mysql 2>/dev/null; then
             sudo systemctl enable mysql 2>/dev/null || true
           elif sudo systemctl start mariadb 2>/dev/null; then

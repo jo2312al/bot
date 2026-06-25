@@ -1298,6 +1298,7 @@ module.exports = {
   analyzeRackCsv,
   analyzeRackImage,
   readLatestRackStatus,
+  saveLatestRackStatus,
   updateRackRoomStatus,
   summarizeRack,
   formatRackSummary,

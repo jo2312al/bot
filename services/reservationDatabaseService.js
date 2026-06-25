@@ -839,9 +839,13 @@ function readCalendarReservationsMysql(includeCanceled) {
       'fecha', DATE_FORMAT(r.start_date, '%d/%m/%Y'),
       'dates', COALESCE(
         (
-          SELECT JSON_ARRAYAGG(DATE_FORMAT(d.stay_date, '%d/%m/%Y') ORDER BY d.stay_date)
-          FROM reservation_dates d
-          WHERE d.reservation_id = r.id
+          SELECT JSON_ARRAYAGG(ordered_dates.display_date)
+          FROM (
+            SELECT DATE_FORMAT(d.stay_date, '%d/%m/%Y') AS display_date
+            FROM reservation_dates d
+            WHERE d.reservation_id = r.id
+            ORDER BY d.stay_date
+          ) ordered_dates
         ),
         JSON_ARRAY()
       ),
