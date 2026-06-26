@@ -2301,6 +2301,44 @@ function getMysqlReports(range) {
         WHERE e.event_date BETWEEN ${mysql.quote(range.startIso)} AND ${mysql.quote(range.endIso)}
         ORDER BY e.event_date DESC, room.room_number;
       `),
+    eventSummary:
+      mysql.queryJson(`
+        SELECT JSON_OBJECT(
+          'hallName', hall.name,
+          'eventsCount', COUNT(event.id),
+          'quotationCount', SUM(event.status = 'cotizacion'),
+          'bookedCount', SUM(event.status = 'apartado'),
+          'paidCount', SUM(event.status = 'pago_completo'),
+          'totalAmount', IFNULL(SUM(event.total_amount), 0),
+          'paidAmount', IFNULL(SUM(event.paid_amount), 0),
+          'pendingAmount', IFNULL(SUM(GREATEST(event.total_amount - event.paid_amount, 0)), 0)
+        )
+        FROM event_halls hall
+        LEFT JOIN quote_events event
+          ON event.hall_id = hall.id
+          AND event.event_date BETWEEN ${mysql.quote(range.startIso)} AND ${mysql.quote(range.endIso)}
+        GROUP BY hall.id, hall.name, hall.sort_order
+        ORDER BY hall.sort_order;
+      `),
+    events:
+      mysql.queryJson(`
+        SELECT JSON_OBJECT(
+          'id', event.id,
+          'date', DATE_FORMAT(event.event_date, '%d/%m/%Y'),
+          'isoDate', DATE_FORMAT(event.event_date, '%Y-%m-%d'),
+          'hallName', hall.name,
+          'client', event.client,
+          'eventName', event.event_name,
+          'status', event.status,
+          'totalAmount', event.total_amount,
+          'paidAmount', event.paid_amount,
+          'pendingAmount', GREATEST(event.total_amount - event.paid_amount, 0)
+        )
+        FROM quote_events event
+        JOIN event_halls hall ON hall.id = event.hall_id
+        WHERE event.event_date BETWEEN ${mysql.quote(range.startIso)} AND ${mysql.quote(range.endIso)}
+        ORDER BY event.event_date, hall.sort_order;
+      `),
     roomEventTypes:
       mysql.queryJson(`
         SELECT JSON_OBJECT(
@@ -2409,6 +2447,13 @@ function getFallbackReports(range) {
 
   const rackRooms =
     readLatestRackStatus()?.rooms || [];
+  const events =
+    readEventBookings()
+      .filter(event =>
+        event.eventDate >= range.startIso
+        &&
+        event.eventDate <= range.endIso
+      );
 
   return {
     mode:
@@ -2488,6 +2533,54 @@ function getFallbackReports(range) {
       })),
     roomEvents:
       [],
+    eventSummary:
+      EVENT_HALLS.map(hall => {
+        const hallEvents =
+          events.filter(event =>
+            event.hallCode === hall.code
+          );
+        return {
+          hallName:
+            hall.name,
+          eventsCount:
+            hallEvents.length,
+          quotationCount:
+            hallEvents.filter(event => event.status === "cotizacion").length,
+          bookedCount:
+            hallEvents.filter(event => event.status === "apartado").length,
+          paidCount:
+            hallEvents.filter(event => event.status === "pago_completo").length,
+          totalAmount:
+            hallEvents.reduce((total, event) => total + Number(event.totalAmount || 0), 0),
+          paidAmount:
+            hallEvents.reduce((total, event) => total + Number(event.paidAmount || 0), 0),
+          pendingAmount:
+            hallEvents.reduce((total, event) => total + Math.max(Number(event.totalAmount || 0) - Number(event.paidAmount || 0), 0), 0)
+        };
+      }),
+    events:
+      events.map(event => ({
+        id:
+          event.id,
+        date:
+          isoToDisplay(event.eventDate),
+        isoDate:
+          event.eventDate,
+        hallName:
+          event.hallName,
+        client:
+          event.client,
+        eventName:
+          event.eventName,
+        status:
+          event.status,
+        totalAmount:
+          event.totalAmount,
+        paidAmount:
+          event.paidAmount,
+        pendingAmount:
+          Math.max(Number(event.totalAmount || 0) - Number(event.paidAmount || 0), 0)
+      })),
     roomEventTypes:
       [
         {
@@ -3632,6 +3725,24 @@ function pageHtml() {
     .event-pill:hover {
       box-shadow: 0 8px 24px rgba(15, 23, 42, .12);
     }
+    .event-alert {
+      border: 1px solid #fed7aa;
+      background: #fff7ed;
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+    .event-alert.danger {
+      border-color: #fecaca;
+      background: #fef2f2;
+    }
+    .availability-ok {
+      color: #047857;
+      font-weight: 700;
+    }
+    .availability-bad {
+      color: #b91c1c;
+      font-weight: 700;
+    }
     .event-detail-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -3665,6 +3776,40 @@ function pageHtml() {
       align-items: center;
       background: #fff;
     }
+    .floor-map {
+      margin-top: 14px;
+      display: grid;
+      gap: 12px;
+    }
+    .floor-card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      padding: 12px;
+    }
+    .floor-rooms {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(62px, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .floor-room {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      min-height: 54px;
+      padding: 7px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      font-size: 12px;
+    }
+    .floor-room strong {
+      font-size: 15px;
+    }
+    .floor-room.occupied { background: #fee2e2; border-color: #fca5a5; }
+    .floor-room.clean { background: #dcfce7; border-color: #86efac; }
+    .floor-room.dirty { background: #fef3c7; border-color: #fcd34d; }
+    .floor-room.blocked { background: #e5e7eb; border-color: #9ca3af; }
     .event-card-head {
       display: flex;
       justify-content: space-between;
@@ -4281,6 +4426,7 @@ function pageHtml() {
             <input id="eventMonth" type="month" onchange="renderEventCalendar()">
           </label>
         </div>
+        <div id="eventAlerts" class="event-list"></div>
         <div id="eventCalendar" class="event-calendar"></div>
         <div class="quote-fieldset-title">Apartar evento desde cero <button class="help-button" onclick="openHelp('manualEvent')" title="Ayuda">?</button></div>
         <div class="date-controls">
@@ -4298,11 +4444,11 @@ function pageHtml() {
           </label>
           <label>
             Fecha
-            <input id="eventDate" type="date">
+            <input id="eventDate" type="date" onchange="renderEventAvailability('manual')">
           </label>
           <label>
             Salon
-            <select id="eventHall"></select>
+            <select id="eventHall" onchange="renderEventAvailability('manual')"></select>
           </label>
           <label>
             Estado
@@ -4325,6 +4471,7 @@ function pageHtml() {
           Notas
           <textarea id="eventNotes" placeholder="Notas internas del evento, pagos, condiciones o pendientes."></textarea>
         </label>
+        <div id="eventAvailability" class="muted" style="margin:8px 0"></div>
         <div class="toolbar">
           <button class="primary" onclick="saveManualEvent()">Guardar evento</button>
           <div id="eventStatusText" class="muted"></div>
@@ -4364,6 +4511,7 @@ function pageHtml() {
       <div style="margin-top:12px">
         <textarea id="rackResult" readonly placeholder="Aqui aparecera el resultado del rack."></textarea>
       </div>
+      <div id="rackFloorMap"></div>
       <div id="rackRoomGrid"></div>
     </section>
     </div>
@@ -4405,6 +4553,11 @@ function pageHtml() {
           <h3>Reservas por fuente</h3>
           <div class="muted">Manual, Excel, bot.</div>
           <div id="sourceReport"></div>
+        </div>
+        <div class="report-card wide">
+          <h3>Reporte de eventos</h3>
+          <div class="muted">Eventos por salon, estados, pagos y saldos pendientes.</div>
+          <div id="eventReport"></div>
         </div>
         <div class="report-card wide">
           <h3>Registrar nota o mantenimiento de habitacion</h3>
@@ -4610,8 +4763,8 @@ function pageHtml() {
       </div>
       <div class="modal-body">
         <div class="reservation-edit-grid">
-          <label>Fecha evento<input id="quoteEventModalDate" type="date"></label>
-          <label>Salon<select id="quoteEventModalHall"></select></label>
+          <label>Fecha evento<input id="quoteEventModalDate" type="date" onchange="renderEventAvailability('quote')"></label>
+          <label>Salon<select id="quoteEventModalHall" onchange="renderEventAvailability('quote')"></select></label>
           <label>Estado
             <select id="quoteEventModalStatus">
               <option value="cotizacion">En cotizacion</option>
@@ -4623,6 +4776,7 @@ function pageHtml() {
           <label>Pagado<input id="quoteEventModalPaid" type="number" min="0" step="0.01" value="0"></label>
           <label class="wide">Notas<textarea id="quoteEventModalNotes" rows="3" placeholder="Notas internas del evento o pago"></textarea></label>
         </div>
+        <div id="quoteEventAvailability" class="muted" style="margin-top:10px"></div>
         <div id="quoteEventModalStatusText" class="muted" style="margin-top:10px"></div>
         <div class="confirm-actions">
           <button onclick="closeQuoteEventModal()">Cancelar</button>
@@ -4668,6 +4822,7 @@ function pageHtml() {
     let eventHalls = [];
     let eventBookings = [];
     let pendingQuoteEvent = null;
+    let pendingEventDetailId = null;
 
     const helpTopics = {
       whatsapp: {
@@ -4836,6 +4991,7 @@ function pageHtml() {
       renderQuoteSections();
       renderQuotationList(data.quotations || []);
       renderHallSelects();
+      renderEventAlerts();
       renderEventCalendar();
       renderEventList();
       occupancy.innerHTML = renderOccupancy(data.occupancy);
@@ -4902,6 +5058,7 @@ function pageHtml() {
       roomRotationReport.innerHTML = renderRoomRotationTable(report.roomRotation || []);
       serviceDueReport.innerHTML = renderServiceDueTable(report.serviceDue || []);
       sourceReport.innerHTML = renderSourceReport(report.reservationsBySource || []);
+      eventReport.innerHTML = renderEventReport(report.eventSummary || [], report.events || []);
       roomEventsReport.innerHTML = renderRoomEventsTable(report.roomEvents || []);
       renderRoomEventOptions(report);
     }
@@ -4992,6 +5149,43 @@ function pageHtml() {
           '</tr>'
         ).join('') +
       '</tbody></table>';
+    }
+
+    function renderEventReport(summaryRows, eventRows) {
+      const summary =
+        summaryRows.length
+          ? '<table class="report-table"><thead><tr><th>Salon</th><th>Eventos</th><th>Cotiz.</th><th>Apart.</th><th>Pagados</th><th>Total</th><th>Pagado</th><th>Pendiente</th></tr></thead><tbody>' +
+            summaryRows.map(row =>
+              '<tr>' +
+                '<td><strong>' + escapeHtml(row.hallName || '-') + '</strong></td>' +
+                '<td>' + escapeHtml(row.eventsCount || 0) + '</td>' +
+                '<td>' + escapeHtml(row.quotationCount || 0) + '</td>' +
+                '<td>' + escapeHtml(row.bookedCount || 0) + '</td>' +
+                '<td>' + escapeHtml(row.paidCount || 0) + '</td>' +
+                '<td>' + formatMoney(row.totalAmount || 0) + '</td>' +
+                '<td>' + formatMoney(row.paidAmount || 0) + '</td>' +
+                '<td>' + formatMoney(row.pendingAmount || 0) + '</td>' +
+              '</tr>'
+            ).join('') +
+            '</tbody></table>'
+          : '<div class="muted">Sin eventos para este mes.</div>';
+
+      const details =
+        eventRows.length
+          ? '<table class="report-table"><thead><tr><th>Fecha</th><th>Salon</th><th>Evento</th><th>Estado</th><th>Saldo</th></tr></thead><tbody>' +
+            eventRows.map(row =>
+              '<tr>' +
+                '<td>' + escapeHtml(row.date || '-') + '</td>' +
+                '<td>' + escapeHtml(row.hallName || '-') + '</td>' +
+                '<td><strong>' + escapeHtml(row.eventName || row.client || '-') + '</strong><br><span class="muted">' + escapeHtml(row.client || '') + '</span></td>' +
+                '<td>' + escapeHtml(eventStatusLabel(row.status)) + '</td>' +
+                '<td>' + formatMoney(row.pendingAmount || 0) + '</td>' +
+              '</tr>'
+            ).join('') +
+            '</tbody></table>'
+          : '';
+
+      return summary + details;
     }
 
     function renderRoomEventOptions(report) {
@@ -5508,6 +5702,87 @@ function pageHtml() {
         : 0;
     }
 
+    function findEventConflict(eventDateValue, hallCode, excludeId) {
+      if (!eventDateValue || !hallCode) {
+        return null;
+      }
+
+      return eventBookings.find(event =>
+        String(event.id) !== String(excludeId || '')
+        &&
+        event.eventDate === eventDateValue
+        &&
+        event.hallCode === hallCode
+        &&
+        ['apartado', 'pago_completo'].includes(event.status)
+      ) || null;
+    }
+
+    function renderEventAvailability(scope, excludeId) {
+      const isQuote =
+        scope === 'quote';
+      const target =
+        isQuote ? quoteEventAvailability : eventAvailability;
+      const dateValue =
+        isQuote ? quoteEventModalDate.value : eventDate.value;
+      const hallCode =
+        isQuote ? quoteEventModalHall.value : eventHall.value;
+      const conflict =
+        findEventConflict(dateValue, hallCode, excludeId);
+
+      if (!target) {
+        return null;
+      }
+
+      if (!dateValue || !hallCode) {
+        target.textContent = '';
+        target.className = 'muted';
+        return null;
+      }
+
+      if (conflict) {
+        target.textContent = 'No disponible: ya existe ' + (conflict.eventName || conflict.client || 'otro evento') + ' en ese salon y fecha.';
+        target.className = 'availability-bad';
+        return conflict;
+      }
+
+      target.textContent = 'Disponible: no hay otro evento apartado/pagado en ese salon y fecha.';
+      target.className = 'availability-ok';
+      return null;
+    }
+
+    function renderEventAlerts() {
+      if (!eventAlerts) {
+        return;
+      }
+
+      const today = new Date().toISOString().slice(0, 10);
+      const next30 = new Date();
+      next30.setDate(next30.getDate() + 30);
+      const next30Iso = next30.toISOString().slice(0, 10);
+      const alerts = eventBookings
+        .filter(event =>
+          event.eventDate >= today
+          &&
+          event.eventDate <= next30Iso
+          &&
+          ['apartado', 'pago_completo'].includes(event.status)
+          &&
+          Number(event.totalAmount || 0) > Number(event.paidAmount || 0)
+        )
+        .sort((left, right) => String(left.eventDate).localeCompare(String(right.eventDate)))
+        .slice(0, 6);
+
+      eventAlerts.innerHTML = alerts.length
+        ? alerts.map(event =>
+          '<div class="event-alert ' + (event.eventDate <= today ? 'danger' : '') + '">' +
+            '<strong>Pago pendiente: ' + escapeHtml(event.eventDate || '') + ' · ' + escapeHtml(event.hallName || '') + '</strong>' +
+            '<div>' + escapeHtml(event.eventName || event.client || 'Evento') + ' · Saldo ' + formatMoney(Math.max(Number(event.totalAmount || 0) - Number(event.paidAmount || 0), 0)) + '</div>' +
+          '</div>'
+        ).join('')
+        : '<div class="muted">Sin alertas de pagos pendientes en los proximos 30 dias.</div>';
+    }
+
     function renderEventCalendar() {
       if (!eventCalendar) {
         return;
@@ -5592,6 +5867,7 @@ function pageHtml() {
       }
 
       const percent = eventPercent(event);
+      pendingEventDetailId = event.id;
       eventDetailTitle.textContent = event.eventName || event.client || 'Evento';
       eventDetailSubtitle.textContent = (event.eventDate || '-') + ' · ' + (event.hallName || event.hallCode || '-') + ' · ' + eventStatusLabel(event.status);
       eventDetailBody.innerHTML =
@@ -5606,6 +5882,25 @@ function pageHtml() {
           '<div class="event-detail-box"><span>Pagado</span><strong>' + formatMoney(event.paidAmount || 0) + ' (' + Math.round(percent) + '%)</strong><div class="payment-bar"><span style="width:' + percent + '%"></span></div></div>' +
         '</div>' +
         '<div class="event-detail-box"><span>Notas</span><div>' + escapeHtml(event.notes || 'Sin notas') + '</div></div>' +
+        '<h3 style="margin:16px 0 8px">Editar evento</h3>' +
+        '<div class="reservation-edit-grid">' +
+          '<label>Cliente<input id="eventEditClient" value="' + escapeHtml(event.client || '') + '"></label>' +
+          '<label>Contacto<input id="eventEditContact" value="' + escapeHtml(event.contact || '') + '"></label>' +
+          '<label>Evento<input id="eventEditName" value="' + escapeHtml(event.eventName || '') + '"></label>' +
+          '<label>Fecha<input id="eventEditDate" type="date" value="' + escapeHtml(event.eventDate || '') + '" onchange="renderEventEditAvailability()"></label>' +
+          '<label>Salon<select id="eventEditHall" onchange="renderEventEditAvailability()">' + eventHalls.map(hall => '<option value="' + escapeHtml(hall.code) + '"' + (hall.code === event.hallCode ? ' selected' : '') + '>' + escapeHtml(hall.name) + '</option>').join('') + '</select></label>' +
+          '<label>Estado<select id="eventEditStatus" onchange="renderEventEditAvailability()">' +
+            '<option value="cotizacion"' + (event.status === 'cotizacion' ? ' selected' : '') + '>En cotizacion</option>' +
+            '<option value="apartado"' + (event.status === 'apartado' ? ' selected' : '') + '>Apartado</option>' +
+            '<option value="pago_completo"' + (event.status === 'pago_completo' ? ' selected' : '') + '>Pago completo</option>' +
+          '</select></label>' +
+          '<label>Total<input id="eventEditTotal" type="number" min="0" step="0.01" value="' + escapeHtml(event.totalAmount || 0) + '"></label>' +
+          '<label>Pagado<input id="eventEditPaid" type="number" min="0" step="0.01" value="' + escapeHtml(event.paidAmount || 0) + '"></label>' +
+          '<label class="wide">Notas<textarea id="eventEditNotes" rows="3">' + escapeHtml(event.notes || '') + '</textarea></label>' +
+        '</div>' +
+        '<div id="eventEditAvailability" class="muted" style="margin-top:10px"></div>' +
+        '<div id="eventEditStatusText" class="muted" style="margin-top:10px"></div>' +
+        '<div class="confirm-actions"><button class="primary" onclick="saveEventDetailEdit()">Guardar cambios</button></div>' +
         '<h3 style="margin:16px 0 8px">Comprobantes</h3>' +
         ((event.vouchers || []).length
           ? '<div class="voucher-list">' + (event.vouchers || []).map(voucher =>
@@ -5618,10 +5913,71 @@ function pageHtml() {
 
       eventDetailModalBackdrop.classList.remove('hidden');
       document.body.classList.add('modal-open');
+      renderEventEditAvailability();
+    }
+
+    function renderEventEditAvailability() {
+      const target = document.getElementById('eventEditAvailability');
+      if (!target) {
+        return null;
+      }
+      const conflict = findEventConflict(
+        eventEditDate.value,
+        eventEditHall.value,
+        pendingEventDetailId
+      );
+      if (
+        ['apartado', 'pago_completo'].includes(eventEditStatus.value)
+        &&
+        conflict
+      ) {
+        target.textContent = 'No disponible: ya existe ' + (conflict.eventName || conflict.client || 'otro evento') + ' en ese salon y fecha.';
+        target.className = 'availability-bad';
+        return conflict;
+      }
+      target.textContent = 'Disponible para este estado/fecha/salon.';
+      target.className = 'availability-ok';
+      return null;
+    }
+
+    async function saveEventDetailEdit() {
+      const event = eventBookings.find(item => String(item.id) === String(pendingEventDetailId));
+      if (!event) {
+        return;
+      }
+      const statusText = document.getElementById('eventEditStatusText');
+      if (
+        ['apartado', 'pago_completo'].includes(eventEditStatus.value)
+        &&
+        renderEventEditAvailability()
+      ) {
+        statusText.textContent = 'No se puede guardar: salon no disponible.';
+        return;
+      }
+      statusText.textContent = 'Guardando cambios...';
+      try {
+        await saveEventPayload({
+          id: event.id,
+          quotationId: event.quotationId,
+          client: eventEditClient.value.trim(),
+          contact: eventEditContact.value.trim(),
+          eventName: eventEditName.value.trim(),
+          eventDate: eventEditDate.value,
+          hallCode: eventEditHall.value,
+          status: eventEditStatus.value,
+          totalAmount: Number(eventEditTotal.value || 0),
+          paidAmount: Number(eventEditPaid.value || 0),
+          notes: eventEditNotes.value.trim()
+        });
+        closeEventDetailModal();
+      } catch (error) {
+        statusText.textContent = error.message || 'No se pudo guardar.';
+      }
     }
 
     function closeEventDetailModal() {
       eventDetailModalBackdrop.classList.add('hidden');
+      pendingEventDetailId = null;
 
       if (
         dayModalBackdrop.classList.contains('hidden') &&
@@ -5653,6 +6009,14 @@ function pageHtml() {
     async function saveManualEvent() {
       try {
         eventStatusText.textContent = 'Guardando evento...';
+        if (
+          ['apartado', 'pago_completo'].includes(eventStatus.value)
+          &&
+          renderEventAvailability('manual')
+        ) {
+          eventStatusText.textContent = 'No se puede guardar: el salon no esta disponible.';
+          return;
+        }
         await saveEventPayload({
           client: eventClient.value.trim(),
           contact: eventContact.value.trim(),
@@ -5695,6 +6059,7 @@ function pageHtml() {
       quoteEventModalPaid.value = 0;
       quoteEventModalNotes.value = quote.notes || '';
       quoteEventModalStatusText.textContent = '';
+      renderEventAvailability('quote');
       quoteEventModalBackdrop.classList.remove('hidden');
       document.body.classList.add('modal-open');
     }
@@ -5724,20 +6089,33 @@ function pageHtml() {
         return;
       }
 
+      if (
+        ['apartado', 'pago_completo'].includes(quoteEventModalStatus.value)
+        &&
+        renderEventAvailability('quote')
+      ) {
+        quoteEventModalStatusText.textContent = 'No se puede apartar: el salon no esta disponible.';
+        return;
+      }
+
       quoteEventModalStatusText.textContent = 'Guardando evento...';
-      await saveEventPayload({
-        quotationId: quote.id,
-        client: quote.client,
-        contact: quote.contact,
-        eventName: quote.eventName || quote.headline,
-        eventDate: quoteEventModalDate.value,
-        hallCode: quoteEventModalHall.value,
-        status: quoteEventModalStatus.value,
-        totalAmount: Number(quoteEventModalTotal.value || quote.total || 0),
-        paidAmount: Number(quoteEventModalPaid.value || 0),
-        notes: quoteEventModalNotes.value.trim()
-      });
-      closeQuoteEventModal();
+      try {
+        await saveEventPayload({
+          quotationId: quote.id,
+          client: quote.client,
+          contact: quote.contact,
+          eventName: quote.eventName || quote.headline,
+          eventDate: quoteEventModalDate.value,
+          hallCode: quoteEventModalHall.value,
+          status: quoteEventModalStatus.value,
+          totalAmount: Number(quoteEventModalTotal.value || quote.total || 0),
+          paidAmount: Number(quoteEventModalPaid.value || 0),
+          notes: quoteEventModalNotes.value.trim()
+        });
+        closeQuoteEventModal();
+      } catch (error) {
+        quoteEventModalStatusText.textContent = error.message || 'No se pudo apartar.';
+      }
     }
 
     function readFileAsDataUrl(file) {
@@ -5960,11 +6338,13 @@ function pageHtml() {
 
     function renderRackRoomGrid(status) {
       if (!status || !Array.isArray(status.rooms)) {
+        rackFloorMap.innerHTML = '';
         rackRoomGrid.innerHTML =
           '<div class="muted" style="margin-top:12px">Importa un CSV del rack para ver habitaciones con botones.</div>';
         return;
       }
 
+      renderRackFloorMap(status.rooms);
       const availableCounts = getAvailableRoomColorCounts(status.rooms);
       rackRoomGrid.innerHTML =
         '<div class="rack-type-legend">' +
@@ -5982,6 +6362,39 @@ function pageHtml() {
             '<span>' + escapeHtml(room.status || '-') + '</span>' +
           '</button>';
         }).join('') +
+        '</div>';
+    }
+
+    function renderRackFloorMap(rooms) {
+      const byFloor = rooms.reduce((acc, room) => {
+        const floor = String(room.room || '').slice(0, 1) || '-';
+        if (!acc[floor]) {
+          acc[floor] = [];
+        }
+        acc[floor].push(room);
+        return acc;
+      }, {});
+
+      rackFloorMap.innerHTML =
+        '<div class="floor-map">' +
+          Object.keys(byFloor).sort().map(floor =>
+            '<div class="floor-card">' +
+              '<strong>Piso ' + escapeHtml(floor) + '</strong>' +
+              '<div class="floor-rooms">' +
+                byFloor[floor].sort((left, right) => String(left.room).localeCompare(String(right.room))).map(room => {
+                  const category = getRackRoomCategory(room.status);
+                  const className = category === 'available'
+                    ? (room.status === 'VS' ? 'dirty' : 'clean')
+                    : category;
+                  return '<button class="floor-room ' + className + '" onclick="setRackRoomOccupied(\\'' + escapeHtml(room.room) + '\\')">' +
+                    '<strong>' + escapeHtml(room.room || '-') + '</strong>' +
+                    '<span>' + escapeHtml(room.type || '-') + '</span>' +
+                    '<span>' + escapeHtml(room.status || '-') + '</span>' +
+                  '</button>';
+                }).join('') +
+              '</div>' +
+            '</div>'
+          ).join('') +
         '</div>';
     }
 

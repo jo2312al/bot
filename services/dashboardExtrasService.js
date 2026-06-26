@@ -818,6 +818,39 @@ function saveEventBooking(input) {
       /^\d+$/.test(String(input.id || ""))
         ? Number(input.id)
         : "NULL";
+    const existingId =
+      /^\d+$/.test(String(input.id || ""))
+        ? Number(input.id)
+        : 0;
+
+    if (
+      [
+        "apartado",
+        "pago_completo"
+      ].includes(booking.status)
+    ) {
+      const conflicts =
+        mysql.queryJson(`
+          SELECT JSON_OBJECT(
+            'id', event.id,
+            'client', event.client,
+            'eventName', event.event_name,
+            'status', event.status
+          )
+          FROM quote_events event
+          WHERE event.hall_id = (SELECT id FROM event_halls WHERE code = ${mysql.quote(booking.hallCode)})
+            AND event.event_date = ${mysql.quote(booking.eventDate)}
+            AND event.status IN ('apartado', 'pago_completo')
+            ${existingId ? `AND event.id != ${Number(existingId)}` : ""}
+          LIMIT 1;
+        `);
+
+      if (conflicts.length) {
+        throw new Error(
+          `El salon ${booking.hallName} ya esta ocupado ese dia por ${conflicts[0].eventName || conflicts[0].client || "otro evento"}`
+        );
+      }
+    }
 
     mysql.runSql(`
       INSERT INTO quote_events (
@@ -973,6 +1006,33 @@ function saveEventVoucher(input) {
       ${mysql.quote(String(input.notes || "").trim())},
       ${mysql.quote(mysql.timestampToSql(uploadedAt))}
     );
+  `);
+
+  mysql.runSql(`
+    UPDATE quote_events event
+    SET
+      paid_amount = (
+        SELECT IFNULL(SUM(voucher.amount), 0)
+        FROM event_payment_vouchers voucher
+        WHERE voucher.quote_event_id = event.id
+      ),
+      status = CASE
+        WHEN total_amount > 0
+          AND (
+            SELECT IFNULL(SUM(voucher.amount), 0)
+            FROM event_payment_vouchers voucher
+            WHERE voucher.quote_event_id = event.id
+          ) >= total_amount THEN 'pago_completo'
+        WHEN (
+            SELECT IFNULL(SUM(voucher.amount), 0)
+            FROM event_payment_vouchers voucher
+            WHERE voucher.quote_event_id = event.id
+          ) > 0
+          AND status = 'cotizacion' THEN 'apartado'
+        ELSE status
+      END,
+      updated_at = ${mysql.quote(mysql.timestampToSql(uploadedAt))}
+    WHERE event.id = ${eventId};
   `);
 
   const rows =
