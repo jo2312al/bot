@@ -5678,13 +5678,19 @@ function pageHtml() {
 
     function openSearchReservation(isoDate, sourceKey) {
       closeGlobalSearchResults();
+
       if (isoDate) {
-        openDayModal(isoDate);
+        activeModalIsoDate = isoDate;
+      }
+
+      if (sourceKey) {
+        openReservationArrivalByKey(sourceKey);
         return;
       }
 
       const reservation = (dashboardData?.groupReservations || []).find(row =>
-        row.sourceKey === sourceKey
+        row.sourceKey === sourceKey ||
+        (isoDate && (row.dates || [row.fecha]).map(displayToIsoClient).includes(isoDate))
       );
       openSearchDetailModal(
         'Reserva',
