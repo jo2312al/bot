@@ -9,6 +9,11 @@ const QRCode =
 const PDFDocument =
   require("pdfkit");
 const {
+  HOTEL_RATE_OPTIONS,
+  HOTEL_ROOM_NUMBERS,
+  hotelRateOptionsHtml
+} = require("./constants/hotelCatalog");
+const {
   readReservations,
   getRoomLimits,
   normalizeRoomType,
@@ -46,6 +51,9 @@ const {
   enqueueReservationGroupNotification
 } = require("./services/groupReservationNotificationService");
 const {
+  createRoomBlockService
+} = require("./services/roomBlockService");
+const {
   EVENT_HALLS,
   getEventVoucher,
   getQuotation,
@@ -62,95 +70,13 @@ const {
 } = require("./services/dashboardExtrasService");
 const mysql =
   require("./services/mysqlCliService");
+const {
+  readRoomBlocks,
+  saveRoomBlock
+} = createRoomBlockService(mysql);
 
 const PORT =
   Number(process.env.DASHBOARD_PORT || 3333);
-
-const HOTEL_ROOM_NUMBERS =
-  [1, 2, 3, 4]
-    .flatMap(floor =>
-      Array.from(
-        { length: floor === 4 ? 6 : 22 },
-        (_, index) => index + 1
-      )
-        .filter(number => number !== 13)
-        .map(number =>
-          `${floor}${String(number).padStart(2, "0")}`
-        )
-    );
-
-const HOTEL_RATE_OPTIONS = [
-  {
-    label:
-      "Habitacion sencilla/doble - $700",
-    value:
-      "$700"
-  },
-  {
-    label:
-      "Suite - $800",
-    value:
-      "$800"
-  },
-  {
-    label:
-      "Mañanera - $900",
-    value:
-      "$900"
-  },
-  {
-    label:
-      "Mañanera suite - $1,000",
-    value:
-      "$1,000"
-  },
-  {
-    label:
-      "Convenio - $600",
-    value:
-      "$600"
-  },
-  {
-    label:
-      "Promocion INAPAM/PEMEX/ADO/cliente frecuente - $650",
-    value:
-      "$650"
-  }
-];
-
-function escapeHtmlAttribute(value) {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-function hotelRateOptionsHtml(selectedValue = "") {
-  const selected =
-    String(selectedValue || "").trim();
-  const options =
-    HOTEL_RATE_OPTIONS
-      .map(option =>
-        `<option value="${escapeHtmlAttribute(option.value)}"${option.value === selected ? " selected" : ""}>${escapeHtmlAttribute(option.label)}</option>`
-      );
-
-  if (
-    selected
-    &&
-    !HOTEL_RATE_OPTIONS.some(option => option.value === selected)
-  ) {
-    options.unshift(
-      `<option value="${escapeHtmlAttribute(selected)}" selected>${escapeHtmlAttribute(selected)} (tarifa guardada)</option>`
-    );
-  }
-
-  return [
-    '<option value="">Sin tarifa</option>',
-    ...options
-  ].join("");
-}
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
@@ -2736,89 +2662,6 @@ function saveRoomEvent(input) {
       ${mysql.quote(input.title || "")},
       ${mysql.quote(input.notes || "")},
       ${input.cost ? Number(input.cost) : "NULL"},
-      ${mysql.quote(input.createdBy || "dashboard")}
-    );
-  `);
-
-  return {
-    ok:
-      true
-  };
-}
-
-function readRoomBlocks() {
-  if (!mysql.ensureSchema()) {
-    return [];
-  }
-
-  return mysql.queryJson(`
-    SELECT JSON_OBJECT(
-      'id', block.id,
-      'roomNumber', room.room_number,
-      'startDate', DATE_FORMAT(block.start_date, '%Y-%m-%d'),
-      'endDate', DATE_FORMAT(block.end_date, '%Y-%m-%d'),
-      'reason', block.reason,
-      'notes', block.notes,
-      'status', block.status,
-      'createdBy', block.created_by,
-      'createdAt', DATE_FORMAT(block.created_at, '%Y-%m-%dT%H:%i:%s.000Z')
-    )
-    FROM room_blocks block
-    JOIN rooms room ON room.id = block.room_id
-    WHERE block.end_date >= DATE_SUB(CURDATE(), INTERVAL 60 DAY)
-    ORDER BY
-      block.status = 'activo' DESC,
-      block.start_date DESC,
-      room.room_number;
-  `);
-}
-
-function saveRoomBlock(input) {
-  if (!mysql.ensureSchema()) {
-    throw new Error("Activa MySQL para guardar bloqueos de habitaciones");
-  }
-
-  const room =
-    String(input.roomNumber || "")
-      .replace(/\D/g, "");
-  const startDate =
-    String(input.startDate || "")
-      .trim();
-  const endDate =
-    String(input.endDate || startDate)
-      .trim();
-  const reason =
-    String(input.reason || "")
-      .trim();
-  const status =
-    String(input.status || "activo")
-      .trim()
-      .toLowerCase();
-
-  if (!room || !startDate || !endDate || !reason) {
-    throw new Error("Habitacion, fechas y motivo son requeridos");
-  }
-
-  if (endDate < startDate) {
-    throw new Error("La fecha final no puede ser menor a la inicial");
-  }
-
-  mysql.runSql(`
-    INSERT INTO room_blocks (
-      room_id,
-      start_date,
-      end_date,
-      reason,
-      notes,
-      status,
-      created_by
-    ) VALUES (
-      (SELECT id FROM rooms WHERE room_number = ${mysql.quote(room)}),
-      ${mysql.quote(startDate)},
-      ${mysql.quote(endDate)},
-      ${mysql.quote(reason)},
-      ${mysql.quote(input.notes || "")},
-      ${mysql.quote(status || "activo")},
       ${mysql.quote(input.createdBy || "dashboard")}
     );
   `);
