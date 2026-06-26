@@ -79,6 +79,79 @@ const HOTEL_ROOM_NUMBERS =
         )
     );
 
+const HOTEL_RATE_OPTIONS = [
+  {
+    label:
+      "Habitacion sencilla/doble - $700",
+    value:
+      "$700"
+  },
+  {
+    label:
+      "Suite - $800",
+    value:
+      "$800"
+  },
+  {
+    label:
+      "Mañanera - $900",
+    value:
+      "$900"
+  },
+  {
+    label:
+      "Mañanera suite - $1,000",
+    value:
+      "$1,000"
+  },
+  {
+    label:
+      "Convenio - $600",
+    value:
+      "$600"
+  },
+  {
+    label:
+      "Promocion INAPAM/PEMEX/ADO/cliente frecuente - $650",
+    value:
+      "$650"
+  }
+];
+
+function escapeHtmlAttribute(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function hotelRateOptionsHtml(selectedValue = "") {
+  const selected =
+    String(selectedValue || "").trim();
+  const options =
+    HOTEL_RATE_OPTIONS
+      .map(option =>
+        `<option value="${escapeHtmlAttribute(option.value)}"${option.value === selected ? " selected" : ""}>${escapeHtmlAttribute(option.label)}</option>`
+      );
+
+  if (
+    selected
+    &&
+    !HOTEL_RATE_OPTIONS.some(option => option.value === selected)
+  ) {
+    options.unshift(
+      `<option value="${escapeHtmlAttribute(selected)}" selected>${escapeHtmlAttribute(selected)} (tarifa guardada)</option>`
+    );
+  }
+
+  return [
+    '<option value="">Sin tarifa</option>',
+    ...options
+  ].join("");
+}
+
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
@@ -4639,7 +4712,9 @@ function pageHtml() {
         </label>
         <label>
           Tarifa
-          <input id="manualTarifa" placeholder="$700">
+          <select id="manualTarifa">
+            ${hotelRateOptionsHtml("$700")}
+          </select>
         </label>
         <label>
           Nota
@@ -5093,7 +5168,7 @@ function pageHtml() {
           <label>Menores<input id="editReservationChildren" type="number" min="0"></label>
           <label>Tipo<input id="editReservationType"></label>
           <label>Hora<input id="editReservationTime"></label>
-          <label>Tarifa<input id="editReservationRate"></label>
+          <label>Tarifa<select id="editReservationRate"></select></label>
           <label class="wide">Nota interna<textarea id="editReservationNote" rows="3"></textarea></label>
         </div>
         <div class="confirm-actions">
@@ -5277,6 +5352,20 @@ function pageHtml() {
     let roomBlocks = [];
     let pendingQuoteEvent = null;
     let pendingEventDetailId = null;
+    const hotelRateOptions = ${JSON.stringify(HOTEL_RATE_OPTIONS)};
+
+    function renderHotelRateOptions(selectedValue) {
+      const selected = String(selectedValue || '').trim();
+      const options = hotelRateOptions.map(option =>
+        '<option value="' + escapeHtml(option.value) + '"' + (option.value === selected ? ' selected' : '') + '>' + escapeHtml(option.label) + '</option>'
+      );
+
+      if (selected && !hotelRateOptions.some(option => option.value === selected)) {
+        options.unshift('<option value="' + escapeHtml(selected) + '" selected>' + escapeHtml(selected) + ' (tarifa guardada)</option>');
+      }
+
+      return '<option value="">Sin tarifa</option>' + options.join('');
+    }
 
     const helpTopics = {
       today: {
@@ -7527,7 +7616,7 @@ function pageHtml() {
       manualAdultos.value = '2';
       manualNinos.value = '0';
       manualHora.value = '';
-      manualTarifa.value = '';
+      manualTarifa.value = '$700';
       manualNota.value = '';
       manualReservationStatus.textContent = 'Reserva guardada: #' + data.reservation.folio;
       await loadDashboard();
@@ -8072,6 +8161,7 @@ function pageHtml() {
       editReservationChildren.value = reservation.ninos || 0;
       editReservationType.value = reservation.tipo || '';
       editReservationTime.value = reservation.hora || '';
+      editReservationRate.innerHTML = renderHotelRateOptions(reservation.tarifa || '');
       editReservationRate.value = reservation.tarifa || '';
       editReservationNote.value = reservation.note || '';
       reservationEditSubtitle.textContent = reservation.source ? 'Fuente: ' + reservation.source : '';
