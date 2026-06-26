@@ -5815,11 +5815,11 @@ function pageHtml() {
 
     function displayToIsoClient(value) {
       const text = String(value || '').trim();
-      const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      const iso = text.match(/^(\\d{4})-(\\d{2})-(\\d{2})/);
       if (iso) {
         return iso[1] + '-' + iso[2] + '-' + iso[3];
       }
-      const display = text.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      const display = text.match(/^(\\d{2})\\/(\\d{2})\\/(\\d{4})$/);
       if (!display) {
         return '';
       }
