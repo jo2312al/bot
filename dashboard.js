@@ -3209,6 +3209,16 @@ function pageHtml() {
       background: #f8fafc;
       padding: 9px;
     }
+    .search-result-button {
+      width: 100%;
+      text-align: left;
+      font-weight: 400;
+      color: var(--text);
+    }
+    .search-result-button:hover {
+      border-color: var(--accent);
+      background: #eefdf9;
+    }
     button {
       border: 1px solid var(--line);
       background: #ffffff;
@@ -5039,6 +5049,18 @@ function pageHtml() {
       <div id="helpModalBody" class="modal-body help-content"></div>
     </div>
   </div>
+  <div id="searchDetailModalBackdrop" class="modal-backdrop hidden" onclick="closeSearchDetailModal()">
+    <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="searchDetailTitle" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <strong id="searchDetailTitle">Detalle</strong>
+          <div id="searchDetailSubtitle" class="muted"></div>
+        </div>
+        <button onclick="closeSearchDetailModal()">Cerrar</button>
+      </div>
+      <div id="searchDetailBody" class="modal-body"></div>
+    </div>
+  </div>
   <div id="dayModalBackdrop" class="modal-backdrop hidden" onclick="closeDayModal()">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="dayModalTitle" onclick="event.stopPropagation()">
       <div class="modal-head">
@@ -5607,44 +5629,201 @@ function pageHtml() {
       const dates = Array.isArray(reservation.dates)
         ? reservation.dates.join(', ')
         : (reservation.fecha || reservation.startDate || '-');
-      return '<div class="mini-item">' +
+      const isoDate = Array.isArray(reservation.dates) && reservation.dates[0]
+        ? displayToIsoClient(reservation.dates[0])
+        : displayToIsoClient(reservation.fecha || reservation.startDate || '');
+      return '<button class="mini-item search-result-button" onclick="openSearchReservation(\\'' + escapeJs(isoDate) + '\\', \\'' + escapeJs(reservation.sourceKey || '') + '\\')">' +
         '<strong>' + escapeHtml(reservation.nombre || reservation.guestName || 'Reserva') + '</strong>' +
         '<div class="muted">' + escapeHtml(dates) + ' · ' + escapeHtml(reservation.tipo || reservation.roomType || '-') + ' · ' + escapeHtml(reservation.source || reservation.origen || '') + '</div>' +
         '<div>' + escapeHtml(reservation.telefono || reservation.phone || '') + '</div>' +
-      '</div>';
+      '</button>';
     }
 
     function renderSearchGuest(row) {
-      return '<div class="mini-item">' +
+      return '<button class="mini-item search-result-button" onclick="openSearchGuest(\\'' + escapeJs(row.reservationId || '') + '\\')">' +
         '<strong>' + escapeHtml(row.guestName || 'Huesped') + '</strong>' +
         '<div class="muted">' + escapeHtml(row.dates || row.startDate || '-') + ' · ' + escapeHtml(row.source || '-') + ' · ' + escapeHtml(row.status || '-') + '</div>' +
         '<div>Hab: ' + escapeHtml(row.assignedRoom || '-') + ' · Tipo: ' + escapeHtml(row.roomType || '-') + '</div>' +
         '<div class="muted">' + escapeHtml(row.phone || '') + (row.note ? ' · Nota: ' + escapeHtml(row.note) : '') + '</div>' +
-      '</div>';
+      '</button>';
     }
 
     function renderSearchEvent(event) {
-      return '<div class="mini-item">' +
+      return '<button class="mini-item search-result-button" onclick="openSearchEvent(\\'' + escapeJs(event.id || '') + '\\')">' +
         '<strong>' + escapeHtml(event.eventName || event.client || 'Evento') + '</strong>' +
         '<div class="muted">' + escapeHtml(isoToDisplay(event.eventDate || '') || event.eventDate || '-') + ' · ' + escapeHtml(event.hallName || '-') + ' · ' + escapeHtml(event.status || '-') + '</div>' +
         '<div>' + escapeHtml(event.client || '') + '</div>' +
-      '</div>';
+      '</button>';
     }
 
     function renderSearchQuote(quote) {
-      return '<div class="mini-item">' +
+      return '<button class="mini-item search-result-button" onclick="openSearchQuote(\\'' + escapeJs(quote.id || '') + '\\')">' +
         '<strong>' + escapeHtml(quote.id || 'Cotizacion') + '</strong>' +
         '<div class="muted">' + escapeHtml(quote.client || '-') + ' · ' + escapeHtml(quote.eventName || '-') + '</div>' +
         '<div>' + escapeHtml(quote.eventDate || '') + ' · ' + escapeHtml(quote.hallName || quote.hall || 'Sin salon') + '</div>' +
-      '</div>';
+      '</button>';
     }
 
     function renderSearchBlock(block) {
-      return '<div class="mini-item">' +
+      return '<button class="mini-item search-result-button" onclick="openSearchBlock(\\'' + escapeJs(block.id || '') + '\\')">' +
         '<strong>Hab ' + escapeHtml(block.roomNumber || '-') + '</strong>' +
         '<div class="muted">' + escapeHtml(isoToDisplay(block.startDate || '') || '-') + ' al ' + escapeHtml(isoToDisplay(block.endDate || '') || '-') + ' · ' + escapeHtml(block.status || '-') + '</div>' +
         '<div>' + escapeHtml(block.reason || '-') + '</div>' +
-      '</div>';
+      '</button>';
+    }
+
+    function closeGlobalSearchResults() {
+      globalSearchResults.classList.add('hidden');
+    }
+
+    function openSearchReservation(isoDate, sourceKey) {
+      closeGlobalSearchResults();
+      if (isoDate) {
+        openDayModal(isoDate);
+        return;
+      }
+
+      const reservation = (dashboardData?.groupReservations || []).find(row =>
+        row.sourceKey === sourceKey
+      );
+      openSearchDetailModal(
+        'Reserva',
+        reservation?.nombre || 'Reserva encontrada',
+        renderSearchReservationDetail(reservation || {})
+      );
+    }
+
+    function openSearchGuest(reservationId) {
+      closeGlobalSearchResults();
+      fetch('/api/guest-history?q=' + encodeURIComponent(globalSearchInput.value.trim()))
+        .then(response => response.json())
+        .then(data => {
+          const row = (data.history || []).find(item => String(item.reservationId) === String(reservationId)) || (data.history || [])[0];
+          openSearchDetailModal(
+            'Historial de huesped',
+            row?.guestName || 'Huesped',
+            renderGuestHistoryDetail(row || {})
+          );
+        })
+        .catch(error =>
+          openSearchDetailModal('Historial de huesped', 'No se pudo cargar', '<div class="muted">' + escapeHtml(error.message || '') + '</div>')
+        );
+    }
+
+    function openSearchEvent(eventId) {
+      closeGlobalSearchResults();
+      openEventDetail(eventId);
+    }
+
+    function openSearchQuote(quotationId) {
+      closeGlobalSearchResults();
+      const quote = (dashboardData?.quotations || []).find(row => row.id === quotationId);
+
+      if (!quote) {
+        openSearchDetailModal('Cotizacion', quotationId || 'Cotizacion', '<div class="muted">No se encontro la cotizacion en memoria. Actualiza el dashboard.</div>');
+        return;
+      }
+
+      openSearchDetailModal(
+        'Cotizacion ' + (quote.id || ''),
+        quote.client || quote.eventName || 'Sin cliente',
+        renderQuoteDetail(quote)
+      );
+    }
+
+    function openSearchBlock(blockId) {
+      closeGlobalSearchResults();
+      const block = roomBlocks.find(item => String(item.id) === String(blockId));
+      openSearchDetailModal(
+        'Bloqueo de habitacion',
+        block ? 'Habitacion ' + block.roomNumber : 'Bloqueo',
+        renderBlockDetail(block || {})
+      );
+    }
+
+    function openSearchDetailModal(title, subtitle, bodyHtml) {
+      searchDetailTitle.textContent = title;
+      searchDetailSubtitle.textContent = subtitle || '';
+      searchDetailBody.innerHTML = bodyHtml || '<div class="muted">Sin detalle.</div>';
+      searchDetailModalBackdrop.classList.remove('hidden');
+      document.body.classList.add('modal-open');
+    }
+
+    function closeSearchDetailModal() {
+      searchDetailModalBackdrop.classList.add('hidden');
+      document.body.classList.remove('modal-open');
+    }
+
+    function renderSearchReservationDetail(reservation) {
+      return '<div class="event-detail-grid">' +
+        renderDetailBox('Huesped', reservation.nombre || reservation.guestName || '-') +
+        renderDetailBox('Telefono', reservation.telefono || reservation.phone || '-') +
+        renderDetailBox('Fechas', (reservation.dates || [reservation.fecha || reservation.startDate]).filter(Boolean).join(', ') || '-') +
+        renderDetailBox('Habitaciones', reservation.habitaciones || reservation.roomsCount || '-') +
+        renderDetailBox('Tipo / hora', (reservation.tipo || reservation.roomType || '-') + ' / ' + (reservation.hora || reservation.arrivalTime || '-')) +
+        renderDetailBox('Tarifa', reservation.tarifa || reservation.rate || '-') +
+      '</div>' +
+      '<div class="event-detail-box"><span>Nota</span><div>' + escapeHtml(reservation.note || reservation.nota || 'Sin nota') + '</div></div>';
+    }
+
+    function renderGuestHistoryDetail(row) {
+      return '<div class="event-detail-grid">' +
+        renderDetailBox('Huesped', row.guestName || '-') +
+        renderDetailBox('Telefono', row.phone || '-') +
+        renderDetailBox('Fechas', row.dates || row.startDate || '-') +
+        renderDetailBox('Fuente / estado', (row.source || '-') + ' / ' + (row.status || '-')) +
+        renderDetailBox('Habitacion', row.assignedRoom || '-') +
+        renderDetailBox('Tipo', row.roomType || '-') +
+        renderDetailBox('Tarifa', row.rate || '-') +
+        renderDetailBox('Folio', row.folio || '-') +
+      '</div>' +
+      '<div class="event-detail-box"><span>Nota</span><div>' + escapeHtml(row.note || 'Sin nota') + '</div></div>';
+    }
+
+    function renderQuoteDetail(quote) {
+      return '<div class="event-detail-grid">' +
+        renderDetailBox('Cliente', quote.client || '-') +
+        renderDetailBox('Contacto', quote.contact || '-') +
+        renderDetailBox('Evento', quote.eventName || quote.headline || '-') +
+        renderDetailBox('Fecha', quote.eventDate || '-') +
+        renderDetailBox('Salon', quote.hallName || quote.hallCode || 'Sin salon') +
+        renderDetailBox('Total', formatMoney(quote.total || 0)) +
+      '</div>' +
+      '<div class="confirm-actions"><button onclick="openQuotationPdf(\\'' + escapeJs(quote.id || '') + '\\')">Abrir PDF</button><button class="primary" onclick="closeSearchDetailModal(); openQuoteEventModal(\\'' + escapeJs(quote.id || '') + '\\')">Apartar salon</button></div>';
+    }
+
+    function renderBlockDetail(block) {
+      return '<div class="event-detail-grid">' +
+        renderDetailBox('Habitacion', block.roomNumber || '-') +
+        renderDetailBox('Fechas', (isoToDisplay(block.startDate || '') || '-') + ' al ' + (isoToDisplay(block.endDate || '') || '-')) +
+        renderDetailBox('Estado', block.status || '-') +
+        renderDetailBox('Motivo', block.reason || '-') +
+      '</div>' +
+      '<div class="event-detail-box"><span>Notas</span><div>' + escapeHtml(block.notes || 'Sin notas') + '</div></div>';
+    }
+
+    function renderDetailBox(label, value) {
+      return '<div class="event-detail-box"><span>' + escapeHtml(label) + '</span><strong>' + escapeHtml(value) + '</strong></div>';
+    }
+
+    function openQuotationPdf(quotationId) {
+      if (!quotationId) {
+        return;
+      }
+      window.open('/api/quotations/' + encodeURIComponent(quotationId) + '/print', '_blank');
+    }
+
+    function displayToIsoClient(value) {
+      const text = String(value || '').trim();
+      const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (iso) {
+        return iso[1] + '-' + iso[2] + '-' + iso[3];
+      }
+      const display = text.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      if (!display) {
+        return '';
+      }
+      return display[3] + '-' + display[2] + '-' + display[1];
     }
 
     async function loadReports() {
@@ -8407,10 +8586,25 @@ function pageHtml() {
     loadBotStatus();
     loadDashboard();
     setInterval(loadBotStatus, 5000);
+    document.addEventListener('click', event => {
+      const searchPanel = document.querySelector('.global-search-panel');
+
+      if (
+        searchPanel &&
+        !searchPanel.contains(event.target) &&
+        !globalSearchResults.classList.contains('hidden')
+      ) {
+        closeGlobalSearchResults();
+      }
+    });
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape') {
-        if (!confirmRackBackdrop.classList.contains('hidden')) {
+        if (!globalSearchResults.classList.contains('hidden')) {
+          closeGlobalSearchResults();
+        } else if (!confirmRackBackdrop.classList.contains('hidden')) {
           closeRackConfirm();
+        } else if (!searchDetailModalBackdrop.classList.contains('hidden')) {
+          closeSearchDetailModal();
         } else if (!eventDetailModalBackdrop.classList.contains('hidden')) {
           closeEventDetailModal();
         } else if (!quoteEventModalBackdrop.classList.contains('hidden')) {
