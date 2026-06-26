@@ -164,6 +164,25 @@ CREATE TABLE IF NOT EXISTS room_events (
     ON UPDATE CASCADE ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS room_blocks (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  room_id BIGINT UNSIGNED NOT NULL,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  reason VARCHAR(200) NOT NULL DEFAULT '',
+  notes TEXT NOT NULL,
+  status VARCHAR(30) NOT NULL DEFAULT 'activo',
+  created_by VARCHAR(120) NOT NULL DEFAULT 'dashboard',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY ix_room_blocks_room_dates (room_id, start_date, end_date),
+  KEY ix_room_blocks_status_dates (status, start_date, end_date),
+  CONSTRAINT fk_room_blocks_room
+    FOREIGN KEY (room_id) REFERENCES rooms(id)
+    ON UPDATE CASCADE ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS group_messages (
   message_key VARCHAR(255) NOT NULL,
   group_id VARCHAR(120) NOT NULL,

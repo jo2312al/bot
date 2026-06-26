@@ -1047,6 +1047,14 @@ function cleanPdfText(value) {
     .replace(/[^\x20-\x7E\n]/g, "");
 }
 
+function normalizeText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
 function collectPdf(doc) {
   return new Promise((resolve, reject) => {
     const chunks =
@@ -2113,6 +2121,8 @@ function getSummary() {
       EVENT_HALLS,
     eventBookings:
       readEventBookings(),
+    roomBlocks:
+      readRoomBlocks(),
     totalRooms:
       TOTAL_ROOMS,
     rackStatus:
@@ -2663,6 +2673,306 @@ function saveRoomEvent(input) {
   };
 }
 
+function readRoomBlocks() {
+  if (!mysql.ensureSchema()) {
+    return [];
+  }
+
+  return mysql.queryJson(`
+    SELECT JSON_OBJECT(
+      'id', block.id,
+      'roomNumber', room.room_number,
+      'startDate', DATE_FORMAT(block.start_date, '%Y-%m-%d'),
+      'endDate', DATE_FORMAT(block.end_date, '%Y-%m-%d'),
+      'reason', block.reason,
+      'notes', block.notes,
+      'status', block.status,
+      'createdBy', block.created_by,
+      'createdAt', DATE_FORMAT(block.created_at, '%Y-%m-%dT%H:%i:%s.000Z')
+    )
+    FROM room_blocks block
+    JOIN rooms room ON room.id = block.room_id
+    WHERE block.end_date >= DATE_SUB(CURDATE(), INTERVAL 60 DAY)
+    ORDER BY
+      block.status = 'activo' DESC,
+      block.start_date DESC,
+      room.room_number;
+  `);
+}
+
+function saveRoomBlock(input) {
+  if (!mysql.ensureSchema()) {
+    throw new Error("Activa MySQL para guardar bloqueos de habitaciones");
+  }
+
+  const room =
+    String(input.roomNumber || "")
+      .replace(/\D/g, "");
+  const startDate =
+    String(input.startDate || "")
+      .trim();
+  const endDate =
+    String(input.endDate || startDate)
+      .trim();
+  const reason =
+    String(input.reason || "")
+      .trim();
+  const status =
+    String(input.status || "activo")
+      .trim()
+      .toLowerCase();
+
+  if (!room || !startDate || !endDate || !reason) {
+    throw new Error("Habitacion, fechas y motivo son requeridos");
+  }
+
+  if (endDate < startDate) {
+    throw new Error("La fecha final no puede ser menor a la inicial");
+  }
+
+  mysql.runSql(`
+    INSERT INTO room_blocks (
+      room_id,
+      start_date,
+      end_date,
+      reason,
+      notes,
+      status,
+      created_by
+    ) VALUES (
+      (SELECT id FROM rooms WHERE room_number = ${mysql.quote(room)}),
+      ${mysql.quote(startDate)},
+      ${mysql.quote(endDate)},
+      ${mysql.quote(reason)},
+      ${mysql.quote(input.notes || "")},
+      ${mysql.quote(status || "activo")},
+      ${mysql.quote(input.createdBy || "dashboard")}
+    );
+  `);
+
+  return {
+    ok:
+      true
+  };
+}
+
+function getGuestHistory(query) {
+  const text =
+    String(query || "")
+      .trim();
+
+  if (!text || text.length < 2 || !mysql.ensureSchema()) {
+    return [];
+  }
+
+  const like =
+    `%${text}%`;
+
+  return mysql.queryJson(`
+    SELECT JSON_OBJECT(
+      'reservationId', reservation.id,
+      'folio', reservation.folio,
+      'source', reservation.source,
+      'status', reservation.status,
+      'guestName', guest.name,
+      'phone', IFNULL(NULLIF(reservation.phone_snapshot, ''), guest.phone),
+      'startDate', DATE_FORMAT(reservation.start_date, '%d/%m/%Y'),
+      'roomType', IFNULL(room_type.name, ''),
+      'roomsCount', reservation.rooms_count,
+      'adults', reservation.adults_count,
+      'children', reservation.children_count,
+      'arrivalTime', reservation.arrival_time_text,
+      'assignedRoom', IFNULL(room.room_number, ''),
+      'rate', reservation.rate_text,
+      'note', IFNULL(note.note, ''),
+      'dates', IFNULL((
+        SELECT GROUP_CONCAT(DATE_FORMAT(date_item.stay_date, '%d/%m/%Y') ORDER BY date_item.stay_date SEPARATOR ', ')
+        FROM reservation_dates date_item
+        WHERE date_item.reservation_id = reservation.id
+      ), '')
+    )
+    FROM reservations reservation
+    JOIN guests guest ON guest.id = reservation.guest_id
+    LEFT JOIN room_types room_type ON room_type.id = reservation.room_type_id
+    LEFT JOIN rooms room ON room.id = reservation.assigned_room_id
+    LEFT JOIN reservation_notes note ON note.reservation_id = reservation.id
+    WHERE
+      guest.name LIKE ${mysql.quote(like)}
+      OR guest.phone LIKE ${mysql.quote(like)}
+      OR reservation.phone_snapshot LIKE ${mysql.quote(like)}
+      OR reservation.folio LIKE ${mysql.quote(like)}
+      OR reservation.raw_text LIKE ${mysql.quote(like)}
+    ORDER BY reservation.start_date DESC, reservation.id DESC
+    LIMIT 60;
+  `);
+}
+
+function getGlobalSearch(query) {
+  const text =
+    String(query || "")
+      .trim();
+  const normalized =
+    normalizeText(text);
+
+  if (!normalized || normalized.length < 2) {
+    return {
+      query:
+        text,
+      reservations:
+        [],
+      events:
+        [],
+      quotations:
+        [],
+      guests:
+        [],
+      blocks:
+        []
+    };
+  }
+
+  const summary =
+    getSummary();
+  const matches =
+    value => normalizeText(value).includes(normalized);
+
+  return {
+    query:
+      text,
+    reservations:
+      (summary.groupReservations || [])
+        .filter(reservation =>
+          [
+            reservation.nombre,
+            reservation.telefono,
+            reservation.tarifa,
+            reservation.folio,
+            reservation.habitacion,
+            reservation.habitacionAsignada,
+            reservation.tipo,
+            reservation.nota
+          ].some(matches)
+        )
+        .slice(0, 20),
+    events:
+      (summary.eventBookings || [])
+        .filter(event =>
+          [
+            event.client,
+            event.contact,
+            event.eventName,
+            event.hallName,
+            event.status,
+            event.notes
+          ].some(matches)
+        )
+        .slice(0, 20),
+    quotations:
+      (summary.quotations || [])
+        .filter(quote =>
+          [
+            quote.id,
+            quote.client,
+            quote.contact,
+            quote.eventName,
+            quote.hallName
+          ].some(matches)
+        )
+        .slice(0, 20),
+    guests:
+      getGuestHistory(text)
+        .slice(0, 20),
+    blocks:
+      (summary.roomBlocks || [])
+        .filter(block =>
+          [
+            block.roomNumber,
+            block.reason,
+            block.notes,
+            block.status
+          ].some(matches)
+        )
+        .slice(0, 20)
+  };
+}
+
+function getReportCsv(type, report) {
+  const selected =
+    String(type || "all").trim();
+  const sections = [];
+  const addSection = (name, headers, rows) => {
+    sections.push([name]);
+    sections.push(headers);
+    rows.forEach(row => sections.push(row));
+    sections.push([]);
+  };
+
+  if (selected === "all" || selected === "occupancy") {
+    addSection(
+      "Ocupacion diaria",
+      ["Fecha", "Habitaciones ocupadas", "Room nights", "Porcentaje"],
+      (report.dailyOccupancy || []).map(row => [
+        row.date || "",
+        row.occupiedRooms || 0,
+        row.occupiedRoomNights || row.occupiedRooms || 0,
+        row.occupancyPercent || 0
+      ])
+    );
+  }
+
+  if (selected === "all" || selected === "rotation") {
+    addSection(
+      "Rotacion habitaciones",
+      ["Habitacion", "Tipo", "Noches", "Ultima ocupacion", "Limpieza profunda", "Clima", "Mantenimiento"],
+      (report.roomRotation || []).map(row => [
+        row.roomNumber || "",
+        row.roomType || "",
+        row.occupiedNights || 0,
+        row.lastOccupiedDate || "",
+        row.lastDeepCleanDate || "",
+        row.lastAcMaintenanceDate || "",
+        row.lastMaintenanceDate || ""
+      ])
+    );
+  }
+
+  if (selected === "all" || selected === "sources") {
+    addSection(
+      "Reservas por fuente",
+      ["Fuente", "Reservas", "Habitaciones", "Adultos", "Menores"],
+      (report.reservationsBySource || []).map(row => [
+        row.source || "",
+        row.reservationsCount || 0,
+        row.roomsReserved || 0,
+        row.adultsCount || 0,
+        row.childrenCount || 0
+      ])
+    );
+  }
+
+  if (selected === "all" || selected === "events") {
+    addSection(
+      "Eventos",
+      ["Fecha", "Salon", "Cliente", "Evento", "Estado", "Total", "Pagado", "Pendiente"],
+      (report.events || []).map(row => [
+        row.date || "",
+        row.hallName || "",
+        row.client || "",
+        row.eventName || "",
+        row.status || "",
+        row.totalAmount || 0,
+        row.paidAmount || 0,
+        row.pendingAmount || 0
+      ])
+    );
+  }
+
+  return "\uFEFF" +
+    sections
+      .map(row => row.map(csvValue).join(","))
+      .join("\n");
+}
+
 async function getBotStatus() {
   const statuses =
     readBotStatuses();
@@ -2852,6 +3162,52 @@ function pageHtml() {
       align-items: center;
       justify-content: space-between;
       margin-bottom: 12px;
+    }
+    .global-search-panel {
+      margin-top: 0;
+      background: #f8fafc;
+    }
+    .search-controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .search-controls input {
+      min-width: min(520px, 70vw);
+    }
+    .search-results {
+      border-top: 1px solid var(--line);
+      padding-top: 12px;
+    }
+    .search-grid,
+    .today-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .search-card,
+    .today-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 12px;
+      min-width: 0;
+    }
+    .search-card h3,
+    .today-card h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+    }
+    .mini-list {
+      display: grid;
+      gap: 8px;
+    }
+    .mini-item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 9px;
     }
     button {
       border: 1px solid var(--line);
@@ -4073,6 +4429,7 @@ function pageHtml() {
   </header>
   <main>
     <nav class="view-tabs">
+      <button id="tab-today" onclick="showView('today')">Hoy</button>
       <button id="tab-main" class="active" onclick="showView('main')">Principal</button>
       <button id="tab-calendar" onclick="showView('calendar')">Calendario</button>
       <button id="tab-reservations" onclick="showView('reservations')">Reservas</button>
@@ -4081,6 +4438,33 @@ function pageHtml() {
       <button id="tab-rack" onclick="showView('rack')">Rack</button>
       <button id="tab-reports" onclick="showView('reports')">Reportes</button>
     </nav>
+
+    <section class="panel global-search-panel">
+      <div class="toolbar">
+        <div>
+          <strong>Buscador global</strong><button class="help-button" onclick="openHelp('search')" title="Ayuda">?</button>
+          <div class="muted">Busca huespedes, telefonos, folios, eventos, cotizaciones, habitaciones o bloqueos.</div>
+        </div>
+        <div class="search-controls">
+          <input id="globalSearchInput" placeholder="Ej. Juan, 444, 101, boda, COT..." onkeydown="handleGlobalSearchKey(event)">
+          <button class="primary" onclick="runGlobalSearch()">Buscar</button>
+        </div>
+      </div>
+      <div id="globalSearchResults" class="search-results hidden"></div>
+    </section>
+
+    <div id="view-today" class="view-panel hidden">
+      <section class="panel">
+        <div class="toolbar">
+          <div>
+            <strong>Vista de hoy</strong><button class="help-button" onclick="openHelp('today')" title="Ayuda">?</button>
+            <div class="muted">Resumen rapido para recepcion: llegadas, ocupacion, eventos, pagos y bloqueos activos.</div>
+          </div>
+          <button class="primary" onclick="loadDashboard()">Actualizar</button>
+        </div>
+        <div id="todayView"></div>
+      </section>
+    </div>
 
     <div id="view-main" class="view-panel">
     <section class="grid">
@@ -4514,6 +4898,47 @@ function pageHtml() {
       <div id="rackFloorMap"></div>
       <div id="rackRoomGrid"></div>
     </section>
+    <section class="panel">
+      <div class="toolbar">
+        <div>
+          <strong>Bloqueos de habitacion</strong><button class="help-button" onclick="openHelp('roomBlocks')" title="Ayuda">?</button>
+          <div class="muted">Aparta cuartos para mantenimiento, limpieza profunda, fallas o cualquier motivo operativo.</div>
+        </div>
+      </div>
+      <div class="date-controls">
+        <label>
+          Habitacion
+          <input id="blockRoom" list="roomEventRoomOptions" placeholder="Ej. 101">
+        </label>
+        <label>
+          Desde
+          <input id="blockStart" type="date">
+        </label>
+        <label>
+          Hasta
+          <input id="blockEnd" type="date">
+        </label>
+        <label>
+          Motivo
+          <input id="blockReason" placeholder="Ej. clima, pintura, fuera de servicio">
+        </label>
+        <label>
+          Estado
+          <select id="blockStatus">
+            <option value="activo">Activo</option>
+            <option value="terminado">Terminado</option>
+            <option value="cancelado">Cancelado</option>
+          </select>
+        </label>
+        <button class="primary" onclick="saveRoomBlock()">Guardar bloqueo</button>
+      </div>
+      <label>
+        Notas del bloqueo
+        <input id="blockNotes" placeholder="Detalle interno, proveedor, pendiente o seguimiento">
+      </label>
+      <div id="roomBlockStatus" class="muted" style="margin-top:8px"></div>
+      <div id="roomBlocksList" style="margin-top:12px"></div>
+    </section>
     </div>
 
     <div id="view-reports" class="view-panel hidden">
@@ -4530,6 +4955,10 @@ function pageHtml() {
           Mes
           <input id="reportMonth" type="month" onchange="loadReports()">
         </label>
+        <button onclick="downloadReportCsv('all')">CSV completo</button>
+        <button onclick="downloadReportCsv('occupancy')">CSV ocupacion</button>
+        <button onclick="downloadReportCsv('rotation')">CSV rotacion</button>
+        <button onclick="downloadReportCsv('events')">CSV eventos</button>
         <div id="reportMode" class="muted"></div>
       </div>
       <div id="reportKpis" class="report-kpis"></div>
@@ -4565,7 +4994,9 @@ function pageHtml() {
             <label>
               Habitacion
               <input id="roomEventRoom" list="roomEventRoomOptions" placeholder="Ej. 101">
-              <datalist id="roomEventRoomOptions"></datalist>
+              <datalist id="roomEventRoomOptions">
+                ${HOTEL_ROOM_NUMBERS.map(room => `<option value="${room}"></option>`).join("")}
+              </datalist>
             </label>
             <label>
               Tipo
@@ -4821,10 +5252,19 @@ function pageHtml() {
     let quoteMenuItems = [];
     let eventHalls = [];
     let eventBookings = [];
+    let roomBlocks = [];
     let pendingQuoteEvent = null;
     let pendingEventDetailId = null;
 
     const helpTopics = {
+      today: {
+        title: 'Vista de hoy',
+        body: 'Es el tablero rapido para recepcion. Junta llegadas, ocupacion, eventos del dia, pagos pendientes y habitaciones bloqueadas.\\n\\nUsalo al iniciar turno para saber que se espera hoy sin navegar por todos los tabs.'
+      },
+      search: {
+        title: 'Buscador global',
+        body: 'Busca en reservas, historial de huespedes, eventos, cotizaciones y bloqueos.\\n\\nPuedes escribir nombre, telefono, folio, habitacion, salon o clave de cotizacion. Si hay historial en MySQL, tambien muestra estancias anteriores del huesped.'
+      },
       whatsapp: {
         title: 'Estado de WhatsApp',
         body: 'Aqui ves si cada bot esta conectado o esperando QR.\\n\\nBot principal: atiende reservas y mensajes normales.\\nBot nocturno: se usa fuera de horario si esta configurado.\\n\\nSi aparece QR, escanealo desde WhatsApp para volver a conectar esa sesion. Si dice conectado, no tienes que hacer nada.'
@@ -4884,6 +5324,10 @@ function pageHtml() {
       rack: {
         title: 'Rack',
         body: 'Importa el CSV del sistema para actualizar ocupadas, vacias y bloqueadas.\\n\\nTambien puedes analizar una foto del rack, pero el CSV es mas confiable.\\n\\nCuando registras llegada con habitacion, el sistema puede marcar esa habitacion como ocupada en el ultimo rack.'
+      },
+      roomBlocks: {
+        title: 'Bloqueos de habitacion',
+        body: 'Sirve para sacar una habitacion de operacion por mantenimiento, limpieza profunda, clima, pintura o cualquier pendiente.\\n\\nEl bloqueo queda con rango de fechas y notas para que recepcion y mantenimiento sepan por que no debe asignarse.'
       },
       reports: {
         title: 'Reportes',
@@ -4986,6 +5430,11 @@ function pageHtml() {
       quoteMenuItems = Array.isArray(data.quotationMenu) ? data.quotationMenu : [];
       eventHalls = Array.isArray(data.eventHalls) ? data.eventHalls : [];
       eventBookings = Array.isArray(data.eventBookings) ? data.eventBookings : [];
+      roomBlocks = Array.isArray(data.roomBlocks) ? data.roomBlocks : [];
+      if (!blockStart.value) {
+        blockStart.value = data.today;
+        blockEnd.value = data.today;
+      }
       renderQuoteMenuOptions();
       renderQuoteMenuEditor();
       renderQuoteSections();
@@ -4994,6 +5443,8 @@ function pageHtml() {
       renderEventAlerts();
       renderEventCalendar();
       renderEventList();
+      renderTodayView();
+      renderRoomBlocks();
       occupancy.innerHTML = renderOccupancy(data.occupancy);
       reservations.innerHTML = renderReservations(data.reservations);
       updateSelectionSummary();
@@ -5001,8 +5452,83 @@ function pageHtml() {
       renderGroupReservationDetail(closeStart.value || data.today);
     }
 
+    function renderTodayView() {
+      if (!dashboardData) {
+        todayView.innerHTML = '<div class="muted">Cargando vista de hoy...</div>';
+        return;
+      }
+
+      const todayIso = dashboardData.today;
+      const todayDisplay = isoToDisplay(todayIso);
+      const arrivals = dashboardData.todayArrivals || [];
+      const todayEvents = eventBookings.filter(event => event.eventDate === todayIso);
+      const activeBlocks = roomBlocks.filter(block =>
+        block.status === 'activo' &&
+        block.startDate <= todayIso &&
+        block.endDate >= todayIso
+      );
+      const paymentAlerts = eventBookings
+        .filter(event =>
+          event.status !== 'pago_completo' &&
+          Number(event.totalAmount || 0) > Number(event.paidAmount || 0)
+        )
+        .sort((a, b) => String(a.eventDate || '').localeCompare(String(b.eventDate || '')))
+        .slice(0, 6);
+
+      todayView.innerHTML =
+        '<div class="report-kpis">' +
+          renderReportKpi('Fecha', todayDisplay) +
+          renderReportKpi('Llegadas', arrivals.length) +
+          renderReportKpi('Ocupacion calendario', (dashboardData.todayReservations?.occupied || 0) + '/' + (dashboardData.totalRooms || 69)) +
+          renderReportKpi('Eventos hoy', todayEvents.length) +
+        '</div>' +
+        '<div class="today-grid">' +
+          renderTodayCard('Llegadas de hoy', arrivals.length ? arrivals.slice(0, 8).map(renderArrivalMiniItem).join('') : '<div class="muted">Sin llegadas registradas para hoy.</div>') +
+          renderTodayCard('Eventos de hoy', todayEvents.length ? todayEvents.map(renderEventMiniItem).join('') : '<div class="muted">Sin eventos hoy.</div>') +
+          renderTodayCard('Pagos pendientes', paymentAlerts.length ? paymentAlerts.map(renderPaymentMiniItem).join('') : '<div class="muted">Sin saldos pendientes importantes.</div>') +
+          renderTodayCard('Bloqueos activos', activeBlocks.length ? activeBlocks.map(renderBlockMiniItem).join('') : '<div class="muted">Sin habitaciones bloqueadas hoy.</div>') +
+        '</div>';
+    }
+
+    function renderTodayCard(title, body) {
+      return '<div class="today-card"><h3>' + escapeHtml(title) + '</h3><div class="mini-list">' + body + '</div></div>';
+    }
+
+    function renderArrivalMiniItem(reservation) {
+      return '<div class="mini-item">' +
+        '<strong>' + escapeHtml(reservation.nombre || reservation.name || 'Reserva') + '</strong>' +
+        '<div class="muted">' + escapeHtml(reservation.habitaciones || 1) + ' hab · ' + escapeHtml(reservation.tipo || '-') + ' · ' + escapeHtml(reservation.hora || '-') + '</div>' +
+        '<div>' + escapeHtml(reservation.telefono || '') + '</div>' +
+      '</div>';
+    }
+
+    function renderEventMiniItem(event) {
+      return '<div class="mini-item">' +
+        '<strong>' + escapeHtml(event.eventName || event.client || 'Evento') + '</strong>' +
+        '<div class="muted">' + escapeHtml(event.hallName || '-') + ' · ' + escapeHtml(event.status || '-') + '</div>' +
+        '<div>' + formatMoney(event.paidAmount || 0) + ' / ' + formatMoney(event.totalAmount || 0) + '</div>' +
+      '</div>';
+    }
+
+    function renderPaymentMiniItem(event) {
+      const pending = Math.max(Number(event.totalAmount || 0) - Number(event.paidAmount || 0), 0);
+      return '<div class="mini-item">' +
+        '<strong>' + escapeHtml(event.eventName || event.client || 'Evento') + '</strong>' +
+        '<div class="muted">' + escapeHtml(isoToDisplay(event.eventDate || '') || '-') + ' · ' + escapeHtml(event.hallName || '-') + '</div>' +
+        '<div>Pendiente: <strong>' + formatMoney(pending) + '</strong></div>' +
+      '</div>';
+    }
+
+    function renderBlockMiniItem(block) {
+      return '<div class="mini-item">' +
+        '<strong>Hab ' + escapeHtml(block.roomNumber || '-') + '</strong>' +
+        '<div class="muted">' + escapeHtml(isoToDisplay(block.startDate || '') || '-') + ' al ' + escapeHtml(isoToDisplay(block.endDate || '') || '-') + '</div>' +
+        '<div>' + escapeHtml(block.reason || '-') + '</div>' +
+      '</div>';
+    }
+
     function showView(name) {
-      ['main', 'calendar', 'reservations', 'quotes', 'events', 'rack', 'reports'].forEach(view => {
+      ['today', 'main', 'calendar', 'reservations', 'quotes', 'events', 'rack', 'reports'].forEach(view => {
         const panel = document.getElementById('view-' + view);
         const tab = document.getElementById('tab-' + view);
 
@@ -5018,6 +5544,107 @@ function pageHtml() {
       if (name === 'reports') {
         loadReports();
       }
+    }
+
+    function handleGlobalSearchKey(event) {
+      if (event.key === 'Enter') {
+        runGlobalSearch();
+      }
+    }
+
+    async function runGlobalSearch() {
+      const query = globalSearchInput.value.trim();
+
+      if (query.length < 2) {
+        globalSearchResults.classList.remove('hidden');
+        globalSearchResults.innerHTML = '<div class="muted">Escribe al menos 2 caracteres para buscar.</div>';
+        return;
+      }
+
+      globalSearchResults.classList.remove('hidden');
+      globalSearchResults.innerHTML = '<div class="muted">Buscando...</div>';
+
+      const response = await fetch('/api/search?q=' + encodeURIComponent(query));
+      const data = await response.json();
+
+      if (!data.ok) {
+        globalSearchResults.innerHTML = '<div class="muted">' + escapeHtml(data.error || 'No se pudo buscar') + '</div>';
+        return;
+      }
+
+      renderGlobalSearchResults(data.results || {});
+    }
+
+    function renderGlobalSearchResults(results) {
+      const sections = [
+        ['Reservas', results.reservations || [], renderSearchReservation],
+        ['Historial huespedes', results.guests || [], renderSearchGuest],
+        ['Eventos', results.events || [], renderSearchEvent],
+        ['Cotizaciones', results.quotations || [], renderSearchQuote],
+        ['Bloqueos', results.blocks || [], renderSearchBlock]
+      ];
+      const total = sections.reduce((sum, [, rows]) => sum + rows.length, 0);
+
+      if (!total) {
+        globalSearchResults.innerHTML = '<div class="muted">Sin resultados para "' + escapeHtml(results.query || '') + '".</div>';
+        return;
+      }
+
+      globalSearchResults.innerHTML =
+        '<div class="search-grid">' +
+          sections
+            .filter(([, rows]) => rows.length)
+            .map(([title, rows, renderer]) =>
+              '<div class="search-card"><h3>' + escapeHtml(title) + '</h3><div class="mini-list">' +
+              rows.map(renderer).join('') +
+              '</div></div>'
+            )
+            .join('') +
+        '</div>';
+    }
+
+    function renderSearchReservation(reservation) {
+      const dates = Array.isArray(reservation.dates)
+        ? reservation.dates.join(', ')
+        : (reservation.fecha || reservation.startDate || '-');
+      return '<div class="mini-item">' +
+        '<strong>' + escapeHtml(reservation.nombre || reservation.guestName || 'Reserva') + '</strong>' +
+        '<div class="muted">' + escapeHtml(dates) + ' · ' + escapeHtml(reservation.tipo || reservation.roomType || '-') + ' · ' + escapeHtml(reservation.source || reservation.origen || '') + '</div>' +
+        '<div>' + escapeHtml(reservation.telefono || reservation.phone || '') + '</div>' +
+      '</div>';
+    }
+
+    function renderSearchGuest(row) {
+      return '<div class="mini-item">' +
+        '<strong>' + escapeHtml(row.guestName || 'Huesped') + '</strong>' +
+        '<div class="muted">' + escapeHtml(row.dates || row.startDate || '-') + ' · ' + escapeHtml(row.source || '-') + ' · ' + escapeHtml(row.status || '-') + '</div>' +
+        '<div>Hab: ' + escapeHtml(row.assignedRoom || '-') + ' · Tipo: ' + escapeHtml(row.roomType || '-') + '</div>' +
+        '<div class="muted">' + escapeHtml(row.phone || '') + (row.note ? ' · Nota: ' + escapeHtml(row.note) : '') + '</div>' +
+      '</div>';
+    }
+
+    function renderSearchEvent(event) {
+      return '<div class="mini-item">' +
+        '<strong>' + escapeHtml(event.eventName || event.client || 'Evento') + '</strong>' +
+        '<div class="muted">' + escapeHtml(isoToDisplay(event.eventDate || '') || event.eventDate || '-') + ' · ' + escapeHtml(event.hallName || '-') + ' · ' + escapeHtml(event.status || '-') + '</div>' +
+        '<div>' + escapeHtml(event.client || '') + '</div>' +
+      '</div>';
+    }
+
+    function renderSearchQuote(quote) {
+      return '<div class="mini-item">' +
+        '<strong>' + escapeHtml(quote.id || 'Cotizacion') + '</strong>' +
+        '<div class="muted">' + escapeHtml(quote.client || '-') + ' · ' + escapeHtml(quote.eventName || '-') + '</div>' +
+        '<div>' + escapeHtml(quote.eventDate || '') + ' · ' + escapeHtml(quote.hallName || quote.hall || 'Sin salon') + '</div>' +
+      '</div>';
+    }
+
+    function renderSearchBlock(block) {
+      return '<div class="mini-item">' +
+        '<strong>Hab ' + escapeHtml(block.roomNumber || '-') + '</strong>' +
+        '<div class="muted">' + escapeHtml(isoToDisplay(block.startDate || '') || '-') + ' al ' + escapeHtml(isoToDisplay(block.endDate || '') || '-') + ' · ' + escapeHtml(block.status || '-') + '</div>' +
+        '<div>' + escapeHtml(block.reason || '-') + '</div>' +
+      '</div>';
     }
 
     async function loadReports() {
@@ -5229,6 +5856,63 @@ function pageHtml() {
       roomEventCost.value = '';
       roomEventStatus.textContent = 'Evento guardado.';
       await loadReports();
+    }
+
+    function renderRoomBlocks() {
+      if (!roomBlocksList) {
+        return;
+      }
+
+      if (!roomBlocks.length) {
+        roomBlocksList.innerHTML = '<div class="muted">Sin bloqueos recientes.</div>';
+        return;
+      }
+
+      roomBlocksList.innerHTML =
+        '<table class="report-table"><thead><tr><th>Hab</th><th>Fechas</th><th>Motivo</th><th>Estado</th></tr></thead><tbody>' +
+        roomBlocks.map(block =>
+          '<tr>' +
+            '<td><strong>' + escapeHtml(block.roomNumber || '-') + '</strong></td>' +
+            '<td>' + escapeHtml(isoToDisplay(block.startDate || '') || '-') + ' al ' + escapeHtml(isoToDisplay(block.endDate || '') || '-') + '</td>' +
+            '<td><strong>' + escapeHtml(block.reason || '-') + '</strong><br><span class="muted">' + escapeHtml(block.notes || '') + '</span></td>' +
+            '<td><span class="pill">' + escapeHtml(block.status || '-') + '</span></td>' +
+          '</tr>'
+        ).join('') +
+        '</tbody></table>';
+    }
+
+    async function saveRoomBlock() {
+      roomBlockStatus.textContent = 'Guardando bloqueo...';
+      const response = await fetch('/api/room-blocks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          roomNumber: blockRoom.value,
+          startDate: blockStart.value,
+          endDate: blockEnd.value,
+          reason: blockReason.value,
+          notes: blockNotes.value,
+          status: blockStatus.value
+        })
+      });
+      const data = await response.json();
+
+      if (!data.ok) {
+        roomBlockStatus.textContent = data.error || 'No se pudo guardar el bloqueo.';
+        return;
+      }
+
+      blockReason.value = '';
+      blockNotes.value = '';
+      roomBlockStatus.textContent = 'Bloqueo guardado.';
+      await loadDashboard();
+    }
+
+    function downloadReportCsv(type) {
+      const month = reportMonth.value || String(dashboardData?.today || '').slice(0, 7);
+      window.location.href = '/api/reports/export-csv?month=' + encodeURIComponent(month) + '&type=' + encodeURIComponent(type || 'all');
     }
 
     function renderOverbookingAlerts(alerts) {
@@ -7685,6 +8369,9 @@ function pageHtml() {
     }
 
     function isoToDisplay(value) {
+      if (!/^\d{4}-\d{2}-\d{2}/.test(String(value || ''))) {
+        return '';
+      }
       return dateToDisplay(isoToDate(value));
     }
 
@@ -7841,6 +8528,149 @@ const server =
             false,
           error:
             error.message || "No se pudieron generar reportes"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "GET"
+      &&
+      url.pathname === "/api/reports/export-csv"
+    ) {
+      try {
+        const month =
+          url.searchParams.get("month");
+        const type =
+          url.searchParams.get("type") || "all";
+        const report =
+          getReports({
+            month
+          });
+        const fileMonth =
+          report.month || normalizeReportMonth(month) || getMexicoTodayIso().slice(0, 7);
+
+        res.writeHead(200, {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename="reporte-${type}-${fileMonth}.csv"`,
+          "Cache-Control": "no-store"
+        });
+        res.end(
+          getReportCsv(
+            type,
+            report
+          )
+        );
+      } catch (error) {
+        sendJson(res, 500, {
+          ok:
+            false,
+          error:
+            error.message || "No se pudo exportar el reporte"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "GET"
+      &&
+      url.pathname === "/api/search"
+    ) {
+      try {
+        sendJson(res, 200, {
+          ok:
+            true,
+          results:
+            getGlobalSearch(
+              url.searchParams.get("q")
+            )
+        });
+      } catch (error) {
+        sendJson(res, 500, {
+          ok:
+            false,
+          error:
+            error.message || "No se pudo buscar"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "GET"
+      &&
+      url.pathname === "/api/guest-history"
+    ) {
+      try {
+        sendJson(res, 200, {
+          ok:
+            true,
+          history:
+            getGuestHistory(
+              url.searchParams.get("q")
+            )
+        });
+      } catch (error) {
+        sendJson(res, 500, {
+          ok:
+            false,
+          error:
+            error.message || "No se pudo cargar historial"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "GET"
+      &&
+      url.pathname === "/api/room-blocks"
+    ) {
+      try {
+        sendJson(res, 200, {
+          ok:
+            true,
+          blocks:
+            readRoomBlocks()
+        });
+      } catch (error) {
+        sendJson(res, 500, {
+          ok:
+            false,
+          error:
+            error.message || "No se pudieron cargar bloqueos"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/room-blocks"
+    ) {
+      try {
+        const body =
+          await readBody(req);
+
+        sendJson(res, 200, {
+          ok:
+            true,
+          block:
+            saveRoomBlock(body)
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok:
+            false,
+          error:
+            error.message || "No se pudo guardar el bloqueo"
         });
       }
 
