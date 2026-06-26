@@ -1870,6 +1870,17 @@ function reservationsToCsv(reservations) {
     .join("\n");
 }
 
+function filterReservationsByDisplayDate(reservations, displayDate) {
+  return reservations.filter(reservation => {
+    const dates =
+      Array.isArray(reservation.dates)
+        ? reservation.dates
+        : [reservation.fecha];
+
+    return dates.includes(displayDate);
+  });
+}
+
 function importReservationsFromCsv(csv) {
   const rows =
     parseCsv(csv);
@@ -6332,6 +6343,10 @@ function pageHtml() {
       window.location.href = '/api/reservations/export-csv';
     }
 
+    function downloadDayReservationsCsv(isoDate) {
+      window.location.href = '/api/reservations/export-csv?date=' + encodeURIComponent(isoDate);
+    }
+
     function downloadTemplateCsv() {
       const csv =
         'nombre,telefono,fecha,fechaSalida,habitaciones,adultos,ninos,tipo,hora,tarifa\\n' +
@@ -6659,9 +6674,12 @@ function pageHtml() {
 
       dayModalTitle.textContent = 'Reservas para ' + display;
       dayModalSubtitle.textContent = row.occupied + '/' + row.total + ' habitaciones ocupadas en calendario';
+      const dayDownloadButton =
+        '<div class="toolbar" style="margin-bottom:12px"><button class="primary" onclick="downloadDayReservationsCsv(\\'' + isoDate + '\\')">Descargar CSV del dia</button><div class="muted">Exporta solo las reservas de ' + escapeHtml(display) + '.</div></div>';
 
       if (!row.reservations.length) {
         dayModalBody.innerHTML =
+          dayDownloadButton +
           '<div class="modal-kpis">' +
             '<div class="modal-kpi"><span class="muted">Reservas</span><strong>0</strong></div>' +
             '<div class="modal-kpi"><span class="muted">Habitaciones</span><strong>0/' + row.total + '</strong></div>' +
@@ -6671,6 +6689,7 @@ function pageHtml() {
           '<div class="muted">No hay reservas detectadas para este dia.</div>';
       } else {
         dayModalBody.innerHTML =
+          dayDownloadButton +
           '<div class="modal-kpis">' +
             '<div class="modal-kpi"><span class="muted">Reservas</span><strong>' + row.reservations.length + '</strong></div>' +
             '<div class="modal-kpi"><span class="muted">Habitaciones</span><strong>' + row.occupied + '/' + row.total + '</strong></div>' +
@@ -7525,14 +7544,31 @@ const server =
     ) {
       const summary =
         getSummary();
+      const isoDate =
+        String(url.searchParams.get("date") || "").trim();
+      const displayDate =
+        isoDate
+          ? isoToDisplayDate(isoDate)
+          : "";
+      const reservations =
+        displayDate
+          ? filterReservationsByDisplayDate(
+            summary.groupReservations,
+            displayDate
+          )
+          : summary.groupReservations;
+      const fileName =
+        displayDate
+          ? `reservas-${isoDate}.csv`
+          : "reservas-calendario.csv";
 
       res.writeHead(200, {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": "attachment; filename=\"reservas-calendario.csv\"",
+        "Content-Disposition": `attachment; filename="${fileName}"`,
         "Cache-Control": "no-store"
       });
       res.end(
-        reservationsToCsv(summary.groupReservations)
+        reservationsToCsv(reservations)
       );
       return;
     }
