@@ -7,6 +7,10 @@ const {
 } = require("child_process");
 const mysql =
   require("./mysqlCliService");
+const {
+  calculateExtraAdults,
+  isMananeraRate
+} = require("./reservationPricingService");
 
 const DATA_DIR =
   path.join(
@@ -39,6 +43,21 @@ let initialized =
 
 let sqliteAvailable =
   null;
+
+function enrichReservationPricing(reservation) {
+  const extra =
+    calculateExtraAdults(reservation);
+
+  return {
+    ...reservation,
+    extraAdults:
+      Number(reservation.extraAdults || extra.extraAdults || 0),
+    extraAmount:
+      Number(reservation.extraAmount || extra.extraAmount || 0),
+    mananera:
+      Boolean(reservation.mananera || isMananeraRate(reservation.tarifa))
+  };
+}
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -259,7 +278,7 @@ function normalizeReservation(reservation) {
       ? reservation.dates
       : [reservation.fecha].filter(Boolean);
 
-  return {
+  return enrichReservationPricing({
     sourceKey:
       getReservationKey(reservation),
     source:
@@ -297,7 +316,7 @@ function normalizeReservation(reservation) {
       reservation.raw || "",
     status:
       reservation.status || "activa"
-  };
+  });
 }
 
 function saveCalendarReservation(reservation) {
@@ -406,13 +425,15 @@ function readCalendarReservations() {
         ...row,
         dates:
           JSON.parse(row.datesJson || "[]")
-      }));
+      }))
+      .map(enrichReservationPricing);
   }
 
   return readJsonFile(FALLBACK_RESERVATIONS_FILE)
     .filter(row =>
       row.status !== "cancelada"
-    );
+    )
+    .map(enrichReservationPricing);
 }
 
 function updateCalendarReservation(sourceKey, updates = {}) {
@@ -867,7 +888,8 @@ function readCalendarReservationsMysql(includeCanceled) {
     LEFT JOIN rooms room ON room.id = r.assigned_room_id
     ${includeCanceled ? "" : "WHERE r.status != 'cancelada'"}
     ORDER BY r.start_date, r.created_at;
-  `);
+  `)
+    .map(enrichReservationPricing);
 }
 
 module.exports = {

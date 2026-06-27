@@ -174,6 +174,10 @@ function formatReservationGroupNotification(notification) {
         reservation.telefono ? `📞 ${reservation.telefono}` : "",
         reservation.hora ? `⏰ ${reservation.hora}` : "",
         reservation.tarifa ? `💰 ${reservation.tarifa}` : "",
+        reservation.mananera ? "🌅 Tarifa mañanera" : "",
+        Number(reservation.extraAmount || 0) > 0
+          ? `➕ Extra adulto(s): ${reservation.extraAdults || 0} / +$${Number(reservation.extraAmount || 0).toLocaleString("es-MX")}`
+          : "",
         reservation.note ? `📝 Nota: ${reservation.note}` : ""
       ];
 

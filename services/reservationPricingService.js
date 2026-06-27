@@ -1,7 +1,3 @@
-const {
-  normalizeRoomType
-} = require("./roomInventoryService");
-
 const AUTO_RATE_VALUES =
   new Set([
     "",
@@ -17,6 +13,16 @@ const AUTO_RATE_VALUES =
     "800",
     "$850",
     "850",
+    "$900",
+    "900",
+    "$1,000",
+    "$1000",
+    "1,000",
+    "1000"
+  ]);
+
+const MANANERA_VALUES =
+  new Set([
     "$900",
     "900",
     "$1,000",
@@ -58,6 +64,44 @@ function getRateBase(value) {
   }
 
   return null;
+}
+
+function normalizeRoomType(value) {
+  const clean =
+    String(value || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+
+  if (clean.includes("suite") && clean.includes("king")) {
+    return "Suite King";
+  }
+
+  if (clean.includes("suite")) {
+    return "Doble Suite";
+  }
+
+  if (clean.includes("king")) {
+    return "King";
+  }
+
+  if (
+    clean.includes("doble")
+    ||
+    clean.includes("matrimonial")
+    ||
+    clean.includes("2 camas")
+  ) {
+    return "Doble";
+  }
+
+  return String(value || "").trim();
+}
+
+function isMananeraRate(value) {
+  return MANANERA_VALUES.has(
+    normalizeRateText(value)
+  );
 }
 
 function getAdultsPerRoom(adults, rooms) {
@@ -153,15 +197,45 @@ function calculateAutomaticRate({
       : rule.rate;
   }
 
+  const baseRate =
+    selectedBase || 700;
+
+  return moneyText(baseRate);
+}
+
+function calculateExtraAdults({
+  tipo,
+  adultos,
+  habitaciones
+} = {}) {
+  const rule =
+    getRoomPricingRule(tipo);
+
+  if (!rule || rule.type !== "Doble") {
+    return {
+      extraAdults:
+        0,
+      extraAmount:
+        0
+    };
+  }
+
+  const adultsPerRoom =
+    getAdultsPerRoom(
+      adultos,
+      habitaciones
+    );
   const extraAdults =
     Math.max(
       Math.min(adultsPerRoom, rule.maxAdultsPerRoom) - 2,
       0
     );
-  const baseRate =
-    selectedBase || 700;
 
-  return moneyText(baseRate + (extraAdults * 100));
+  return {
+    extraAdults,
+    extraAmount:
+      extraAdults * 100
+  };
 }
 
 function validateReservationOccupancy({
@@ -196,13 +270,32 @@ function applyReservationPricing(input = {}) {
 
   validateReservationOccupancy(output);
 
-  if (isAutoRateValue(output.tarifa)) {
-    const automaticRate =
-      calculateAutomaticRate(output);
+  const extra =
+    calculateExtraAdults(output);
+  output.extraAdults =
+    extra.extraAdults;
+  output.extraAmount =
+    extra.extraAmount;
+  output.mananera =
+    isMananeraRate(output.tarifa);
 
-    if (automaticRate) {
-      output.tarifa =
-        automaticRate;
+  if (isAutoRateValue(output.tarifa)) {
+    if (!output.mananera) {
+      const selectedBase =
+        getRateBase(output.tarifa);
+
+      if (selectedBase) {
+        output.tarifa =
+          moneyText(selectedBase);
+      } else {
+        const automaticRate =
+          calculateAutomaticRate(output);
+
+        if (automaticRate) {
+          output.tarifa =
+            automaticRate;
+        }
+      }
     }
   }
 
@@ -211,8 +304,10 @@ function applyReservationPricing(input = {}) {
 
 module.exports = {
   applyReservationPricing,
+  calculateExtraAdults,
   calculateAutomaticRate,
   getAdultsPerRoom,
+  isMananeraRate,
   isAutoRateValue,
   validateReservationOccupancy
 };

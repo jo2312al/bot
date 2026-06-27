@@ -362,6 +362,12 @@ function normalizeManualReservation(input) {
       ),
     tarifa:
       String(pricedInput.tarifa || "").trim(),
+    extraAdults:
+      Math.max(Number(pricedInput.extraAdults || 0), 0),
+    extraAmount:
+      Math.max(Number(pricedInput.extraAmount || 0), 0),
+    mananera:
+      Boolean(pricedInput.mananera),
     hora:
       String(pricedInput.hora || "").trim(),
     note:
@@ -5083,7 +5089,7 @@ function pageHtml() {
     let manualRateLocked = false;
     let editRateLocked = false;
     const hotelRateOptions = ${JSON.stringify(HOTEL_RATE_OPTIONS)};
-    const hotelAutoRateValues = new Set(['', '$600', '600', '$650', '650', '$700', '700', '$750', '750', '$800', '800', '$850', '850', '$900', '900', '$1,000', '$1000', '1,000', '1000']);
+    const hotelAutoRateValues = new Set(['', '$600', '600', '$650', '650', '$700', '700', '$800', '800', '$900', '900', '$1,000', '$1000', '1,000', '1000']);
 
     function renderHotelRateOptions(selectedValue) {
       const selected = String(selectedValue || '').trim();
@@ -5124,23 +5130,39 @@ function pageHtml() {
       return null;
     }
 
+    function clientIsMananeraRate(value) {
+      const text = String(value || '').trim().replace(/,/g, '');
+      return text === '$900' || text === '900' || text === '$1000' || text === '1000';
+    }
+
     function clientMoneyText(amount) {
       return '$' + Number(amount || 0).toLocaleString('en-US');
     }
 
     function calculateClientAutoRate(tipo, adultos, habitaciones) {
       const type = normalizeClientRoomType(tipo);
-      const perRoom = clientAdultsPerRoom(adultos, habitaciones);
       const selectedBase = clientRateBase(arguments.length > 3 ? arguments[3] : '');
 
       if (type === 'King') return selectedBase ? clientMoneyText(selectedBase) : '$700';
       if (type === 'Suite King' || type === 'Doble Suite') return selectedBase ? clientMoneyText(selectedBase) : '$800';
       if (type === 'Doble') {
-        const baseRate = selectedBase || 700;
-        return clientMoneyText(baseRate + (Math.max(Math.min(perRoom, 4) - 2, 0) * 100));
+        return clientMoneyText(selectedBase || 700);
       }
 
       return '';
+    }
+
+    function calculateClientExtraAdults(tipo, adultos, habitaciones) {
+      if (normalizeClientRoomType(tipo) !== 'Doble') {
+        return { extraAdults: 0, extraAmount: 0 };
+      }
+
+      const perRoom = clientAdultsPerRoom(adultos, habitaciones);
+      const extraAdults = Math.max(Math.min(perRoom, 4) - 2, 0);
+      return {
+        extraAdults,
+        extraAmount: extraAdults * 100
+      };
     }
 
     function validateClientOccupancy(tipo, adultos, habitaciones) {
@@ -5154,15 +5176,19 @@ function pageHtml() {
     }
 
     function shouldAutoUpdateRate(value, locked) {
+      if (clientIsMananeraRate(value)) {
+        return false;
+      }
+
       return !locked || hotelAutoRateValues.has(String(value || '').trim());
     }
 
     function rememberManualRateChoice() {
-      manualRateLocked = !hotelAutoRateValues.has(String(manualTarifa.value || '').trim());
+      manualRateLocked = clientIsMananeraRate(manualTarifa.value) || !hotelAutoRateValues.has(String(manualTarifa.value || '').trim());
     }
 
     function rememberEditRateChoice() {
-      editRateLocked = !hotelAutoRateValues.has(String(editReservationRate.value || '').trim());
+      editRateLocked = clientIsMananeraRate(editReservationRate.value) || !hotelAutoRateValues.has(String(editReservationRate.value || '').trim());
     }
 
     function refreshManualRate() {
@@ -5173,9 +5199,15 @@ function pageHtml() {
         manualRateLocked = false;
       }
 
-      manualReservationStatus.textContent = validateClientOccupancy(manualTipo.value, manualAdultos.value, manualHabitaciones.value)
-        ? ''
-        : 'La ocupacion excede el maximo para este tipo. Niños no cuentan para extra.';
+      if (!validateClientOccupancy(manualTipo.value, manualAdultos.value, manualHabitaciones.value)) {
+        manualReservationStatus.textContent = 'La ocupacion excede el maximo para este tipo. Niños no cuentan para extra.';
+        return;
+      }
+
+      const extra = calculateClientExtraAdults(manualTipo.value, manualAdultos.value, manualHabitaciones.value);
+      manualReservationStatus.textContent = extra.extraAmount
+        ? 'Extra adulto(s): ' + extra.extraAdults + ' / +$' + extra.extraAmount + '. Se agregara al mensaje y guardado; la tarifa base no cambia.'
+        : '';
     }
 
     function refreshEditRate() {
@@ -5676,7 +5708,7 @@ function pageHtml() {
         renderDetailBox('Fechas', (reservation.dates || [reservation.fecha || reservation.startDate]).filter(Boolean).join(', ') || '-') +
         renderDetailBox('Habitaciones', reservation.habitaciones || reservation.roomsCount || '-') +
         renderDetailBox('Tipo / hora', (reservation.tipo || reservation.roomType || '-') + ' / ' + (reservation.hora || reservation.arrivalTime || '-')) +
-        renderDetailBox('Tarifa', reservation.tarifa || reservation.rate || '-') +
+        renderDetailBox('Tarifa', getReservationPricingText(reservation)) +
       '</div>' +
       '<div class="event-detail-box"><span>Nota</span><div>' + escapeHtml(reservation.note || reservation.nota || 'Sin nota') + '</div></div>';
     }
@@ -5719,6 +5751,22 @@ function pageHtml() {
 
     function renderDetailBox(label, value) {
       return '<div class="event-detail-box"><span>' + escapeHtml(label) + '</span><strong>' + escapeHtml(value) + '</strong></div>';
+    }
+
+    function getReservationPricingText(reservation) {
+      const parts = [
+        reservation.tarifa || reservation.rate || '-'
+      ];
+
+      if (reservation.mananera) {
+        parts.push('Mañanera');
+      }
+
+      if (Number(reservation.extraAmount || 0) > 0) {
+        parts.push('Extra adulto(s): ' + Number(reservation.extraAdults || 0) + ' / +$' + Number(reservation.extraAmount || 0).toLocaleString('es-MX'));
+      }
+
+      return parts.join(' · ');
     }
 
     function openQuotationPdf(quotationId) {
@@ -7949,7 +7997,7 @@ function pageHtml() {
                 '<div><span class="muted">Habitaciones</span><strong>' + escapeHtml(item.habitaciones || 1) + '</strong></div>' +
                 '<div><span class="muted">Huespedes</span><strong>' + escapeHtml((item.adultos || 0) + ' adulto(s), ' + (item.ninos || 0) + ' menor(es)') + '</strong></div>' +
                 '<div><span class="muted">Tipo / hora sistema</span><strong>' + escapeHtml(item.tipo || '-') + ' / ' + escapeHtml(getReservationTimeDisplay(item.hora)) + '</strong></div>' +
-                '<div><span class="muted">Telefono / tarifa</span><strong>' + escapeHtml(item.telefono || '-') + ' / ' + escapeHtml(item.tarifa || '-') + '</strong></div>' +
+                '<div><span class="muted">Telefono / tarifa</span><strong>' + escapeHtml(item.telefono || '-') + ' / ' + escapeHtml(getReservationPricingText(item)) + '</strong></div>' +
                 '<div><span class="muted">Llegada / habitacion</span><strong>' + escapeHtml(item.arrivalAt ? new Date(item.arrivalAt).toLocaleString() : 'Pendiente') + ' / ' + escapeHtml(item.roomNumber || '-') + '</strong></div>' +
               '</div>' +
               '<div class="day-reservation-actions">' +
@@ -8026,7 +8074,7 @@ function pageHtml() {
       editReservationTime.value = reservation.hora || '';
       editReservationRate.innerHTML = renderHotelRateOptions(reservation.tarifa || '');
       editReservationRate.value = reservation.tarifa || '';
-      editRateLocked = !hotelAutoRateValues.has(String(editReservationRate.value || '').trim());
+      editRateLocked = clientIsMananeraRate(editReservationRate.value) || !hotelAutoRateValues.has(String(editReservationRate.value || '').trim());
       editReservationNote.value = reservation.note || '';
       reservationEditSubtitle.textContent = reservation.source ? 'Fuente: ' + reservation.source : '';
       reservationEditBackdrop.classList.remove('hidden');

@@ -70,6 +70,12 @@ function cleanReservation(reservation = {}) {
       String(reservation.hora || "").trim(),
     tarifa:
       String(reservation.tarifa || "").trim(),
+    extraAdults:
+      Math.max(Number(reservation.extraAdults || 0), 0),
+    extraAmount:
+      Math.max(Number(reservation.extraAmount || 0), 0),
+    mananera:
+      Boolean(reservation.mananera),
     folio:
       String(reservation.folio || "").trim(),
     note:

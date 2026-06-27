@@ -47,18 +47,6 @@ const HOTEL_RATE_OPTIONS = [
       "Promocion INAPAM/PEMEX/ADO/cliente frecuente - $650",
     value:
       "$650"
-  },
-  {
-    label:
-      "Promocion + 1 adulto extra - $750",
-    value:
-      "$750"
-  },
-  {
-    label:
-      "Promocion + 2 adultos extra - $850",
-    value:
-      "$850"
   }
 ];
 
