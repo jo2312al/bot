@@ -1880,13 +1880,24 @@ function reservationsToCsv(reservations) {
 }
 
 function filterReservationsByDisplayDate(reservations, displayDate) {
+  const isoDate =
+    displayDateToIso(displayDate);
+
   return reservations.filter(reservation => {
     const dates =
       Array.isArray(reservation.dates)
         ? reservation.dates
         : [reservation.fecha];
 
-    return dates.includes(displayDate);
+    return dates.some(date =>
+      date === displayDate
+      ||
+      date === isoDate
+      ||
+      displayDateToIso(date) === isoDate
+      ||
+      isoToDisplayDate(date) === displayDate
+    );
   });
 }
 
@@ -7822,6 +7833,13 @@ function pageHtml() {
       return dashboardData.groupReservationCalendar.find(item => item.date === display);
     }
 
+    function getReservationsForIsoDate(isoDate) {
+      return filterReservationsByDisplayDate(
+        dashboardData?.groupReservations || [],
+        isoToDisplay(isoDate)
+      );
+    }
+
     function getDayTotals(row) {
       return row.reservations.reduce((totals, item) => {
         totals.adultos += Number(item.adultos || 0);
@@ -7846,11 +7864,28 @@ function pageHtml() {
 
       activeModalIsoDate = isoDate;
       const display = isoToDisplay(isoDate);
-      const row = getCalendarRowForIso(isoDate) || {
+      const calendarRow = getCalendarRowForIso(isoDate) || {
         date: display,
         occupied: 0,
         total: dashboardData.totalRooms || 69,
         reservations: []
+      };
+      const reservationsForDay =
+        filterReservationsByDisplayDate(
+          dashboardData.groupReservations || [],
+          display
+        );
+      const row = {
+        ...calendarRow,
+        reservations:
+          reservationsForDay,
+        occupied:
+          reservationsForDay.reduce((total, reservation) =>
+            total + Number(reservation.habitaciones || 1),
+            0
+          ),
+        total:
+          calendarRow.total || dashboardData.totalRooms || 69
       };
       const totals = getDayTotals(row);
 
@@ -7953,8 +7988,7 @@ function pageHtml() {
     }
 
     function openReservationEdit(index) {
-      const row = getCalendarRowForIso(activeModalIsoDate);
-      const reservation = row?.reservations?.[index];
+      const reservation = getReservationsForIsoDate(activeModalIsoDate)[index];
 
       if (!reservation?.sourceKey) {
         alert('No se encontro la llave de esta reserva.');
@@ -7991,8 +8025,7 @@ function pageHtml() {
     }
 
     function openReservationArrival(index) {
-      const row = getCalendarRowForIso(activeModalIsoDate);
-      const reservation = row?.reservations?.[index];
+      const reservation = getReservationsForIsoDate(activeModalIsoDate)[index];
 
       openReservationArrivalFor(reservation);
     }
@@ -8115,8 +8148,7 @@ function pageHtml() {
     }
 
     function confirmDeleteReservation(index) {
-      const row = getCalendarRowForIso(activeModalIsoDate);
-      const reservation = row?.reservations?.[index];
+      const reservation = getReservationsForIsoDate(activeModalIsoDate)[index];
 
       if (!reservation) {
         return;
