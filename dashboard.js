@@ -5072,7 +5072,7 @@ function pageHtml() {
     let manualRateLocked = false;
     let editRateLocked = false;
     const hotelRateOptions = ${JSON.stringify(HOTEL_RATE_OPTIONS)};
-    const hotelAutoRateValues = new Set(['', '$700', '700', '$800', '800', '$900', '900', '$1,000', '$1000', '1,000', '1000']);
+    const hotelAutoRateValues = new Set(['', '$600', '600', '$650', '650', '$700', '700', '$750', '750', '$800', '800', '$850', '850', '$900', '900', '$1,000', '$1000', '1,000', '1000']);
 
     function renderHotelRateOptions(selectedValue) {
       const selected = String(selectedValue || '').trim();
@@ -5104,16 +5104,29 @@ function pageHtml() {
       return Math.ceil(Math.max(Number(adults || 0), 0) / Math.max(Number(rooms || 1), 1));
     }
 
+    function clientRateBase(value) {
+      const text = String(value || '').trim().replace(/,/g, '');
+
+      if (text === '$600' || text === '600') return 600;
+      if (text === '$650' || text === '650') return 650;
+      if (text === '$750' || text === '750' || text === '$850' || text === '850') return 650;
+      return null;
+    }
+
+    function clientMoneyText(amount) {
+      return '$' + Number(amount || 0).toLocaleString('en-US');
+    }
+
     function calculateClientAutoRate(tipo, adultos, habitaciones) {
       const type = normalizeClientRoomType(tipo);
       const perRoom = clientAdultsPerRoom(adultos, habitaciones);
+      const selectedBase = clientRateBase(arguments.length > 3 ? arguments[3] : '');
 
-      if (type === 'King') return '$700';
-      if (type === 'Suite King' || type === 'Doble Suite') return '$800';
+      if (type === 'King') return selectedBase ? clientMoneyText(selectedBase) : '$700';
+      if (type === 'Suite King' || type === 'Doble Suite') return selectedBase ? clientMoneyText(selectedBase) : '$800';
       if (type === 'Doble') {
-        if (perRoom >= 4) return '$900';
-        if (perRoom === 3) return '$800';
-        return '$700';
+        const baseRate = selectedBase || 700;
+        return clientMoneyText(baseRate + (Math.max(Math.min(perRoom, 4) - 2, 0) * 100));
       }
 
       return '';
@@ -5142,7 +5155,7 @@ function pageHtml() {
     }
 
     function refreshManualRate() {
-      const rate = calculateClientAutoRate(manualTipo.value, manualAdultos.value, manualHabitaciones.value);
+      const rate = calculateClientAutoRate(manualTipo.value, manualAdultos.value, manualHabitaciones.value, manualTarifa.value);
 
       if (rate && shouldAutoUpdateRate(manualTarifa.value, manualRateLocked)) {
         manualTarifa.value = rate;
@@ -5155,7 +5168,7 @@ function pageHtml() {
     }
 
     function refreshEditRate() {
-      const rate = calculateClientAutoRate(editReservationType.value, editReservationAdults.value, editReservationRooms.value);
+      const rate = calculateClientAutoRate(editReservationType.value, editReservationAdults.value, editReservationRooms.value, editReservationRate.value);
 
       if (rate && shouldAutoUpdateRate(editReservationRate.value, editRateLocked)) {
         editReservationRate.value = rate;

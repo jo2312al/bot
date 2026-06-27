@@ -5,10 +5,18 @@ const {
 const AUTO_RATE_VALUES =
   new Set([
     "",
+    "$600",
+    "600",
+    "$650",
+    "650",
     "$700",
     "700",
+    "$750",
+    "750",
     "$800",
     "800",
+    "$850",
+    "850",
     "$900",
     "900",
     "$1,000",
@@ -26,6 +34,30 @@ function isAutoRateValue(value) {
   return AUTO_RATE_VALUES.has(
     normalizeRateText(value)
   );
+}
+
+function moneyText(amount) {
+  return `$${Number(amount || 0).toLocaleString("en-US")}`;
+}
+
+function getRateBase(value) {
+  const text =
+    normalizeRateText(value)
+      .replace(/,/g, "");
+
+  if (text === "$600" || text === "600") {
+    return 600;
+  }
+
+  if (text === "$650" || text === "650") {
+    return 650;
+  }
+
+  if (text === "$750" || text === "750" || text === "$850" || text === "850") {
+    return 650;
+  }
+
+  return null;
 }
 
 function getAdultsPerRoom(adults, rooms) {
@@ -97,7 +129,8 @@ function getRoomPricingRule(roomType) {
 function calculateAutomaticRate({
   tipo,
   adultos,
-  habitaciones
+  habitaciones,
+  tarifa
 } = {}) {
   const rule =
     getRoomPricingRule(tipo);
@@ -111,14 +144,24 @@ function calculateAutomaticRate({
       adultos,
       habitaciones
     );
+  const selectedBase =
+    getRateBase(tarifa);
 
   if (rule.rate) {
-    return rule.rate;
+    return selectedBase
+      ? moneyText(selectedBase)
+      : rule.rate;
   }
 
-  return rule.rateByAdultsPerRoom[Math.min(adultsPerRoom, rule.maxAdultsPerRoom)]
-    ||
-    "";
+  const extraAdults =
+    Math.max(
+      Math.min(adultsPerRoom, rule.maxAdultsPerRoom) - 2,
+      0
+    );
+  const baseRate =
+    selectedBase || 700;
+
+  return moneyText(baseRate + (extraAdults * 100));
 }
 
 function validateReservationOccupancy({
