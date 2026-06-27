@@ -7833,8 +7833,26 @@ function pageHtml() {
       return dashboardData.groupReservationCalendar.find(item => item.date === display);
     }
 
+    function filterClientReservationsByDisplayDate(reservations, displayDate) {
+      const isoDate = displayToIsoClient(displayDate);
+
+      return (reservations || []).filter(reservation => {
+        const dates = Array.isArray(reservation.dates)
+          ? reservation.dates
+          : [reservation.fecha].filter(Boolean);
+
+        return dates.some(date => {
+          const text = String(date || '').trim();
+          return text === displayDate ||
+            text === isoDate ||
+            displayToIsoClient(text) === isoDate ||
+            isoToDisplay(text) === displayDate;
+        });
+      });
+    }
+
     function getReservationsForIsoDate(isoDate) {
-      return filterReservationsByDisplayDate(
+      return filterClientReservationsByDisplayDate(
         dashboardData?.groupReservations || [],
         isoToDisplay(isoDate)
       );
@@ -7871,7 +7889,7 @@ function pageHtml() {
         reservations: []
       };
       const reservationsForDay =
-        filterReservationsByDisplayDate(
+        filterClientReservationsByDisplayDate(
           dashboardData.groupReservations || [],
           display
         );
