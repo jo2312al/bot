@@ -14,6 +14,8 @@ La refactorización se hará por cortes pequeños para no romper producción.
 - Ya se extrajo:
   - catálogo de habitaciones/tarifas a `constants/hotelCatalog.js`;
   - bloqueos de habitación a `services/roomBlockService.js`.
+  - reglas de precio/capacidad de reservas a `services/reservationPricingService.js`;
+  - búsqueda global e historial de huéspedes a `services/dashboardSearchService.js`.
 
 ## Siguientes fases
 
@@ -22,8 +24,8 @@ La refactorización se hará por cortes pequeños para no romper producción.
    - dejar `dashboard.js` solo llamando `reportService.getReports(...)`.
 
 2. Extraer búsqueda:
-   - mover historial de huéspedes y búsqueda global a `services/dashboardSearchService.js`;
-   - inyectar `getSummary` para evitar dependencias circulares.
+   - completado en `services/dashboardSearchService.js`;
+   - se inyecta `getSummary` para evitar dependencias circulares.
 
 3. Separar frontend:
    - mover CSS a `public/dashboard.css`;

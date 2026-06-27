@@ -54,6 +54,12 @@ const {
   createRoomBlockService
 } = require("./services/roomBlockService");
 const {
+  createDashboardSearchService
+} = require("./services/dashboardSearchService");
+const {
+  applyReservationPricing
+} = require("./services/reservationPricingService");
+const {
   EVENT_HALLS,
   getEventVoucher,
   getQuotation,
@@ -74,6 +80,8 @@ const {
   readRoomBlocks,
   saveRoomBlock
 } = createRoomBlockService(mysql);
+let dashboardSearchService =
+  null;
 
 const PORT =
   Number(process.env.DASHBOARD_PORT || 3333);
@@ -296,17 +304,19 @@ function getDatesBetween(startDisplay, endDisplay) {
 }
 
 function normalizeManualReservation(input) {
+  const pricedInput =
+    applyReservationPricing(input);
   const fecha =
-    String(input.fecha || "").includes("-")
-      ? isoToDisplayDate(input.fecha)
-      : String(input.fecha || "").trim();
+    String(pricedInput.fecha || "").includes("-")
+      ? isoToDisplayDate(pricedInput.fecha)
+      : String(pricedInput.fecha || "").trim();
 
   const fechaSalida =
-    input.fechaSalida
+    pricedInput.fechaSalida
       ? (
-        String(input.fechaSalida).includes("-")
-          ? isoToDisplayDate(input.fechaSalida)
-          : String(input.fechaSalida).trim()
+        String(pricedInput.fechaSalida).includes("-")
+          ? isoToDisplayDate(pricedInput.fechaSalida)
+          : String(pricedInput.fechaSalida).trim()
       )
       : fecha;
 
@@ -316,48 +326,48 @@ function normalizeManualReservation(input) {
       fechaSalida
     );
 
-  if (!input.nombre || !fecha || !dates.length) {
+  if (!pricedInput.nombre || !fecha || !dates.length) {
     throw new Error("Nombre y fecha valida son requeridos");
   }
 
   const sourceKey =
-    input.sourceKey
+    pricedInput.sourceKey
     ||
     `manual:${Date.now()}:${Math.random().toString(16).slice(2)}`;
 
   return {
     source:
-      input.source || "manual",
+      pricedInput.source || "manual",
     sourceKey,
     folio:
-      input.folio || sourceKey.replace("manual:", "M-").slice(0, 18),
+      pricedInput.folio || sourceKey.replace("manual:", "M-").slice(0, 18),
     timestamp:
       new Date().toISOString(),
     nombre:
-      String(input.nombre || "").trim(),
+      String(pricedInput.nombre || "").trim(),
     telefono:
-      String(input.telefono || "").trim(),
+      String(pricedInput.telefono || "").trim(),
     fecha:
       dates[0],
     dates,
     habitaciones:
-      Math.max(Number(input.habitaciones || 1), 1),
+      Math.max(Number(pricedInput.habitaciones || 1), 1),
     adultos:
-      Math.max(Number(input.adultos || 0), 0),
+      Math.max(Number(pricedInput.adultos || 0), 0),
     ninos:
-      Math.max(Number(input.ninos || 0), 0),
+      Math.max(Number(pricedInput.ninos || 0), 0),
     tipo:
       normalizeRoomType(
-        String(input.tipo || input.habitacion || "").trim()
+        String(pricedInput.tipo || pricedInput.habitacion || "").trim()
       ),
     tarifa:
-      String(input.tarifa || "").trim(),
+      String(pricedInput.tarifa || "").trim(),
     hora:
-      String(input.hora || "").trim(),
+      String(pricedInput.hora || "").trim(),
     note:
-      String(input.note || "").trim(),
+      String(pricedInput.note || "").trim(),
     raw:
-      input.raw || "Captura manual",
+      pricedInput.raw || "Captura manual",
     status:
       "activa"
   };
@@ -1044,14 +1054,6 @@ function cleanPdfText(value) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^\x20-\x7E\n]/g, "");
-}
-
-function normalizeText(value) {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
 }
 
 function collectPdf(doc) {
@@ -2133,6 +2135,18 @@ function getSummary() {
   };
 }
 
+function getDashboardSearchService() {
+  if (!dashboardSearchService) {
+    dashboardSearchService =
+      createDashboardSearchService({
+        mysql,
+        getSummary
+      });
+  }
+
+  return dashboardSearchService;
+}
+
 function normalizeReportMonth(value) {
   const match =
     String(value || "")
@@ -2669,146 +2683,6 @@ function saveRoomEvent(input) {
   return {
     ok:
       true
-  };
-}
-
-function getGuestHistory(query) {
-  const text =
-    String(query || "")
-      .trim();
-
-  if (!text || text.length < 2 || !mysql.ensureSchema()) {
-    return [];
-  }
-
-  const like =
-    `%${text}%`;
-
-  return mysql.queryJson(`
-    SELECT JSON_OBJECT(
-      'reservationId', reservation.id,
-      'folio', reservation.folio,
-      'source', reservation.source,
-      'status', reservation.status,
-      'guestName', guest.name,
-      'phone', IFNULL(NULLIF(reservation.phone_snapshot, ''), guest.phone),
-      'startDate', DATE_FORMAT(reservation.start_date, '%d/%m/%Y'),
-      'roomType', IFNULL(room_type.name, ''),
-      'roomsCount', reservation.rooms_count,
-      'adults', reservation.adults_count,
-      'children', reservation.children_count,
-      'arrivalTime', reservation.arrival_time_text,
-      'assignedRoom', IFNULL(room.room_number, ''),
-      'rate', reservation.rate_text,
-      'note', IFNULL(note.note, ''),
-      'dates', IFNULL((
-        SELECT GROUP_CONCAT(DATE_FORMAT(date_item.stay_date, '%d/%m/%Y') ORDER BY date_item.stay_date SEPARATOR ', ')
-        FROM reservation_dates date_item
-        WHERE date_item.reservation_id = reservation.id
-      ), '')
-    )
-    FROM reservations reservation
-    JOIN guests guest ON guest.id = reservation.guest_id
-    LEFT JOIN room_types room_type ON room_type.id = reservation.room_type_id
-    LEFT JOIN rooms room ON room.id = reservation.assigned_room_id
-    LEFT JOIN reservation_notes note ON note.reservation_id = reservation.id
-    WHERE
-      guest.name LIKE ${mysql.quote(like)}
-      OR guest.phone LIKE ${mysql.quote(like)}
-      OR reservation.phone_snapshot LIKE ${mysql.quote(like)}
-      OR reservation.folio LIKE ${mysql.quote(like)}
-      OR reservation.raw_text LIKE ${mysql.quote(like)}
-    ORDER BY reservation.start_date DESC, reservation.id DESC
-    LIMIT 60;
-  `);
-}
-
-function getGlobalSearch(query) {
-  const text =
-    String(query || "")
-      .trim();
-  const normalized =
-    normalizeText(text);
-
-  if (!normalized || normalized.length < 2) {
-    return {
-      query:
-        text,
-      reservations:
-        [],
-      events:
-        [],
-      quotations:
-        [],
-      guests:
-        [],
-      blocks:
-        []
-    };
-  }
-
-  const summary =
-    getSummary();
-  const matches =
-    value => normalizeText(value).includes(normalized);
-
-  return {
-    query:
-      text,
-    reservations:
-      (summary.groupReservations || [])
-        .filter(reservation =>
-          [
-            reservation.nombre,
-            reservation.telefono,
-            reservation.tarifa,
-            reservation.folio,
-            reservation.habitacion,
-            reservation.habitacionAsignada,
-            reservation.tipo,
-            reservation.nota
-          ].some(matches)
-        )
-        .slice(0, 20),
-    events:
-      (summary.eventBookings || [])
-        .filter(event =>
-          [
-            event.client,
-            event.contact,
-            event.eventName,
-            event.hallName,
-            event.status,
-            event.notes
-          ].some(matches)
-        )
-        .slice(0, 20),
-    quotations:
-      (summary.quotations || [])
-        .filter(quote =>
-          [
-            quote.id,
-            quote.client,
-            quote.contact,
-            quote.eventName,
-            quote.hallName
-          ].some(matches)
-        )
-        .slice(0, 20),
-    guests:
-      getGuestHistory(text)
-        .slice(0, 20),
-    blocks:
-      (summary.roomBlocks || [])
-        .filter(block =>
-          [
-            block.roomNumber,
-            block.reason,
-            block.notes,
-            block.status
-          ].some(matches)
-        )
-        .slice(0, 20)
   };
 }
 
@@ -4529,11 +4403,11 @@ function pageHtml() {
         </label>
         <label>
           Habs
-          <input id="manualHabitaciones" type="number" min="1" value="1">
+          <input id="manualHabitaciones" type="number" min="1" value="1" oninput="refreshManualRate()">
         </label>
         <label>
           Adultos
-          <input id="manualAdultos" type="number" min="0" value="2">
+          <input id="manualAdultos" type="number" min="0" value="2" oninput="refreshManualRate()">
         </label>
         <label>
           Menores
@@ -4541,7 +4415,7 @@ function pageHtml() {
         </label>
         <label>
           Tipo
-          <select id="manualTipo">
+          <select id="manualTipo" onchange="refreshManualRate()">
             <option value="">Sin tipo</option>
             <option value="Doble">Doble</option>
             <option value="King">King</option>
@@ -4555,7 +4429,7 @@ function pageHtml() {
         </label>
         <label>
           Tarifa
-          <select id="manualTarifa">
+          <select id="manualTarifa" onchange="rememberManualRateChoice()">
             ${hotelRateOptionsHtml("$700")}
           </select>
         </label>
@@ -5006,12 +4880,12 @@ function pageHtml() {
           <label>Telefono<input id="editReservationPhone" inputmode="tel"></label>
           <label>Entrada<input id="editReservationStart" type="date"></label>
           <label>Salida<input id="editReservationEnd" type="date"></label>
-          <label>Habitaciones<input id="editReservationRooms" type="number" min="1"></label>
-          <label>Adultos<input id="editReservationAdults" type="number" min="0"></label>
+          <label>Habitaciones<input id="editReservationRooms" type="number" min="1" oninput="refreshEditRate()"></label>
+          <label>Adultos<input id="editReservationAdults" type="number" min="0" oninput="refreshEditRate()"></label>
           <label>Menores<input id="editReservationChildren" type="number" min="0"></label>
-          <label>Tipo<input id="editReservationType"></label>
+          <label>Tipo<input id="editReservationType" oninput="refreshEditRate()"></label>
           <label>Hora<input id="editReservationTime"></label>
-          <label>Tarifa<select id="editReservationRate"></select></label>
+          <label>Tarifa<select id="editReservationRate" onchange="rememberEditRateChoice()"></select></label>
           <label class="wide">Nota interna<textarea id="editReservationNote" rows="3"></textarea></label>
         </div>
         <div class="confirm-actions">
@@ -5195,7 +5069,10 @@ function pageHtml() {
     let roomBlocks = [];
     let pendingQuoteEvent = null;
     let pendingEventDetailId = null;
+    let manualRateLocked = false;
+    let editRateLocked = false;
     const hotelRateOptions = ${JSON.stringify(HOTEL_RATE_OPTIONS)};
+    const hotelAutoRateValues = new Set(['', '$700', '700', '$800', '800', '$900', '900', '$1,000', '$1000', '1,000', '1000']);
 
     function renderHotelRateOptions(selectedValue) {
       const selected = String(selectedValue || '').trim();
@@ -5208,6 +5085,82 @@ function pageHtml() {
       }
 
       return '<option value="">Sin tarifa</option>' + options.join('');
+    }
+
+    function normalizeClientRoomType(value) {
+      const clean = String(value || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\\u0300-\\u036f]/g, '');
+
+      if (clean.includes('suite') && clean.includes('king')) return 'Suite King';
+      if (clean.includes('suite')) return 'Doble Suite';
+      if (clean.includes('king')) return 'King';
+      if (clean.includes('doble') || clean.includes('matrimonial') || clean.includes('2 camas')) return 'Doble';
+      return String(value || '').trim();
+    }
+
+    function clientAdultsPerRoom(adults, rooms) {
+      return Math.ceil(Math.max(Number(adults || 0), 0) / Math.max(Number(rooms || 1), 1));
+    }
+
+    function calculateClientAutoRate(tipo, adultos, habitaciones) {
+      const type = normalizeClientRoomType(tipo);
+      const perRoom = clientAdultsPerRoom(adultos, habitaciones);
+
+      if (type === 'King') return '$700';
+      if (type === 'Suite King' || type === 'Doble Suite') return '$800';
+      if (type === 'Doble') {
+        if (perRoom >= 4) return '$900';
+        if (perRoom === 3) return '$800';
+        return '$700';
+      }
+
+      return '';
+    }
+
+    function validateClientOccupancy(tipo, adultos, habitaciones) {
+      const type = normalizeClientRoomType(tipo);
+      const perRoom = clientAdultsPerRoom(adultos, habitaciones);
+      const max = type === 'King'
+        ? 2
+        : (type === 'Doble' || type === 'Suite King' || type === 'Doble Suite' ? 4 : 0);
+
+      return !max || perRoom <= max;
+    }
+
+    function shouldAutoUpdateRate(value, locked) {
+      return !locked || hotelAutoRateValues.has(String(value || '').trim());
+    }
+
+    function rememberManualRateChoice() {
+      manualRateLocked = !hotelAutoRateValues.has(String(manualTarifa.value || '').trim());
+    }
+
+    function rememberEditRateChoice() {
+      editRateLocked = !hotelAutoRateValues.has(String(editReservationRate.value || '').trim());
+    }
+
+    function refreshManualRate() {
+      const rate = calculateClientAutoRate(manualTipo.value, manualAdultos.value, manualHabitaciones.value);
+
+      if (rate && shouldAutoUpdateRate(manualTarifa.value, manualRateLocked)) {
+        manualTarifa.value = rate;
+        manualRateLocked = false;
+      }
+
+      manualReservationStatus.textContent = validateClientOccupancy(manualTipo.value, manualAdultos.value, manualHabitaciones.value)
+        ? ''
+        : 'La ocupacion excede el maximo para este tipo. Niños no cuentan para extra.';
+    }
+
+    function refreshEditRate() {
+      const rate = calculateClientAutoRate(editReservationType.value, editReservationAdults.value, editReservationRooms.value);
+
+      if (rate && shouldAutoUpdateRate(editReservationRate.value, editRateLocked)) {
+        editReservationRate.value = rate;
+        editRateLocked = false;
+      }
     }
 
     const helpTopics = {
@@ -7418,6 +7371,7 @@ function pageHtml() {
     }
 
     async function saveManualReservation() {
+      refreshManualRate();
       const payload = {
         nombre: manualNombre.value.trim(),
         telefono: manualTelefono.value.trim(),
@@ -7460,6 +7414,7 @@ function pageHtml() {
       manualNinos.value = '0';
       manualHora.value = '';
       manualTarifa.value = '$700';
+      manualRateLocked = false;
       manualNota.value = '';
       manualReservationStatus.textContent = 'Reserva guardada: #' + data.reservation.folio;
       await loadDashboard();
@@ -8006,6 +7961,7 @@ function pageHtml() {
       editReservationTime.value = reservation.hora || '';
       editReservationRate.innerHTML = renderHotelRateOptions(reservation.tarifa || '');
       editReservationRate.value = reservation.tarifa || '';
+      editRateLocked = !hotelAutoRateValues.has(String(editReservationRate.value || '').trim());
       editReservationNote.value = reservation.note || '';
       reservationEditSubtitle.textContent = reservation.source ? 'Fuente: ' + reservation.source : '';
       reservationEditBackdrop.classList.remove('hidden');
@@ -8101,6 +8057,8 @@ function pageHtml() {
       if (!pendingEditReservation) {
         return;
       }
+
+      refreshEditRate();
 
       const dates = getEditReservationDates(
         editReservationStart.value,
@@ -8717,7 +8675,7 @@ const server =
           ok:
             true,
           results:
-            getGlobalSearch(
+            getDashboardSearchService().getGlobalSearch(
               url.searchParams.get("q")
             )
         });
@@ -8743,7 +8701,7 @@ const server =
           ok:
             true,
           history:
-            getGuestHistory(
+            getDashboardSearchService().getGuestHistory(
               url.searchParams.get("q")
             )
         });
@@ -9175,18 +9133,21 @@ const server =
           throw new Error("Reserva requerida");
         }
 
+        const pricedBody =
+          applyReservationPricing(body);
+
         const reservation =
           updateCalendarReservation(
-            String(body.sourceKey),
-            body
+            String(pricedBody.sourceKey),
+            pricedBody
           );
 
-        if (Object.prototype.hasOwnProperty.call(body, "note")) {
+        if (Object.prototype.hasOwnProperty.call(pricedBody, "note")) {
           saveReservationNote({
             reservationKey:
               getReservationNoteKey(reservation),
             note:
-              body.note
+              pricedBody.note
           });
         }
 
