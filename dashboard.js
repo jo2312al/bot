@@ -303,6 +303,33 @@ function getDatesBetween(startDisplay, endDisplay) {
   return dates;
 }
 
+function getDatesForNights(startDisplay, nightsValue) {
+  const start =
+    dateValue(startDisplay);
+  const nights =
+    Math.max(Number.parseInt(nightsValue, 10) || 1, 1);
+
+  if (Number.isNaN(start)) {
+    return [];
+  }
+
+  const dates =
+    [];
+  const current =
+    new Date(start);
+
+  for (let index = 0; index < nights; index++) {
+    dates.push(
+      `${String(current.getDate()).padStart(2, "0")}/${String(current.getMonth() + 1).padStart(2, "0")}/${current.getFullYear()}`
+    );
+    current.setDate(
+      current.getDate() + 1
+    );
+  }
+
+  return dates;
+}
+
 function normalizeManualReservation(input) {
   const pricedInput =
     applyReservationPricing(input);
@@ -311,20 +338,18 @@ function normalizeManualReservation(input) {
       ? isoToDisplayDate(pricedInput.fecha)
       : String(pricedInput.fecha || "").trim();
 
-  const fechaSalida =
+  const dates =
     pricedInput.fechaSalida
-      ? (
+      ? getDatesBetween(
+        fecha,
         String(pricedInput.fechaSalida).includes("-")
           ? isoToDisplayDate(pricedInput.fechaSalida)
           : String(pricedInput.fechaSalida).trim()
       )
-      : fecha;
-
-  const dates =
-    getDatesBetween(
-      fecha,
-      fechaSalida
-    );
+      : getDatesForNights(
+        fecha,
+        pricedInput.noches || pricedInput.nights || 1
+      );
 
   if (!pricedInput.nombre || !fecha || !dates.length) {
     throw new Error("Nombre y fecha valida son requeridos");
@@ -350,6 +375,8 @@ function normalizeManualReservation(input) {
     fecha:
       dates[0],
     dates,
+    noches:
+      Math.max(Number(pricedInput.noches || dates.length || 1), 1),
     habitaciones:
       Math.max(Number(pricedInput.habitaciones || 1), 1),
     adultos:
@@ -1839,7 +1866,7 @@ function reservationsToCsv(reservations) {
     "nombre",
     "telefono",
     "fecha",
-    "fechaSalida",
+    "noches",
     "habitaciones",
     "adultos",
     "ninos",
@@ -1862,7 +1889,7 @@ function reservationsToCsv(reservations) {
         reservation.nombre,
         reservation.telefono,
         reservation.fecha,
-        dates[dates.length - 1] || reservation.fecha,
+        reservation.noches || dates.length || 1,
         reservation.habitaciones || 1,
         reservation.adultos || 0,
         reservation.ninos || 0,
@@ -1894,16 +1921,16 @@ function filterReservationsByDisplayDate(reservations, displayDate) {
       Array.isArray(reservation.dates)
         ? reservation.dates
         : [reservation.fecha];
+    const arrivalDate =
+      reservation.fecha || dates[0];
 
-    return dates.some(date =>
-      date === displayDate
+    return arrivalDate === displayDate
       ||
-      date === isoDate
+      arrivalDate === isoDate
       ||
-      displayDateToIso(date) === isoDate
+      displayDateToIso(arrivalDate) === isoDate
       ||
-      isoToDisplayDate(date) === displayDate
-    );
+      isoToDisplayDate(arrivalDate) === displayDate;
   });
 }
 
@@ -1953,7 +1980,9 @@ function importReservationsFromCsv(csv) {
             fecha:
               data.fecha,
             fechaSalida:
-              data.fechasalida || data.salida || data.fecha,
+              data.fechasalida || data.salida,
+            noches:
+              data.noches || data.nights || 1,
             habitaciones:
               data.habitaciones || data.habs || data.hab,
             adultos:
@@ -2018,6 +2047,12 @@ function normalizeCsvHeader(header) {
       "fechasalida",
     fechasalida:
       "fechasalida",
+    noche:
+      "noches",
+    noches:
+      "noches",
+    nights:
+      "noches",
     hab:
       "habitaciones",
     habs:
@@ -3468,6 +3503,43 @@ function pageHtml() {
       font-size: 12px;
       line-height: 1.25;
     }
+    .day-breakdown {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .day-pie {
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      background:
+        conic-gradient(
+          #0f766e 0 var(--arrivals, 0deg),
+          #2563eb var(--arrivals, 0deg) calc(var(--arrivals, 0deg) + var(--continuing, 0deg)),
+          #e5e7eb 0 360deg
+        );
+      border: 1px solid #cbd5e1;
+      box-shadow: inset 0 0 0 7px #ffffff;
+      flex: 0 0 auto;
+    }
+    .day-pie-legend {
+      display: grid;
+      gap: 2px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.2;
+    }
+    .day-pie-legend i {
+      display: inline-block;
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      margin-right: 4px;
+      vertical-align: -1px;
+    }
+    .day-pie-arrivals { background: #0f766e; }
+    .day-pie-continuing { background: #2563eb; }
     .day-top {
       display: flex;
       align-items: center;
@@ -4106,6 +4178,22 @@ function pageHtml() {
       font-size: 20px;
       margin-top: 4px;
     }
+    .modal-day-breakdown {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 12px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 10px;
+      margin-bottom: 14px;
+    }
+    .modal-day-breakdown .day-pie {
+      width: 72px;
+      height: 72px;
+      box-shadow: inset 0 0 0 18px #ffffff;
+    }
     .day-reservation-list {
       display: grid;
       gap: 10px;
@@ -4412,11 +4500,11 @@ function pageHtml() {
         </label>
         <label>
           Entrada
-          <input id="manualFecha" type="date">
+          <input id="manualFecha" type="date" onchange="renderManualCheckoutPreview()">
         </label>
         <label>
-          Salida
-          <input id="manualFechaSalida" type="date">
+          Noches
+          <input id="manualNoches" type="number" min="1" step="1" value="1" oninput="renderManualCheckoutPreview()">
         </label>
         <label>
           Habs
@@ -4456,6 +4544,7 @@ function pageHtml() {
         </label>
         <button class="primary" onclick="saveManualReservation()">Guardar reserva</button>
       </div>
+      <div id="manualSalidaPreview" class="muted" style="margin-top:8px"></div>
       <div class="file-actions" style="margin-top:12px">
         <label class="file-dropzone" data-file-zone="csvFile" tabindex="0">
           <input id="csvFile" class="file-input" type="file" accept=".csv,text/csv">
@@ -4896,7 +4985,7 @@ function pageHtml() {
           <label class="wide">Cliente<input id="editReservationName" autocomplete="off"></label>
           <label>Telefono<input id="editReservationPhone" inputmode="tel"></label>
           <label>Entrada<input id="editReservationStart" type="date"></label>
-          <label>Salida<input id="editReservationEnd" type="date"></label>
+          <label>Noches<input id="editReservationNights" type="number" min="1" step="1"></label>
           <label>Habitaciones<input id="editReservationRooms" type="number" min="1" oninput="refreshEditRate()"></label>
           <label>Adultos<input id="editReservationAdults" type="number" min="0" oninput="refreshEditRate()"></label>
           <label>Menores<input id="editReservationChildren" type="number" min="0"></label>
@@ -5254,7 +5343,7 @@ function pageHtml() {
       },
       reservations: {
         title: 'Agregar reservas',
-        body: 'Captura manual: llena huesped, telefono, entrada/salida, habitaciones, personas, tipo, hora, tarifa y nota.\\n\\nImportar CSV: pega o sube un archivo con reservas; el sistema las convierte al calendario.\\n\\nDespues de agregar, puedes decidir si mandar la reserva al grupo. Si tiene nota, tambien se incluye.'
+        body: 'Captura manual: llena huesped, telefono, entrada, noches, habitaciones, personas, tipo, hora, tarifa y nota.\\n\\nLa salida se calcula automaticamente con entrada + noches. Importar CSV: pega o sube un archivo con reservas; el sistema las convierte al calendario.\\n\\nDespues de agregar, puedes decidir si mandar la reserva al grupo. Si tiene nota, tambien se incluye.'
       },
       reservationList: {
         title: 'Reservas registradas',
@@ -5410,6 +5499,7 @@ function pageHtml() {
       renderRoomBlocks();
       occupancy.innerHTML = renderOccupancy(data.occupancy);
       reservations.innerHTML = renderReservations(data.reservations);
+      renderManualCheckoutPreview();
       updateSelectionSummary();
       renderCalendar();
       renderGroupReservationDetail(closeStart.value || data.today);
@@ -7416,6 +7506,34 @@ function pageHtml() {
       await loadDashboard();
     }
 
+    function calculateCheckoutDate(startIso, nightsValue) {
+      const start = isoToDate(startIso);
+      const nights = Math.max(Number.parseInt(nightsValue, 10) || 1, 1);
+
+      if (Number.isNaN(start.getTime())) {
+        return '';
+      }
+
+      start.setDate(start.getDate() + nights);
+      return dateToDisplay(start);
+    }
+
+    function renderManualCheckoutPreview() {
+      if (typeof manualSalidaPreview === 'undefined') {
+        return;
+      }
+
+      const nights = Math.max(Number.parseInt(manualNoches.value, 10) || 1, 1);
+      const checkout = calculateCheckoutDate(
+        manualFecha.value,
+        nights
+      );
+
+      manualSalidaPreview.textContent = checkout
+        ? 'Salida calculada: ' + checkout + ' (' + nights + ' noche(s)).'
+        : 'La fecha de salida se calcula automaticamente con entrada + noches.';
+    }
+
     async function cancelFolio() {
       const folio = folioInput.value.trim().replace(/^#/, '');
 
@@ -7448,7 +7566,7 @@ function pageHtml() {
         nombre: manualNombre.value.trim(),
         telefono: manualTelefono.value.trim(),
         fecha: manualFecha.value,
-        fechaSalida: manualFechaSalida.value || manualFecha.value,
+        noches: Number.parseInt(manualNoches.value, 10) || 1,
         habitaciones: Number(manualHabitaciones.value || 1),
         adultos: Number(manualAdultos.value || 0),
         ninos: Number(manualNinos.value || 0),
@@ -7482,12 +7600,14 @@ function pageHtml() {
       manualNombre.value = '';
       manualTelefono.value = '';
       manualHabitaciones.value = '1';
+      manualNoches.value = '1';
       manualAdultos.value = '2';
       manualNinos.value = '0';
       manualHora.value = '';
       manualTarifa.value = '$700';
       manualRateLocked = false;
       manualNota.value = '';
+      renderManualCheckoutPreview();
       manualReservationStatus.textContent = 'Reserva guardada: #' + data.reservation.folio;
       await loadDashboard();
       openGroupSendConfirm([data.reservation], 'capturada');
@@ -7590,8 +7710,8 @@ function pageHtml() {
 
     function downloadTemplateCsv() {
       const csv =
-        'nombre,telefono,fecha,fechaSalida,habitaciones,adultos,ninos,tipo,hora,tarifa\\n' +
-        'Juan Perez,9931234567,25/12/2026,25/12/2026,1,2,0,Doble,3 pm,$700\\n';
+        'nombre,telefono,fecha,noches,habitaciones,adultos,ninos,tipo,hora,tarifa\\n' +
+        'Juan Perez,9931234567,25/12/2026,1,1,2,0,Doble,3 pm,$700\\n';
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
@@ -7741,7 +7861,7 @@ function pageHtml() {
         const display = dateToDisplay(date);
         const iso = dateToIso(date);
         const row = occupancyByDate[display] || { counts: {}, limits: dashboardData.limits };
-        const groupRow = groupByDate[display] || { occupied: 0, total: dashboardData.totalRooms || 69 };
+        const groupRow = groupByDate[display] || { occupied: 0, arrivals: 0, continuing: 0, total: dashboardData.totalRooms || 69 };
         const isClosed = closed.has(display);
         const isSelected = iso === closeStart.value || iso === closeEnd.value;
         const isInRange = isIsoWithinSelection(iso);
@@ -7752,7 +7872,7 @@ function pageHtml() {
           + (display === todayDisplay ? ' today' : '');
         const meta = isClosed
           ? 'Cerrado'
-          : groupRow.occupied + '/' + groupRow.total + ' reservas<br>' + renderInventoryMini(row);
+          : renderCalendarDayMeta(groupRow, row);
 
         cells.push(
           '<div class="' + className + '" onclick="selectCalendarDate(\\'' + iso + '\\')">' +
@@ -7783,6 +7903,42 @@ function pageHtml() {
           return (labels[type] || type) + ' ' + used + '/' + limit;
         })
         .join(' / ');
+    }
+
+    function renderCalendarDayMeta(groupRow, inventoryRow) {
+      const occupied = Number(groupRow.occupied || 0);
+      const total = Number(groupRow.total || dashboardData.totalRooms || 69);
+
+      return occupied + '/' + total + ' ocupadas' +
+        '<br>Entradas ' + Number(groupRow.arrivals || 0) +
+        ' / Continuan ' + Number(groupRow.continuing || 0) +
+        renderDayOccupancyPie(groupRow, true) +
+        '<br>' + renderInventoryMini(inventoryRow);
+    }
+
+    function renderDayOccupancyPie(row, compact) {
+      const total = Number(row.total || dashboardData?.totalRooms || 69);
+      const arrivals = Number(row.arrivals ?? sumReservationRooms(row.reservations));
+      const continuing = Number(row.continuing ?? sumReservationRooms(row.continuingReservations));
+      const occupied = Number(row.occupied || arrivals + continuing);
+      const arrivalDegrees = total ? Math.min((arrivals / total) * 360, 360) : 0;
+      const continuingDegrees = total ? Math.min((continuing / total) * 360, 360 - arrivalDegrees) : 0;
+
+      return '<div class="' + (compact ? 'day-breakdown' : 'modal-day-breakdown') + '">' +
+        '<div class="day-pie" style="--arrivals:' + arrivalDegrees + 'deg;--continuing:' + continuingDegrees + 'deg"></div>' +
+        '<div class="day-pie-legend">' +
+          '<span><i class="day-pie-arrivals"></i>Entradas hoy: <strong>' + arrivals + '</strong></span>' +
+          '<span><i class="day-pie-continuing"></i>Continuan: <strong>' + continuing + '</strong></span>' +
+          (compact ? '' : '<span>Ocupadas total: <strong>' + occupied + '/' + total + '</strong></span>') +
+        '</div>' +
+      '</div>';
+    }
+
+    function sumReservationRooms(reservations) {
+      return (reservations || []).reduce((total, reservation) =>
+        total + Number(reservation.habitaciones || 1),
+        0
+      );
     }
 
     function shortRoomLabel(type) {
@@ -7851,10 +8007,10 @@ function pageHtml() {
       const display = isoToDisplay(isoDate);
       const row = getCalendarRowForIso(isoDate);
 
-      if (!row || !row.reservations.length) {
+      if (!row || (!row.reservations.length && !Number(row.continuing || 0))) {
         groupReservationDetail.innerHTML =
           '<div class="day-summary-card">' +
-            '<div><strong>' + display + '</strong><div class="muted">Sin reservas detectadas para este dia.</div></div>' +
+            '<div><strong>' + display + '</strong><div class="muted">Sin entradas ni continuaciones detectadas para este dia.</div></div>' +
             '<button onclick="openDayModal(\\'' + isoDate + '\\')">Ver dia</button>' +
           '</div>';
         return;
@@ -7864,9 +8020,10 @@ function pageHtml() {
       groupReservationDetail.innerHTML =
         '<div class="day-summary-card">' +
           '<div>' +
-            '<strong>' + display + ': ' + row.occupied + '/' + row.total + ' habitaciones</strong>' +
+            '<strong>' + display + ': ' + row.occupied + '/' + row.total + ' habitaciones ocupadas</strong>' +
             '<div class="summary-chips">' +
-              '<span class="chip">' + row.reservations.length + ' reserva(s)</span>' +
+              '<span class="chip">' + row.reservations.length + ' entrada(s)</span>' +
+              '<span class="chip">' + Number(row.continuing || 0) + ' hab(s) continuan</span>' +
               '<span class="chip">' + totals.adultos + ' adulto(s)</span>' +
               '<span class="chip">' + totals.ninos + ' menor(es)</span>' +
               '<span class="chip">' + totals.manual + ' manual/excel</span>' +
@@ -7900,10 +8057,48 @@ function pageHtml() {
     }
 
     function getReservationsForIsoDate(isoDate) {
-      return filterClientReservationsByDisplayDate(
+      return filterClientReservationsByArrivalDate(
         dashboardData?.groupReservations || [],
         isoToDisplay(isoDate)
       );
+    }
+
+    function filterClientReservationsByArrivalDate(reservations, displayDate) {
+      return (reservations || []).filter(reservation =>
+        isSameDisplayDate(
+          getReservationArrivalDisplayDate(reservation),
+          displayDate
+        )
+      );
+    }
+
+    function getContinuingReservationsByDisplayDate(reservations, displayDate) {
+      return filterClientReservationsByDisplayDate(reservations, displayDate)
+        .filter(reservation =>
+          !isSameDisplayDate(
+            getReservationArrivalDisplayDate(reservation),
+            displayDate
+          )
+        );
+    }
+
+    function getReservationArrivalDisplayDate(reservation) {
+      const dates = Array.isArray(reservation.dates)
+        ? reservation.dates
+        : [reservation.fecha].filter(Boolean);
+      const arrival = String(reservation.fecha || dates[0] || '').trim();
+
+      return isoToDisplay(arrival) || arrival;
+    }
+
+    function isSameDisplayDate(value, displayDate) {
+      const isoDate = displayToIsoClient(displayDate);
+      const text = String(value || '').trim();
+
+      return text === displayDate ||
+        text === isoDate ||
+        displayToIsoClient(text) === isoDate ||
+        isoToDisplay(text) === displayDate;
     }
 
     function getDayTotals(row) {
@@ -7937,7 +8132,12 @@ function pageHtml() {
         reservations: []
       };
       const reservationsForDay =
-        filterClientReservationsByDisplayDate(
+        filterClientReservationsByArrivalDate(
+          dashboardData.groupReservations || [],
+          display
+        );
+      const continuingReservations =
+        getContinuingReservationsByDisplayDate(
           dashboardData.groupReservations || [],
           display
         );
@@ -7945,37 +8145,41 @@ function pageHtml() {
         ...calendarRow,
         reservations:
           reservationsForDay,
+        continuingReservations,
+        arrivals:
+          sumReservationRooms(reservationsForDay),
+        continuing:
+          sumReservationRooms(continuingReservations),
         occupied:
-          reservationsForDay.reduce((total, reservation) =>
-            total + Number(reservation.habitaciones || 1),
-            0
-          ),
+          sumReservationRooms(reservationsForDay) + sumReservationRooms(continuingReservations),
         total:
           calendarRow.total || dashboardData.totalRooms || 69
       };
       const totals = getDayTotals(row);
 
-      dayModalTitle.textContent = 'Reservas para ' + display;
-      dayModalSubtitle.textContent = row.occupied + '/' + row.total + ' habitaciones ocupadas en calendario';
+      dayModalTitle.textContent = 'Entradas para ' + display;
+      dayModalSubtitle.textContent = row.occupied + '/' + row.total + ' habitaciones ocupadas contando continuaciones';
       const dayDownloadButton =
-        '<div class="toolbar" style="margin-bottom:12px"><button class="primary" onclick="downloadDayReservationsCsv(\\'' + isoDate + '\\')">Descargar CSV del dia</button><div class="muted">Exporta solo las reservas de ' + escapeHtml(display) + '.</div></div>';
+        '<div class="toolbar" style="margin-bottom:12px"><button class="primary" onclick="downloadDayReservationsCsv(\\'' + isoDate + '\\')">Descargar CSV del dia</button><div class="muted">Exporta solo las entradas de ' + escapeHtml(display) + '.</div></div>';
 
       if (!row.reservations.length) {
         dayModalBody.innerHTML =
           dayDownloadButton +
+          renderDayOccupancyPie(row, false) +
           '<div class="modal-kpis">' +
-            '<div class="modal-kpi"><span class="muted">Reservas</span><strong>0</strong></div>' +
-            '<div class="modal-kpi"><span class="muted">Habitaciones</span><strong>0/' + row.total + '</strong></div>' +
+            '<div class="modal-kpi"><span class="muted">Entradas</span><strong>0</strong></div>' +
+            '<div class="modal-kpi"><span class="muted">Habitaciones ocupadas</span><strong>' + row.occupied + '/' + row.total + '</strong></div>' +
             '<div class="modal-kpi"><span class="muted">Adultos</span><strong>0</strong></div>' +
             '<div class="modal-kpi"><span class="muted">Menores</span><strong>0</strong></div>' +
           '</div>' +
-          '<div class="muted">No hay reservas detectadas para este dia.</div>';
+          '<div class="muted">No hay entradas detectadas para este dia.' + (row.continuing ? ' Si hay habitaciones que continuan de dias anteriores.' : '') + '</div>';
       } else {
         dayModalBody.innerHTML =
           dayDownloadButton +
+          renderDayOccupancyPie(row, false) +
           '<div class="modal-kpis">' +
-            '<div class="modal-kpi"><span class="muted">Reservas</span><strong>' + row.reservations.length + '</strong></div>' +
-            '<div class="modal-kpi"><span class="muted">Habitaciones</span><strong>' + row.occupied + '/' + row.total + '</strong></div>' +
+            '<div class="modal-kpi"><span class="muted">Entradas</span><strong>' + row.reservations.length + '</strong></div>' +
+            '<div class="modal-kpi"><span class="muted">Habitaciones ocupadas</span><strong>' + row.occupied + '/' + row.total + '</strong></div>' +
             '<div class="modal-kpi"><span class="muted">Adultos</span><strong>' + totals.adultos + '</strong></div>' +
             '<div class="modal-kpi"><span class="muted">Menores</span><strong>' + totals.ninos + '</strong></div>' +
           '</div>' +
@@ -8034,18 +8238,18 @@ function pageHtml() {
       return String(parts[2]).padStart(4, '0') + '-' + String(parts[1]).padStart(2, '0') + '-' + String(parts[0]).padStart(2, '0');
     }
 
-    function getEditReservationDates(startValue, endValue) {
+    function getEditReservationDates(startValue, nightsValue) {
       const start = isoToDate(startValue);
-      const end = isoToDate(endValue || startValue);
+      const nights = Math.max(Number.parseInt(nightsValue, 10) || 1, 1);
 
-      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+      if (Number.isNaN(start.getTime())) {
         return [];
       }
 
       const dates = [];
       const cursor = new Date(start);
 
-      while (cursor <= end) {
+      for (let index = 0; index < nights; index++) {
         dates.push(dateToDisplay(cursor));
         cursor.setDate(cursor.getDate() + 1);
       }
@@ -8066,7 +8270,7 @@ function pageHtml() {
       editReservationName.value = reservation.nombre || '';
       editReservationPhone.value = reservation.telefono || '';
       editReservationStart.value = displayToIso(dates[0] || reservation.fecha);
-      editReservationEnd.value = displayToIso(dates[dates.length - 1] || reservation.fecha);
+      editReservationNights.value = reservation.noches || dates.length || 1;
       editReservationRooms.value = reservation.habitaciones || 1;
       editReservationAdults.value = reservation.adultos || 0;
       editReservationChildren.value = reservation.ninos || 0;
@@ -8174,7 +8378,7 @@ function pageHtml() {
 
       const dates = getEditReservationDates(
         editReservationStart.value,
-        editReservationEnd.value
+        editReservationNights.value
       );
 
       if (!editReservationName.value.trim() || !dates.length) {
@@ -8192,6 +8396,7 @@ function pageHtml() {
           nombre: editReservationName.value.trim(),
           telefono: editReservationPhone.value.trim(),
           dates,
+          noches: Number.parseInt(editReservationNights.value, 10) || dates.length || 1,
           habitaciones: Number(editReservationRooms.value || 1),
           adultos: Number(editReservationAdults.value || 0),
           ninos: Number(editReservationChildren.value || 0),

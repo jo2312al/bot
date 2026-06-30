@@ -908,6 +908,10 @@ function buildGroupReservationCalendar(reservations) {
       Array.isArray(reservation.dates)
         ? reservation.dates
         : [reservation.fecha];
+    const arrivalDate =
+      reservation.fecha || dates[0];
+    const rooms =
+      reservation.habitaciones || 1;
 
     for (const date of dates) {
       if (!byDate.has(date)) {
@@ -917,9 +921,15 @@ function buildGroupReservationCalendar(reservations) {
             date,
             occupied:
               0,
+            arrivals:
+              0,
+            continuing:
+              0,
             total:
               TOTAL_ROOMS,
             reservations:
+              [],
+            continuingReservations:
               []
           }
         );
@@ -929,9 +939,17 @@ function buildGroupReservationCalendar(reservations) {
         byDate.get(date);
 
       day.occupied +=
-        reservation.habitaciones || 1;
+        rooms;
 
-      day.reservations.push(reservation);
+      if (date === arrivalDate) {
+        day.arrivals +=
+          rooms;
+        day.reservations.push(reservation);
+      } else {
+        day.continuing +=
+          rooms;
+        day.continuingReservations.push(reservation);
+      }
     }
   }
 

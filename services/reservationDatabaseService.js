@@ -47,9 +47,15 @@ let sqliteAvailable =
 function enrichReservationPricing(reservation) {
   const extra =
     calculateExtraAdults(reservation);
+  const dates =
+    Array.isArray(reservation.dates)
+      ? reservation.dates
+      : [reservation.fecha].filter(Boolean);
 
   return {
     ...reservation,
+    noches:
+      Math.max(Number(reservation.noches || dates.length || 1), 1),
     extraAdults:
       Number(reservation.extraAdults || extra.extraAdults || 0),
     extraAmount:
