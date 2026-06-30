@@ -7878,7 +7878,7 @@ function pageHtml() {
           '<div class="' + className + '" onclick="selectCalendarDate(\\'' + iso + '\\')">' +
             '<span class="day-top">' +
               '<span class="day-number">' + day + '</span>' +
-              '<button class="day-view ' + (groupRow.occupied ? 'has-reservations' : '') + '" onclick="openDayModal(\\'' + iso + '\\'); event.stopPropagation();">Ver</button>' +
+              '<button class="day-view ' + (groupRow.occupied ? 'has-reservations' : '') + '" onclick="openDayModal(' + escapeJsArg(iso) + '); event.stopPropagation();">Ver</button>' +
             '</span>' +
             '<span class="day-meta">' + meta + '</span>' +
           '</div>'
@@ -8011,7 +8011,7 @@ function pageHtml() {
         groupReservationDetail.innerHTML =
           '<div class="day-summary-card">' +
             '<div><strong>' + display + '</strong><div class="muted">Sin entradas ni continuaciones detectadas para este dia.</div></div>' +
-            '<button onclick="openDayModal(\\'' + isoDate + '\\')">Ver dia</button>' +
+            '<button onclick="openDayModal(' + escapeJsArg(isoDate) + ')">Ver dia</button>' +
           '</div>';
         return;
       }
@@ -8029,7 +8029,7 @@ function pageHtml() {
               '<span class="chip">' + totals.manual + ' manual/excel</span>' +
             '</div>' +
           '</div>' +
-          '<button class="primary" onclick="openDayModal(\\'' + isoDate + '\\')">Ver desglose</button>' +
+          '<button class="primary" onclick="openDayModal(' + escapeJsArg(isoDate) + ')">Ver desglose</button>' +
         '</div>';
     }
 
@@ -8057,6 +8057,10 @@ function pageHtml() {
     }
 
     function getReservationsForIsoDate(isoDate) {
+      if (!isoDate) {
+        return [];
+      }
+
       return filterClientReservationsByArrivalDate(
         dashboardData?.groupReservations || [],
         isoToDisplay(isoDate)
@@ -8064,6 +8068,10 @@ function pageHtml() {
     }
 
     function filterClientReservationsByArrivalDate(reservations, displayDate) {
+      if (!displayDate) {
+        return [];
+      }
+
       return (reservations || []).filter(reservation =>
         isSameDisplayDate(
           getReservationArrivalDisplayDate(reservation),
@@ -8073,6 +8081,10 @@ function pageHtml() {
     }
 
     function getContinuingReservationsByDisplayDate(reservations, displayDate) {
+      if (!displayDate) {
+        return [];
+      }
+
       return filterClientReservationsByDisplayDate(reservations, displayDate)
         .filter(reservation =>
           !isSameDisplayDate(
@@ -8092,6 +8104,10 @@ function pageHtml() {
     }
 
     function isSameDisplayDate(value, displayDate) {
+      if (!value || !displayDate) {
+        return false;
+      }
+
       const isoDate = displayToIsoClient(displayDate);
       const text = String(value || '').trim();
 
@@ -8123,9 +8139,23 @@ function pageHtml() {
     function openDayModal(isoDate) {
       if (!dashboardData) return;
 
-      activeModalIsoDate = isoDate;
-      const display = isoToDisplay(isoDate);
-      const calendarRow = getCalendarRowForIso(isoDate) || {
+      const normalizedIsoDate =
+        displayToIsoClient(isoDate)
+        || displayToIsoClient(selectedStart)
+        || dashboardData.today;
+      const display = isoToDisplay(normalizedIsoDate);
+
+      if (!display) {
+        dayModalTitle.textContent = 'Entradas del dia';
+        dayModalSubtitle.textContent = 'Selecciona una fecha valida en el calendario.';
+        dayModalBody.innerHTML = '<div class="muted">No se pudo identificar la fecha del dia. Cierra este modal y vuelve a tocar Ver en el calendario.</div>';
+        dayModalBackdrop.classList.remove('hidden');
+        document.body.classList.add('modal-open');
+        return;
+      }
+
+      activeModalIsoDate = normalizedIsoDate;
+      const calendarRow = getCalendarRowForIso(normalizedIsoDate) || {
         date: display,
         occupied: 0,
         total: dashboardData.totalRooms || 69,
@@ -8160,7 +8190,7 @@ function pageHtml() {
       dayModalTitle.textContent = 'Entradas para ' + display;
       dayModalSubtitle.textContent = row.occupied + '/' + row.total + ' habitaciones ocupadas contando continuaciones';
       const dayDownloadButton =
-        '<div class="toolbar" style="margin-bottom:12px"><button class="primary" onclick="downloadDayReservationsCsv(\\'' + isoDate + '\\')">Descargar CSV del dia</button><div class="muted">Exporta solo las entradas de ' + escapeHtml(display) + '.</div></div>';
+        '<div class="toolbar" style="margin-bottom:12px"><button class="primary" onclick="downloadDayReservationsCsv(' + escapeJsArg(normalizedIsoDate) + ')">Descargar CSV del dia</button><div class="muted">Exporta solo las entradas de ' + escapeHtml(display) + '.</div></div>';
 
       if (!row.reservations.length) {
         dayModalBody.innerHTML =
@@ -8793,6 +8823,10 @@ function pageHtml() {
         .slice(1, -1)
         .split("'")
         .join("\\\\'");
+    }
+
+    function escapeJsArg(value) {
+      return JSON.stringify(String(value || ''));
     }
 
     setupFileDropzones();
