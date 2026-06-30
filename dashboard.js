@@ -1934,6 +1934,36 @@ function filterReservationsByDisplayDate(reservations, displayDate) {
   });
 }
 
+function normalizeCsvReservationDate(value) {
+  const text =
+    String(value || "").trim();
+  const match =
+    text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+
+  if (!match) {
+    return text;
+  }
+
+  const first =
+    Number(match[1]);
+  const second =
+    Number(match[2]);
+  const year =
+    Number(match[3]);
+
+  if (
+    first === 7
+    &&
+    second >= 1
+    &&
+    second <= 31
+  ) {
+    return `${String(second).padStart(2, "0")}/07/${year}`;
+  }
+
+  return `${String(first).padStart(2, "0")}/${String(second).padStart(2, "0")}/${year}`;
+}
+
 function importReservationsFromCsv(csv) {
   const rows =
     parseCsv(csv);
@@ -1963,6 +1993,12 @@ function importReservationsFromCsv(csv) {
       });
 
       try {
+        const normalizedFecha =
+          normalizeCsvReservationDate(data.fecha);
+        const normalizedSalida =
+          data.fechasalida || data.salida
+            ? normalizeCsvReservationDate(data.fechasalida || data.salida)
+            : "";
         const reservation =
           normalizeManualReservation({
             source:
@@ -1970,7 +2006,7 @@ function importReservationsFromCsv(csv) {
             sourceKey:
               data.folio
                 ? `excel:${data.folio}:${index + 2}`
-                : `excel:${data.nombre}:${data.fecha}:${data.telefono}:${index + 2}`,
+                : `excel:${data.nombre}:${normalizedFecha}:${data.telefono}:${index + 2}`,
             folio:
               data.folio,
             nombre:
@@ -1978,9 +2014,9 @@ function importReservationsFromCsv(csv) {
             telefono:
               data.telefono,
             fecha:
-              data.fecha,
+              normalizedFecha,
             fechaSalida:
-              data.fechasalida || data.salida,
+              normalizedSalida,
             noches:
               data.noches || data.nights || 1,
             habitaciones:

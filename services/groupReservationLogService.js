@@ -859,6 +859,10 @@ function dedupeReservations(reservations) {
 
   return reservations
     .filter(reservation => {
+      const sourceKey =
+        reservation.sourceKey
+          ? `source:${reservation.sourceKey}`
+          : "";
       const folioKey =
         reservation.folio
           ? `folio:${reservation.folio}`
@@ -874,7 +878,7 @@ function dedupeReservations(reservations) {
           .join("|");
 
       const key =
-        folioKey || basicKey;
+        sourceKey || folioKey || basicKey;
 
       if (seen.has(key)) {
         return false;
