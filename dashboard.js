@@ -8826,7 +8826,7 @@ function pageHtml() {
     }
 
     function escapeJsArg(value) {
-      return JSON.stringify(String(value || ''));
+      return "'" + escapeJs(value || '') + "'";
     }
 
     setupFileDropzones();
