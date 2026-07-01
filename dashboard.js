@@ -5271,6 +5271,8 @@ function pageHtml() {
       if (type === 'King') return selectedBase ? clientMoneyText(selectedBase) : '$700';
       if (type === 'Suite King' || type === 'Doble Suite') return selectedBase ? clientMoneyText(selectedBase) : '$800';
       if (type === 'Doble') {
+        const perRoom = clientAdultsPerRoom(adultos, habitaciones);
+        if (perRoom >= 3) return '$800';
         return clientMoneyText(selectedBase || 700);
       }
 
@@ -5283,10 +5285,9 @@ function pageHtml() {
       }
 
       const perRoom = clientAdultsPerRoom(adultos, habitaciones);
-      const extraAdults = Math.max(Math.min(perRoom, 4) - 2, 0);
       return {
-        extraAdults,
-        extraAmount: extraAdults * 100
+        extraAdults: 0,
+        extraAmount: 0
       };
     }
 

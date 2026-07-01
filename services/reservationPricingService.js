@@ -162,7 +162,7 @@ function getRoomPricingRule(roomType) {
         3:
           "$800",
         4:
-          "$900"
+          "$800"
       }
     };
   }
@@ -197,6 +197,14 @@ function calculateAutomaticRate({
       : rule.rate;
   }
 
+  if (
+    rule.type === "Doble"
+    &&
+    adultsPerRoom >= 3
+  ) {
+    return "$800";
+  }
+
   const baseRate =
     selectedBase || 700;
 
@@ -220,21 +228,11 @@ function calculateExtraAdults({
     };
   }
 
-  const adultsPerRoom =
-    getAdultsPerRoom(
-      adultos,
-      habitaciones
-    );
-  const extraAdults =
-    Math.max(
-      Math.min(adultsPerRoom, rule.maxAdultsPerRoom) - 2,
-      0
-    );
-
   return {
-    extraAdults,
+    extraAdults:
+      0,
     extraAmount:
-      extraAdults * 100
+      0
   };
 }
 

@@ -20,7 +20,7 @@ const HOTEL_RATE_OPTIONS = [
   },
   {
     label:
-      "Suite - $800",
+      "Doble 3/4 personas o Suite - $800",
     value:
       "$800"
   },
