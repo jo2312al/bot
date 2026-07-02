@@ -483,28 +483,6 @@ function saveRoomPreassignment(input) {
     throw new Error("Esa habitacion ya esta preasignada para ese dia");
   }
 
-  const rackRoom =
-    readLatestRackStatus()?.rooms?.find(item =>
-      item.room === assignment.room
-    );
-
-  if (
-    rackRoom
-    &&
-    !["VL", "VS"].includes(rackRoom.status)
-  ) {
-    const sameSavedRoom =
-      assignments.find(item =>
-        item.id === assignment.id
-        &&
-        item.room === assignment.room
-      );
-
-    if (!sameSavedRoom) {
-      throw new Error("La habitacion no esta disponible en el rack");
-    }
-  }
-
   const next =
     assignments.filter(item =>
       item.id !== assignment.id
@@ -7871,7 +7849,7 @@ function pageHtml() {
           renderPreassignKpi('Preasignadas', '-') +
           renderPreassignKpi('Llegan / continuan', '-') +
           renderPreassignKpi('Pendientes', '-') +
-          renderPreassignKpi('Disponibles rack', '-');
+          renderPreassignKpi('Habitaciones rack', '-');
         preassignRoomGrid.innerHTML =
           '<div class="muted">El tablero se carga cuando seleccionas una fecha.</div>';
         preassignPendingList.innerHTML =
@@ -7884,7 +7862,6 @@ function pageHtml() {
       const candidates = getPreassignCandidates(isoDate);
       const assignedKeys = getAssignedReservationKeys(isoDate);
       const pending = candidates.filter(item => !assignedKeys.has(item.sourceKey));
-      const availableRooms = rooms.filter(room => getRackRoomCategory(room.status) === 'available').length;
 
       preassignStatus.textContent = 'Fecha: ' + escapeHtml(isoToDisplay(isoDate) || isoDate) +
         (dashboardData.rackStatus?.uploadedAt ? ' / Rack: ' + new Date(dashboardData.rackStatus.uploadedAt).toLocaleString() : ' / Sin rack cargado');
@@ -7892,21 +7869,20 @@ function pageHtml() {
         renderPreassignKpi('Preasignadas', assignments.length) +
         renderPreassignKpi('Llegan / continuan', candidates.length) +
         renderPreassignKpi('Pendientes', pending.length) +
-        renderPreassignKpi('Disponibles rack', availableRooms || '-');
+        renderPreassignKpi('Habitaciones rack', rooms.length || '-');
 
       if (!rooms.length) {
         preassignRoomGrid.innerHTML = '<div class="muted">Importa el CSV del rack para preasignar sobre habitaciones reales.</div>';
       } else {
-        const assignableRooms = rooms
+        const rackRooms = rooms
           .slice()
-          .filter(room => getRackRoomCategory(room.status) !== 'occupied')
           .sort((left, right) => String(left.room || '').localeCompare(String(right.room || '')))
 
-        preassignRoomGrid.innerHTML = assignableRooms.length
-          ? assignableRooms
+        preassignRoomGrid.innerHTML = rackRooms.length
+          ? rackRooms
             .map(room => renderPreassignRoomButton(room, isoDate))
             .join('')
-          : '<div class="muted">No hay habitaciones disponibles o bloqueadas para esta fecha.</div>';
+          : '<div class="muted">No hay habitaciones en el rack para esta fecha.</div>';
       }
 
       renderPreassignPendingList(pending, isoDate);
@@ -7918,13 +7894,14 @@ function pageHtml() {
 
     function renderPreassignRoomButton(room, isoDate) {
       const category = getRackRoomCategory(room.status);
+      const displayCategory = category === 'occupied' ? 'available' : category;
       const assignment = getPreassignRoomAssignment(room.room, isoDate);
       const className = assignment
         ? 'assigned'
-        : (category === 'available' && room.status === 'VS' ? 'dirty' : category);
+        : (displayCategory === 'available' && room.status === 'VS' ? 'dirty' : displayCategory);
       const label = assignment
         ? assignment.guestName
-        : (category === 'available' ? 'Libre' : (category === 'occupied' ? 'Ocupada' : 'Bloqueada'));
+        : (displayCategory === 'available' ? 'Libre' : 'Bloqueada');
 
       return '<button class="preassign-room ' + className + '" onclick="openPreassignModal(\\'' + escapeJs(room.room || '') + '\\')">' +
         '<strong>' + escapeHtml(room.room || '-') + '</strong>' +
