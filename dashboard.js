@@ -7971,6 +7971,7 @@ function pageHtml() {
       return '<div>' +
         '<strong>Reservas y continuaciones del dia</strong>' +
         '<div class="muted">Elige una, o llena el formulario como huesped sin reservacion.</div>' +
+        '<input id="preassignCandidateSearch" placeholder="Buscar nombre, telefono, folio, tipo o nota" oninput="filterPreassignCandidates()" style="margin-top:10px">' +
         '<div class="preassign-candidate-list" style="margin-top:10px">' + candidateList + '</div>' +
       '</div>' +
       '<div>' +
@@ -8015,12 +8016,61 @@ function pageHtml() {
     function renderPreassignCandidate(item, assignedKeys, assignment) {
       const selected = item.sourceKey && item.sourceKey === assignment?.sourceKey;
       const alreadyAssigned = item.sourceKey && assignedKeys.has(item.sourceKey) && !selected;
-      return '<div class="preassign-candidate ' + (selected ? 'selected ' : '') + (alreadyAssigned ? 'assigned' : '') + '" onclick="selectPreassignCandidate(\\'' + escapeJs(item.sourceKey || '') + '\\', this)">' +
+      const searchText = [
+        item.nombre,
+        item.telefono,
+        item.folio,
+        item.tipo,
+        item.preassignKind,
+        item.hora,
+        item.note
+      ].join(' ');
+
+      return '<div class="preassign-candidate ' + (selected ? 'selected ' : '') + (alreadyAssigned ? 'assigned' : '') + '" data-search="' + escapeHtml(normalizeSearchText(searchText)) + '" onclick="selectPreassignCandidate(\\'' + escapeJs(item.sourceKey || '') + '\\', this)">' +
         '<strong>' + escapeHtml(item.nombre || 'Sin nombre') + '</strong>' +
         '<div class="muted">' + escapeHtml(item.preassignKind || '-') + ' / ' + escapeHtml(item.tipo || '-') + ' / ' + escapeHtml(item.habitaciones || 1) + ' hab(s)</div>' +
         '<div class="muted">' + getPreassignPeople(item) + ' persona(s) sugeridas por cuarto / ' + escapeHtml(item.telefono || '') + '</div>' +
         (alreadyAssigned ? '<div class="muted">Ya tiene una preasignacion; puedes usarla otra vez si son varias habitaciones.</div>' : '') +
       '</div>';
+    }
+
+    function normalizeSearchText(value) {
+      return String(value || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\\u0300-\\u036f]/g, '');
+    }
+
+    function filterPreassignCandidates() {
+      const input = document.getElementById('preassignCandidateSearch');
+      const query = normalizeSearchText(input?.value || '');
+      let visible = 0;
+
+      document.querySelectorAll('.preassign-candidate').forEach(candidate => {
+        const matches = !query || String(candidate.dataset.search || '').includes(query);
+        candidate.style.display = matches ? '' : 'none';
+        if (matches) {
+          visible++;
+        }
+      });
+
+      const list = document.querySelector('.preassign-candidate-list');
+      let empty = document.getElementById('preassignCandidateEmpty');
+
+      if (!list) {
+        return;
+      }
+
+      if (!empty) {
+        empty = document.createElement('div');
+        empty.id = 'preassignCandidateEmpty';
+        empty.className = 'muted';
+        empty.textContent = 'Sin coincidencias.';
+        empty.style.display = 'none';
+        list.appendChild(empty);
+      }
+
+      empty.style.display = visible ? 'none' : '';
     }
 
     function selectPreassignCandidate(sourceKey, trigger) {
