@@ -85,6 +85,8 @@ let dashboardSearchService =
 
 const PORT =
   Number(process.env.DASHBOARD_PORT || 3333);
+const PREASSIGNMENTS_FILE =
+  path.join(__dirname, "data", "room-preassignments.json");
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
@@ -328,6 +330,207 @@ function getDatesForNights(startDisplay, nightsValue) {
   }
 
   return dates;
+}
+
+function ensureDataDirectory() {
+  const dir =
+    path.dirname(PREASSIGNMENTS_FILE);
+
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, {
+      recursive: true
+    });
+  }
+}
+
+function readRoomPreassignments() {
+  try {
+    if (!fs.existsSync(PREASSIGNMENTS_FILE)) {
+      return [];
+    }
+
+    const parsed =
+      JSON.parse(
+        fs.readFileSync(PREASSIGNMENTS_FILE, "utf8")
+      );
+
+    return Array.isArray(parsed)
+      ? parsed
+      : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function saveRoomPreassignments(assignments) {
+  ensureDataDirectory();
+  fs.writeFileSync(
+    PREASSIGNMENTS_FILE,
+    JSON.stringify(assignments, null, 2)
+  );
+}
+
+function getRoomCapacity(type) {
+  const clean =
+    String(type || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+
+  if (clean.includes("king")) {
+    return 2;
+  }
+
+  if (
+    clean.includes("doble")
+    ||
+    clean.includes("suite")
+    ||
+    clean.includes("matrimonial")
+  ) {
+    return 4;
+  }
+
+  return 4;
+}
+
+function normalizePreassignment(input) {
+  const date =
+    String(input.date || "").trim();
+  const room =
+    String(input.room || "").replace(/\D/g, "");
+  const sourceKey =
+    String(input.sourceKey || "").trim();
+  const guestName =
+    String(input.guestName || "").trim();
+  const adults =
+    Math.max(Number(input.adults || 0), 0);
+  const children =
+    Math.max(Number(input.children || 0), 0);
+  const people =
+    Math.max(Number(input.people || adults + children || 1), 1);
+  const roomType =
+    normalizeRoomType(
+      String(input.roomType || "").trim()
+    );
+  const status =
+    String(input.status || "preasignado").trim() || "preasignado";
+  const origin =
+    String(input.origin || (sourceKey ? "Reserva" : "Sin reservacion")).trim();
+  const note =
+    String(input.note || "").trim();
+
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error("Fecha requerida");
+  }
+
+  if (!room || !HOTEL_ROOM_NUMBERS.includes(room)) {
+    throw new Error("Habitacion invalida");
+  }
+
+  if (!guestName) {
+    throw new Error("Nombre del huesped requerido");
+  }
+
+  const rackRoom =
+    readLatestRackStatus()?.rooms?.find(item =>
+      item.room === room
+    );
+  const effectiveType =
+    rackRoom?.type || roomType;
+  const capacity =
+    getRoomCapacity(effectiveType);
+
+  if (people > capacity) {
+    throw new Error(`Capacidad excedida: ${effectiveType || "habitacion"} permite ${capacity} persona(s)`);
+  }
+
+  return {
+    id:
+      String(input.id || `pre:${Date.now()}:${Math.random().toString(16).slice(2)}`),
+    date,
+    room,
+    roomType:
+      effectiveType || roomType,
+    sourceKey,
+    guestName,
+    adults,
+    children,
+    people,
+    origin,
+    status,
+    note,
+    updatedAt:
+      new Date().toISOString()
+  };
+}
+
+function saveRoomPreassignment(input) {
+  const assignment =
+    normalizePreassignment(input);
+  const assignments =
+    readRoomPreassignments();
+  const duplicateRoom =
+    assignments.find(item =>
+      item.date === assignment.date
+      &&
+      item.room === assignment.room
+      &&
+      item.id !== assignment.id
+    );
+
+  if (duplicateRoom) {
+    throw new Error("Esa habitacion ya esta preasignada para ese dia");
+  }
+
+  const rackRoom =
+    readLatestRackStatus()?.rooms?.find(item =>
+      item.room === assignment.room
+    );
+
+  if (
+    rackRoom
+    &&
+    !["VL", "VS"].includes(rackRoom.status)
+  ) {
+    const sameSavedRoom =
+      assignments.find(item =>
+        item.id === assignment.id
+        &&
+        item.room === assignment.room
+      );
+
+    if (!sameSavedRoom) {
+      throw new Error("La habitacion no esta disponible en el rack");
+    }
+  }
+
+  const next =
+    assignments.filter(item =>
+      item.id !== assignment.id
+    );
+  next.push(assignment);
+  saveRoomPreassignments(next);
+
+  return assignment;
+}
+
+function deleteRoomPreassignment(id) {
+  const cleanId =
+    String(id || "").trim();
+
+  if (!cleanId) {
+    throw new Error("Preasignacion requerida");
+  }
+
+  const assignments =
+    readRoomPreassignments();
+  const next =
+    assignments.filter(item =>
+      item.id !== cleanId
+    );
+
+  saveRoomPreassignments(next);
 }
 
 function normalizeManualReservation(input) {
@@ -2212,6 +2415,8 @@ function getSummary() {
       readEventBookings(),
     roomBlocks:
       readRoomBlocks(),
+    roomPreassignments:
+      readRoomPreassignments(),
     totalRooms:
       TOTAL_ROOMS,
     rackStatus:
@@ -4276,6 +4481,129 @@ function pageHtml() {
     .reservation-edit-grid .wide {
       grid-column: span 2;
     }
+    .preassign-toolbar {
+      align-items: end;
+      display: grid;
+      gap: 12px;
+      grid-template-columns: minmax(180px, 240px) 1fr auto auto;
+    }
+    .preassign-kpis {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin: 14px 0;
+    }
+    .preassign-kpi,
+    .preassign-side-card {
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .preassign-kpi strong {
+      display: block;
+      font-size: 22px;
+      margin-top: 4px;
+    }
+    .preassign-layout {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: minmax(0, 1fr) 360px;
+    }
+    .preassign-grid {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+    }
+    .preassign-room {
+      background: #ffffff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--text);
+      min-height: 94px;
+      padding: 8px;
+      text-align: left;
+    }
+    .preassign-room:hover {
+      border-color: var(--accent);
+      box-shadow: 0 8px 16px rgba(15, 23, 42, 0.08);
+    }
+    .preassign-room strong,
+    .preassign-room span {
+      display: block;
+    }
+    .preassign-room .guest {
+      font-size: 12px;
+      margin-top: 5px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .preassign-room.available {
+      border-color: #86efac;
+    }
+    .preassign-room.assigned {
+      background: #ecfdf5;
+      border-color: #22c55e;
+    }
+    .preassign-room.occupied {
+      background: #fff1f2;
+      border-color: #fda4af;
+    }
+    .preassign-room.blocked {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+    }
+    .preassign-room.dirty {
+      background: #fffbeb;
+      border-color: #fcd34d;
+    }
+    .preassign-modal-grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+    }
+    .preassign-candidate-list {
+      display: grid;
+      gap: 8px;
+      max-height: 420px;
+      overflow: auto;
+    }
+    .preassign-candidate {
+      background: #ffffff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      cursor: pointer;
+      padding: 10px;
+    }
+    .preassign-candidate.selected {
+      border-color: var(--accent);
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+    .preassign-candidate.assigned {
+      opacity: 0.62;
+    }
+    .preassign-form {
+      display: grid;
+      gap: 10px;
+    }
+    .preassign-form-row {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .preassign-side-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .preassign-mini-row {
+      border-bottom: 1px solid var(--line);
+      padding: 8px 0;
+    }
+    .preassign-mini-row:last-child {
+      border-bottom: 0;
+    }
     body.modal-open {
       overflow: hidden;
     }
@@ -4283,8 +4611,15 @@ function pageHtml() {
       .grid { grid-template-columns: 1fr; }
       .bot-status-grid { grid-template-columns: 1fr; }
       .day-reservation-details,
-      .reservation-edit-grid {
+      .reservation-edit-grid,
+      .preassign-toolbar,
+      .preassign-layout,
+      .preassign-modal-grid,
+      .preassign-form-row {
         grid-template-columns: 1fr;
+      }
+      .preassign-kpis {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
       .reservation-edit-grid .wide {
         grid-column: auto;
@@ -4373,6 +4708,7 @@ function pageHtml() {
       <button id="tab-today" onclick="showView('today')">Hoy</button>
       <button id="tab-main" class="active" onclick="showView('main')">Principal</button>
       <button id="tab-calendar" onclick="showView('calendar')">Calendario</button>
+      <button id="tab-preassign" onclick="showView('preassign')">Preasignar</button>
       <button id="tab-reservations" onclick="showView('reservations')">Reservas</button>
       <button id="tab-quotes" onclick="showView('quotes')">Cotizaciones</button>
       <button id="tab-events" onclick="showView('events')">Eventos</button>
@@ -4513,6 +4849,36 @@ function pageHtml() {
       </div>
       <div id="calendar" class="calendar-grid"></div>
       <div id="groupReservationDetail" style="margin-top:14px"></div>
+    </section>
+    </div>
+
+    <div id="view-preassign" class="view-panel hidden">
+    <section class="panel">
+      <div class="toolbar">
+        <div>
+          <strong>Preasignacion de habitaciones</strong><button class="help-button" onclick="openHelp('preassign')" title="Ayuda">?</button>
+          <div class="muted">Prepara llegadas, continuaciones y huespedes sin reservacion antes de recibirlos.</div>
+        </div>
+      </div>
+      <div class="preassign-toolbar">
+        <label>
+          Fecha
+          <input id="preassignDate" type="date" onchange="renderPreassignmentBoard()">
+        </label>
+        <div id="preassignStatus" class="muted"></div>
+        <button class="primary" onclick="printPreassignment()">Imprimir / PDF</button>
+      </div>
+      <div id="preassignKpis" class="preassign-kpis"></div>
+      <div class="preassign-layout">
+        <div>
+          <div id="preassignRoomGrid" class="preassign-grid"></div>
+        </div>
+        <aside class="preassign-side-card">
+          <strong>Pendientes del dia</strong>
+          <div class="muted">Reservas sin habitacion preasignada y continuaciones detectadas.</div>
+          <div id="preassignPendingList" class="preassign-side-list"></div>
+        </aside>
+      </div>
     </section>
     </div>
 
@@ -5062,6 +5428,20 @@ function pageHtml() {
       </div>
     </div>
   </div>
+  <div id="preassignModalBackdrop" class="modal-backdrop hidden" onclick="closePreassignModal()">
+    <div class="modal reservation-edit-modal" role="dialog" aria-modal="true" aria-labelledby="preassignModalTitle" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <strong id="preassignModalTitle">Preasignar habitacion</strong>
+          <div id="preassignModalSubtitle" class="muted"></div>
+        </div>
+        <button onclick="closePreassignModal()">Cerrar</button>
+      </div>
+      <div class="modal-body">
+        <div id="preassignModalBody" class="preassign-modal-grid"></div>
+      </div>
+    </div>
+  </div>
   <div id="groupSendConfirmBackdrop" class="modal-backdrop hidden" onclick="closeGroupSendConfirm()">
     <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="groupSendConfirmTitle" onclick="event.stopPropagation()">
       <div class="modal-head">
@@ -5194,6 +5574,8 @@ function pageHtml() {
     let pendingArrivalReservation = null;
     let pendingGroupReservations = [];
     let pendingRackRoom = null;
+    let pendingPreassignRoom = null;
+    let selectedPreassignCandidateKey = "";
     let activeModalIsoDate = "";
     let reportsData = null;
     let quoteSectionsData = [
@@ -5378,6 +5760,10 @@ function pageHtml() {
         title: 'Calendario de reservas',
         body: 'Cada dia muestra cuantas habitaciones estan reservadas de las 69.\\n\\nDa clic en Ver para abrir el detalle del dia: huespedes, tipo, hora, telefono, tarifa, notas, llegada y habitacion asignada.\\n\\nManual/Excel y Bot se separan para saber de donde vino cada reserva.'
       },
+      preassign: {
+        title: 'Preasignacion',
+        body: 'Usalo antes de un dia lleno. Elige la fecha, da clic en una habitacion y asigna una reserva que llega, una continuacion o un huesped sin reservacion.\\n\\nReglas: King maximo 2 personas; Doble y suites maximo 4 personas. La impresion deja una hoja clara para recepcion.'
+      },
       reservations: {
         title: 'Agregar reservas',
         body: 'Captura manual: llena huesped, telefono, entrada, noches, habitaciones, personas, tipo, hora, tarifa y nota.\\n\\nLa salida se calcula automaticamente con entrada + noches. Importar CSV: pega o sube un archivo con reservas; el sistema las convierte al calendario.\\n\\nDespues de agregar, puedes decidir si mandar la reserva al grupo. Si tiene nota, tambien se incluye.'
@@ -5511,7 +5897,6 @@ function pageHtml() {
       if (!roomEventDate.value) {
         roomEventDate.value = data.today;
       }
-
       renderRackDashboard(data.rackStatus);
       renderRackRoomGrid(data.rackStatus);
       overbookingAlerts.innerHTML = renderOverbookingAlerts(data.overbookingAlerts || []);
@@ -5540,6 +5925,7 @@ function pageHtml() {
       updateSelectionSummary();
       renderCalendar();
       renderGroupReservationDetail(closeStart.value || data.today);
+      renderPreassignmentBoard();
     }
 
     function renderTodayView() {
@@ -5618,7 +6004,7 @@ function pageHtml() {
     }
 
     function showView(name) {
-      ['today', 'main', 'calendar', 'reservations', 'quotes', 'events', 'rack', 'reports'].forEach(view => {
+      ['today', 'main', 'calendar', 'preassign', 'reservations', 'quotes', 'events', 'rack', 'reports'].forEach(view => {
         const panel = document.getElementById('view-' + view);
         const tab = document.getElementById('tab-' + view);
 
@@ -5633,6 +6019,9 @@ function pageHtml() {
 
       if (name === 'reports') {
         loadReports();
+      }
+      if (name === 'preassign') {
+        renderPreassignmentBoard();
       }
     }
 
@@ -7396,6 +7785,426 @@ function pageHtml() {
       });
     }
 
+    function getPreassignAssignmentsForDate(isoDate) {
+      return (dashboardData?.roomPreassignments || [])
+        .filter(item => item.date === isoDate);
+    }
+
+    function getPreassignRoomAssignment(room, isoDate) {
+      return getPreassignAssignmentsForDate(isoDate)
+        .find(item => item.room === room);
+    }
+
+    function getPreassignCandidates(isoDate) {
+      const display = isoToDisplay(isoDate);
+      const arrivals = filterClientReservationsByArrivalDate(
+        dashboardData?.groupReservations || [],
+        display
+      ).map(reservation => ({
+        ...reservation,
+        preassignKind: 'Llegada',
+        preassignKey: reservation.sourceKey || ('arrival:' + (reservation.folio || reservation.nombre || Math.random()))
+      }));
+      const continuing = getContinuingReservationsByDisplayDate(
+        dashboardData?.groupReservations || [],
+        display
+      ).map(reservation => ({
+        ...reservation,
+        preassignKind: 'Continua',
+        preassignKey: reservation.sourceKey || ('continue:' + (reservation.folio || reservation.nombre || Math.random()))
+      }));
+      const seen = new Set();
+
+      return arrivals.concat(continuing)
+        .filter(reservation => {
+          const key = reservation.preassignKey;
+          if (seen.has(key)) {
+            return false;
+          }
+          seen.add(key);
+          return true;
+        })
+        .sort((left, right) =>
+          String(left.hora || '').localeCompare(String(right.hora || ''))
+        );
+    }
+
+    function getAssignedReservationKeys(isoDate) {
+      return new Set(
+        getPreassignAssignmentsForDate(isoDate)
+          .filter(item => item.sourceKey)
+          .map(item => item.sourceKey)
+      );
+    }
+
+    function getPreassignPeople(reservation) {
+      const rooms = Math.max(Number(reservation?.habitaciones || 1), 1);
+      const total = Number(reservation?.adultos || 0) + Number(reservation?.ninos || 0);
+      return Math.max(Math.ceil(total / rooms) || 1, 1);
+    }
+
+    function getPreassignCapacity(room) {
+      return getClientRoomCapacity(room?.type || '');
+    }
+
+    function getClientRoomCapacity(type) {
+      const clean = String(type || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\\u0300-\\u036f]/g, '');
+
+      if (clean.includes('king')) return 2;
+      if (clean.includes('doble') || clean.includes('suite') || clean.includes('matrimonial')) return 4;
+      return 4;
+    }
+
+    function renderPreassignmentBoard() {
+      if (!dashboardData || typeof preassignRoomGrid === 'undefined') {
+        return;
+      }
+
+      const isoDate = preassignDate.value;
+
+      if (!isoDate) {
+        preassignStatus.textContent = 'Selecciona una fecha para cargar preasignaciones.';
+        preassignKpis.innerHTML =
+          renderPreassignKpi('Preasignadas', '-') +
+          renderPreassignKpi('Llegan / continuan', '-') +
+          renderPreassignKpi('Pendientes', '-') +
+          renderPreassignKpi('Disponibles rack', '-');
+        preassignRoomGrid.innerHTML =
+          '<div class="muted">El tablero se carga cuando seleccionas una fecha.</div>';
+        preassignPendingList.innerHTML =
+          '<div class="muted">Sin fecha seleccionada.</div>';
+        return;
+      }
+
+      const rooms = dashboardData.rackStatus?.rooms || [];
+      const assignments = getPreassignAssignmentsForDate(isoDate);
+      const candidates = getPreassignCandidates(isoDate);
+      const assignedKeys = getAssignedReservationKeys(isoDate);
+      const pending = candidates.filter(item => !assignedKeys.has(item.sourceKey));
+      const availableRooms = rooms.filter(room => getRackRoomCategory(room.status) === 'available').length;
+
+      preassignStatus.textContent = 'Fecha: ' + escapeHtml(isoToDisplay(isoDate) || isoDate) +
+        (dashboardData.rackStatus?.uploadedAt ? ' / Rack: ' + new Date(dashboardData.rackStatus.uploadedAt).toLocaleString() : ' / Sin rack cargado');
+      preassignKpis.innerHTML =
+        renderPreassignKpi('Preasignadas', assignments.length) +
+        renderPreassignKpi('Llegan / continuan', candidates.length) +
+        renderPreassignKpi('Pendientes', pending.length) +
+        renderPreassignKpi('Disponibles rack', availableRooms || '-');
+
+      if (!rooms.length) {
+        preassignRoomGrid.innerHTML = '<div class="muted">Importa el CSV del rack para preasignar sobre habitaciones reales.</div>';
+      } else {
+        preassignRoomGrid.innerHTML = rooms
+          .slice()
+          .sort((left, right) => String(left.room || '').localeCompare(String(right.room || '')))
+          .map(room => renderPreassignRoomButton(room, isoDate))
+          .join('');
+      }
+
+      renderPreassignPendingList(pending, isoDate);
+    }
+
+    function renderPreassignKpi(label, value) {
+      return '<div class="preassign-kpi"><span class="muted">' + escapeHtml(label) + '</span><strong>' + escapeHtml(value) + '</strong></div>';
+    }
+
+    function renderPreassignRoomButton(room, isoDate) {
+      const category = getRackRoomCategory(room.status);
+      const assignment = getPreassignRoomAssignment(room.room, isoDate);
+      const className = assignment
+        ? 'assigned'
+        : (category === 'available' && room.status === 'VS' ? 'dirty' : category);
+      const label = assignment
+        ? assignment.guestName
+        : (category === 'available' ? 'Libre' : (category === 'occupied' ? 'Ocupada' : 'Bloqueada'));
+
+      return '<button class="preassign-room ' + className + '" onclick="openPreassignModal(\\'' + escapeJs(room.room || '') + '\\')">' +
+        '<strong>' + escapeHtml(room.room || '-') + '</strong>' +
+        '<span>' + escapeHtml(room.type || '-') + '</span>' +
+        '<span>' + escapeHtml(room.status || '-') + ' / cap ' + getPreassignCapacity(room) + '</span>' +
+        '<span class="guest">' + escapeHtml(label) + '</span>' +
+      '</button>';
+    }
+
+    function renderPreassignPendingList(pending, isoDate) {
+      if (!pending.length) {
+        preassignPendingList.innerHTML = '<div class="muted">Sin pendientes. Todo lo detectado para el dia ya tiene al menos una preasignacion.</div>';
+        return;
+      }
+
+      preassignPendingList.innerHTML = pending.map(item =>
+        '<div class="preassign-mini-row">' +
+          '<strong>' + escapeHtml(item.nombre || 'Sin nombre') + '</strong>' +
+          '<div class="muted">' + escapeHtml(item.preassignKind || '-') + ' / ' + escapeHtml(item.tipo || '-') + ' / ' + getPreassignPeople(item) + ' persona(s) por cuarto</div>' +
+          '<div class="muted">' + escapeHtml(item.telefono || '') + '</div>' +
+        '</div>'
+      ).join('');
+    }
+
+    function openPreassignModal(roomNumber) {
+      const isoDate = preassignDate.value;
+
+      if (!isoDate) {
+        alert('Selecciona una fecha primero.');
+        return;
+      }
+
+      const room = (dashboardData?.rackStatus?.rooms || []).find(item => item.room === roomNumber) || {
+        room: roomNumber,
+        type: '',
+        status: '-'
+      };
+      const assignment = getPreassignRoomAssignment(roomNumber, isoDate);
+      pendingPreassignRoom = room;
+      selectedPreassignCandidateKey = assignment?.sourceKey || '';
+
+      preassignModalTitle.textContent = 'Habitacion ' + roomNumber;
+      preassignModalSubtitle.textContent = (isoToDisplay(isoDate) || isoDate) + ' / ' + (room.type || '-') + ' / Estado rack ' + (room.status || '-');
+      preassignModalBody.innerHTML = renderPreassignModalBody(room, assignment, isoDate);
+      preassignModalBackdrop.classList.remove('hidden');
+      document.body.classList.add('modal-open');
+      updatePreassignCapacityHelp();
+    }
+
+    function renderPreassignModalBody(room, assignment, isoDate) {
+      const candidates = getPreassignCandidates(isoDate);
+      const assignedKeys = getAssignedReservationKeys(isoDate);
+      const candidateList = candidates.length
+        ? candidates.map(item => renderPreassignCandidate(item, assignedKeys, assignment)).join('')
+        : '<div class="muted">No hay reservas detectadas para esta fecha. Puedes capturar huesped fuera de reservacion.</div>';
+      const currentName = assignment?.guestName || '';
+      const currentAdults = assignment?.adults ?? '';
+      const currentChildren = assignment?.children ?? '';
+      const currentPeople = assignment?.people || '';
+      const currentOrigin = assignment?.origin || 'Sin reservacion';
+      const currentStatus = assignment?.status || 'preasignado';
+      const currentNote = assignment?.note || '';
+      const deleteButton = assignment
+        ? '<button class="danger" onclick="deletePreassignment(\\'' + escapeJs(assignment.id) + '\\')">Quitar</button>'
+        : '';
+
+      return '<div>' +
+        '<strong>Reservas y continuaciones del dia</strong>' +
+        '<div class="muted">Elige una, o llena el formulario como huesped sin reservacion.</div>' +
+        '<div class="preassign-candidate-list" style="margin-top:10px">' + candidateList + '</div>' +
+      '</div>' +
+      '<div>' +
+        '<strong>Asignacion</strong>' +
+        '<div id="preassignCapacityHelp" class="muted" style="margin:6px 0 10px"></div>' +
+        '<div class="preassign-form">' +
+          '<input id="preassignAssignmentId" type="hidden" value="' + escapeHtml(assignment?.id || '') + '">' +
+          '<input id="preassignSourceKey" type="hidden" value="' + escapeHtml(assignment?.sourceKey || '') + '">' +
+          '<label>Huesped<input id="preassignGuestName" value="' + escapeHtml(currentName) + '" placeholder="Nombre del huesped"></label>' +
+          '<div class="preassign-form-row">' +
+            '<label>Adultos<input id="preassignAdults" type="number" min="0" value="' + escapeHtml(currentAdults) + '" oninput="syncPreassignPeople()"></label>' +
+            '<label>Menores<input id="preassignChildren" type="number" min="0" value="' + escapeHtml(currentChildren) + '" oninput="syncPreassignPeople()"></label>' +
+          '</div>' +
+          '<div class="preassign-form-row">' +
+            '<label>Personas<input id="preassignPeople" type="number" min="1" value="' + escapeHtml(currentPeople) + '" oninput="updatePreassignCapacityHelp()"></label>' +
+            '<label>Origen<select id="preassignOrigin">' +
+              renderPreassignOption('Reserva', currentOrigin) +
+              renderPreassignOption('Ya hospedado', currentOrigin) +
+              renderPreassignOption('Sin reservacion', currentOrigin) +
+            '</select></label>' +
+          '</div>' +
+          '<label>Estado<select id="preassignAssignmentStatus">' +
+            renderPreassignOption('preasignado', currentStatus) +
+            renderPreassignOption('llego', currentStatus) +
+            renderPreassignOption('cambiar cuarto', currentStatus) +
+            renderPreassignOption('revisar', currentStatus) +
+          '</select></label>' +
+          '<label>Notas<input id="preassignNote" value="' + escapeHtml(currentNote) + '" placeholder="Ej. llega tarde, cerca elevador, pago pendiente"></label>' +
+          '<div class="confirm-actions">' +
+            deleteButton +
+            '<button onclick="closePreassignModal()">Cancelar</button>' +
+            '<button class="primary" onclick="savePreassignment()">Guardar</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }
+
+    function renderPreassignOption(value, selected) {
+      return '<option value="' + escapeHtml(value) + '"' + (value === selected ? ' selected' : '') + '>' + escapeHtml(value) + '</option>';
+    }
+
+    function renderPreassignCandidate(item, assignedKeys, assignment) {
+      const selected = item.sourceKey && item.sourceKey === assignment?.sourceKey;
+      const alreadyAssigned = item.sourceKey && assignedKeys.has(item.sourceKey) && !selected;
+      return '<div class="preassign-candidate ' + (selected ? 'selected ' : '') + (alreadyAssigned ? 'assigned' : '') + '" onclick="selectPreassignCandidate(\\'' + escapeJs(item.sourceKey || '') + '\\', this)">' +
+        '<strong>' + escapeHtml(item.nombre || 'Sin nombre') + '</strong>' +
+        '<div class="muted">' + escapeHtml(item.preassignKind || '-') + ' / ' + escapeHtml(item.tipo || '-') + ' / ' + escapeHtml(item.habitaciones || 1) + ' hab(s)</div>' +
+        '<div class="muted">' + getPreassignPeople(item) + ' persona(s) sugeridas por cuarto / ' + escapeHtml(item.telefono || '') + '</div>' +
+        (alreadyAssigned ? '<div class="muted">Ya tiene una preasignacion; puedes usarla otra vez si son varias habitaciones.</div>' : '') +
+      '</div>';
+    }
+
+    function selectPreassignCandidate(sourceKey, trigger) {
+      const isoDate = preassignDate.value;
+      const candidate = getPreassignCandidates(isoDate).find(item => item.sourceKey === sourceKey);
+
+      selectedPreassignCandidateKey = sourceKey;
+      document.querySelectorAll('.preassign-candidate').forEach(node => node.classList.remove('selected'));
+      trigger?.classList.add('selected');
+
+      if (!candidate) {
+        return;
+      }
+
+      preassignSourceKey.value = candidate.sourceKey || '';
+      preassignGuestName.value = candidate.nombre || '';
+      preassignAdults.value = Math.ceil(Number(candidate.adultos || 0) / Math.max(Number(candidate.habitaciones || 1), 1));
+      preassignChildren.value = Math.ceil(Number(candidate.ninos || 0) / Math.max(Number(candidate.habitaciones || 1), 1));
+      preassignPeople.value = getPreassignPeople(candidate);
+      preassignOrigin.value = candidate.preassignKind === 'Continua' ? 'Ya hospedado' : 'Reserva';
+      if (!preassignNote.value && candidate.note) {
+        preassignNote.value = candidate.note;
+      }
+      updatePreassignCapacityHelp();
+    }
+
+    function syncPreassignPeople() {
+      preassignPeople.value = Math.max(
+        Number(preassignAdults.value || 0) + Number(preassignChildren.value || 0),
+        1
+      );
+      updatePreassignCapacityHelp();
+    }
+
+    function updatePreassignCapacityHelp() {
+      if (!pendingPreassignRoom || typeof preassignCapacityHelp === 'undefined') {
+        return;
+      }
+
+      const capacity = getPreassignCapacity(pendingPreassignRoom);
+      const people = Number(preassignPeople?.value || 0);
+      preassignCapacityHelp.textContent =
+        'Capacidad: ' + capacity + ' persona(s). King max 2; Doble/Suite max 4.';
+      preassignCapacityHelp.style.color = people > capacity ? '#b91c1c' : '';
+    }
+
+    async function savePreassignment() {
+      if (!pendingPreassignRoom) {
+        return;
+      }
+
+      if (!preassignDate.value) {
+        alert('Selecciona una fecha primero.');
+        return;
+      }
+
+      const capacity = getPreassignCapacity(pendingPreassignRoom);
+      const people = Number(preassignPeople.value || 0);
+
+      if (people > capacity) {
+        alert('La habitacion permite maximo ' + capacity + ' persona(s).');
+        return;
+      }
+
+      const response = await fetch('/api/room-preassignments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          id: preassignAssignmentId.value,
+          date: preassignDate.value,
+          room: pendingPreassignRoom.room,
+          roomType: pendingPreassignRoom.type,
+          sourceKey: preassignSourceKey.value,
+          guestName: preassignGuestName.value,
+          adults: Number(preassignAdults.value || 0),
+          children: Number(preassignChildren.value || 0),
+          people,
+          origin: preassignOrigin.value,
+          status: preassignAssignmentStatus.value,
+          note: preassignNote.value
+        })
+      });
+      const data = await response.json();
+
+      if (!data.ok) {
+        alert(data.error || 'No se pudo guardar la preasignacion.');
+        return;
+      }
+
+      closePreassignModal();
+      await loadDashboard();
+      showView('preassign');
+    }
+
+    async function deletePreassignment(id) {
+      const response = await fetch('/api/room-preassignments/delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ id })
+      });
+      const data = await response.json();
+
+      if (!data.ok) {
+        alert(data.error || 'No se pudo quitar la preasignacion.');
+        return;
+      }
+
+      closePreassignModal();
+      await loadDashboard();
+      showView('preassign');
+    }
+
+    function closePreassignModal() {
+      preassignModalBackdrop.classList.add('hidden');
+      pendingPreassignRoom = null;
+      selectedPreassignCandidateKey = '';
+      document.body.classList.remove('modal-open');
+    }
+
+    function printPreassignment() {
+      const isoDate = preassignDate.value;
+
+      if (!isoDate) {
+        alert('Selecciona una fecha para imprimir.');
+        return;
+      }
+
+      const display = isoToDisplay(isoDate) || isoDate;
+      const assignments = getPreassignAssignmentsForDate(isoDate)
+        .slice()
+        .sort((left, right) => String(left.room || '').localeCompare(String(right.room || '')));
+      const pending = getPreassignCandidates(isoDate)
+        .filter(item => !getAssignedReservationKeys(isoDate).has(item.sourceKey));
+      const rows = assignments.length
+        ? assignments.map(item =>
+          '<tr><td><strong>' + escapeHtml(item.room || '') + '</strong></td><td>' + escapeHtml(item.guestName || '') + '</td><td>' + escapeHtml(item.people || '') + '</td><td>' + escapeHtml(item.roomType || '') + '</td><td>' + escapeHtml(item.origin || '') + '</td><td>' + escapeHtml(item.status || '') + '</td><td>' + escapeHtml(item.note || '') + '</td></tr>'
+        ).join('')
+        : '<tr><td colspan="7">Sin preasignaciones guardadas.</td></tr>';
+      const pendingRows = pending.length
+        ? pending.map(item =>
+          '<tr><td>' + escapeHtml(item.nombre || '') + '</td><td>' + escapeHtml(item.preassignKind || '') + '</td><td>' + escapeHtml(item.tipo || '') + '</td><td>' + escapeHtml(getPreassignPeople(item)) + '</td><td>' + escapeHtml(item.telefono || '') + '</td></tr>'
+        ).join('')
+        : '<tr><td colspan="5">Sin pendientes detectados.</td></tr>';
+      const html =
+        '<!doctype html><html><head><meta charset="utf-8"><title>Preasignacion ' + escapeHtml(display) + '</title>' +
+        '<style>body{font-family:Arial,sans-serif;color:#111827;margin:24px}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:22px 0 8px}.muted{color:#64748b}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #cbd5e1;padding:7px;text-align:left;vertical-align:top;font-size:12px}th{background:#f1f5f9}.actions{text-align:right;margin-bottom:12px}@media print{.actions{display:none}body{margin:10mm}}</style>' +
+        '</head><body><div class="actions"><button onclick="window.print()">Imprimir / guardar PDF</button></div>' +
+        '<h1>Preasignacion de habitaciones</h1><div class="muted">Hotel Villa Margaritas / ' + escapeHtml(display) + '</div>' +
+        '<h2>Habitaciones asignadas</h2><table><thead><tr><th>Hab</th><th>Huesped</th><th>Pers.</th><th>Tipo</th><th>Origen</th><th>Estado</th><th>Notas</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+        '<h2>Pendientes</h2><table><thead><tr><th>Huesped</th><th>Tipo</th><th>Habitacion solicitada</th><th>Pers./cuarto</th><th>Telefono</th></tr></thead><tbody>' + pendingRows + '</tbody></table>' +
+        '<script>window.onload=function(){window.print();}<\\/script></body></html>';
+      const printWindow = window.open('', '_blank');
+
+      if (!printWindow) {
+        alert('Permite ventanas emergentes para imprimir.');
+        return;
+      }
+
+      printWindow.document.write(html);
+      printWindow.document.close();
+    }
+
     function setRackRoomOccupied(room) {
       const status = dashboardData?.rackStatus;
       const rackRoom = status?.rooms?.find(item => item.room === room);
@@ -8899,6 +9708,8 @@ function pageHtml() {
           closeGroupSendConfirm();
         } else if (!reservationArrivalBackdrop.classList.contains('hidden')) {
           closeReservationArrival();
+        } else if (!preassignModalBackdrop.classList.contains('hidden')) {
+          closePreassignModal();
         } else if (!confirmDeleteBackdrop.classList.contains('hidden')) {
           closeDeleteConfirm();
         } else {
@@ -9149,6 +9960,60 @@ const server =
             false,
           error:
             error.message || "No se pudo guardar el bloqueo"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/room-preassignments"
+    ) {
+      try {
+        const body =
+          await readBody(req);
+
+        sendJson(res, 200, {
+          ok:
+            true,
+          assignment:
+            saveRoomPreassignment(body)
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok:
+            false,
+          error:
+            error.message || "No se pudo guardar la preasignacion"
+        });
+      }
+
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/room-preassignments/delete"
+    ) {
+      try {
+        const body =
+          await readBody(req);
+
+        deleteRoomPreassignment(body.id);
+
+        sendJson(res, 200, {
+          ok:
+            true
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok:
+            false,
+          error:
+            error.message || "No se pudo borrar la preasignacion"
         });
       }
 
