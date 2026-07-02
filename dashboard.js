@@ -7897,11 +7897,16 @@ function pageHtml() {
       if (!rooms.length) {
         preassignRoomGrid.innerHTML = '<div class="muted">Importa el CSV del rack para preasignar sobre habitaciones reales.</div>';
       } else {
-        preassignRoomGrid.innerHTML = rooms
+        const assignableRooms = rooms
           .slice()
+          .filter(room => getRackRoomCategory(room.status) !== 'occupied')
           .sort((left, right) => String(left.room || '').localeCompare(String(right.room || '')))
-          .map(room => renderPreassignRoomButton(room, isoDate))
-          .join('');
+
+        preassignRoomGrid.innerHTML = assignableRooms.length
+          ? assignableRooms
+            .map(room => renderPreassignRoomButton(room, isoDate))
+            .join('')
+          : '<div class="muted">No hay habitaciones disponibles o bloqueadas para esta fecha.</div>';
       }
 
       renderPreassignPendingList(pending, isoDate);
