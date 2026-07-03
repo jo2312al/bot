@@ -7972,6 +7972,10 @@ function pageHtml() {
         '<strong>Reservas y continuaciones del dia</strong>' +
         '<div class="muted">Elige una, o llena el formulario como huesped sin reservacion.</div>' +
         '<input id="preassignCandidateSearch" placeholder="Buscar nombre, telefono, folio, tipo o nota" oninput="filterPreassignCandidates()" style="margin-top:10px">' +
+        '<div class="preassign-form-row" style="margin-top:8px">' +
+          '<label>Min personas<input id="preassignPeopleMin" type="number" min="0" placeholder="Ej. 2" oninput="filterPreassignCandidates()"></label>' +
+          '<label>Max personas<input id="preassignPeopleMax" type="number" min="0" placeholder="Ej. 4" oninput="filterPreassignCandidates()"></label>' +
+        '</div>' +
         '<div class="preassign-candidate-list" style="margin-top:10px">' + candidateList + '</div>' +
       '</div>' +
       '<div>' +
@@ -8025,11 +8029,12 @@ function pageHtml() {
         item.hora,
         item.note
       ].join(' ');
+      const people = getPreassignPeople(item);
 
-      return '<div class="preassign-candidate ' + (selected ? 'selected ' : '') + (alreadyAssigned ? 'assigned' : '') + '" data-search="' + escapeHtml(normalizeSearchText(searchText)) + '" onclick="selectPreassignCandidate(\\'' + escapeJs(item.sourceKey || '') + '\\', this)">' +
+      return '<div class="preassign-candidate ' + (selected ? 'selected ' : '') + (alreadyAssigned ? 'assigned' : '') + '" data-search="' + escapeHtml(normalizeSearchText(searchText)) + '" data-people="' + escapeHtml(people) + '" onclick="selectPreassignCandidate(\\'' + escapeJs(item.sourceKey || '') + '\\', this)">' +
         '<strong>' + escapeHtml(item.nombre || 'Sin nombre') + '</strong>' +
         '<div class="muted">' + escapeHtml(item.preassignKind || '-') + ' / ' + escapeHtml(item.tipo || '-') + ' / ' + escapeHtml(item.habitaciones || 1) + ' hab(s)</div>' +
-        '<div class="muted">' + getPreassignPeople(item) + ' persona(s) sugeridas por cuarto / ' + escapeHtml(item.telefono || '') + '</div>' +
+        '<div class="muted">' + people + ' persona(s) sugeridas por cuarto / ' + escapeHtml(item.telefono || '') + '</div>' +
         (alreadyAssigned ? '<div class="muted">Ya tiene una preasignacion; puedes usarla otra vez si son varias habitaciones.</div>' : '') +
       '</div>';
     }
@@ -8044,10 +8049,16 @@ function pageHtml() {
     function filterPreassignCandidates() {
       const input = document.getElementById('preassignCandidateSearch');
       const query = normalizeSearchText(input?.value || '');
+      const minPeople = Number(document.getElementById('preassignPeopleMin')?.value || 0);
+      const maxPeople = Number(document.getElementById('preassignPeopleMax')?.value || 0);
       let visible = 0;
 
       document.querySelectorAll('.preassign-candidate').forEach(candidate => {
-        const matches = !query || String(candidate.dataset.search || '').includes(query);
+        const people = Number(candidate.dataset.people || 0);
+        const matchesText = !query || String(candidate.dataset.search || '').includes(query);
+        const matchesMin = !minPeople || people >= minPeople;
+        const matchesMax = !maxPeople || people <= maxPeople;
+        const matches = matchesText && matchesMin && matchesMax;
         candidate.style.display = matches ? '' : 'none';
         if (matches) {
           visible++;
