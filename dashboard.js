@@ -7849,7 +7849,8 @@ function pageHtml() {
           renderPreassignKpi('Preasignadas', '-') +
           renderPreassignKpi('Llegan / continuan', '-') +
           renderPreassignKpi('Pendientes', '-') +
-          renderPreassignKpi('Habitaciones rack', '-');
+          renderPreassignKpi('Habitaciones rack', '-') +
+          renderPreassignKpi('Quedan por tipo', '-');
         preassignRoomGrid.innerHTML =
           '<div class="muted">El tablero se carga cuando seleccionas una fecha.</div>';
         preassignPendingList.innerHTML =
@@ -7869,7 +7870,8 @@ function pageHtml() {
         renderPreassignKpi('Preasignadas', assignments.length) +
         renderPreassignKpi('Llegan / continuan', candidates.length) +
         renderPreassignKpi('Pendientes', pending.length) +
-        renderPreassignKpi('Habitaciones rack', rooms.length || '-');
+        renderPreassignKpi('Habitaciones rack', rooms.length || '-') +
+        renderPreassignKpi('Quedan por tipo', renderPreassignRemainingByType(rooms, assignments));
 
       if (!rooms.length) {
         preassignRoomGrid.innerHTML = '<div class="muted">Importa el CSV del rack para preasignar sobre habitaciones reales.</div>';
@@ -7890,6 +7892,49 @@ function pageHtml() {
 
     function renderPreassignKpi(label, value) {
       return '<div class="preassign-kpi"><span class="muted">' + escapeHtml(label) + '</span><strong>' + escapeHtml(value) + '</strong></div>';
+    }
+
+    function getPreassignTypeLabel(value) {
+      const type = normalizeClientRoomType(value);
+
+      if (type === 'Suite King') return 'Suite King';
+      if (type === 'Doble Suite') return 'Doble Suite';
+      if (type === 'King') return 'King';
+      if (type === 'Doble') return 'Doble';
+
+      return type || 'Sin tipo';
+    }
+
+    function renderPreassignRemainingByType(rooms, assignments) {
+      const counts = {};
+
+      (rooms || []).forEach(room => {
+        const type = getPreassignTypeLabel(room.type);
+        if (!counts[type]) {
+          counts[type] = {
+            total: 0,
+            assigned: 0
+          };
+        }
+        counts[type].total++;
+      });
+
+      (assignments || []).forEach(assignment => {
+        const room = (rooms || []).find(item => item.room === assignment.room);
+        const type = getPreassignTypeLabel(room?.type || assignment.roomType);
+        if (!counts[type]) {
+          counts[type] = {
+            total: 0,
+            assigned: 0
+          };
+        }
+        counts[type].assigned++;
+      });
+
+      return Object.keys(counts)
+        .sort((left, right) => left.localeCompare(right))
+        .map(type => type + ' ' + Math.max(counts[type].total - counts[type].assigned, 0))
+        .join(' / ') || '-';
     }
 
     function renderPreassignRoomButton(room, isoDate) {
