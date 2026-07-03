@@ -8021,6 +8021,10 @@ function pageHtml() {
           '<label>Min personas<input id="preassignPeopleMin" type="number" min="0" placeholder="Ej. 2" oninput="filterPreassignCandidates()"></label>' +
           '<label>Max personas<input id="preassignPeopleMax" type="number" min="0" placeholder="Ej. 4" oninput="filterPreassignCandidates()"></label>' +
         '</div>' +
+        '<div class="summary-chips" style="margin-top:8px">' +
+          '<label class="chip"><input type="radio" name="preassignAssignedFilter" value="all" checked onchange="filterPreassignCandidates()"> Todas</label>' +
+          '<label class="chip"><input type="radio" name="preassignAssignedFilter" value="unassigned" onchange="filterPreassignCandidates()"> No asignadas</label>' +
+        '</div>' +
         '<div class="preassign-candidate-list" style="margin-top:10px">' + candidateList + '</div>' +
       '</div>' +
       '<div>' +
@@ -8076,7 +8080,7 @@ function pageHtml() {
       ].join(' ');
       const people = getPreassignPeople(item);
 
-      return '<div class="preassign-candidate ' + (selected ? 'selected ' : '') + (alreadyAssigned ? 'assigned' : '') + '" data-search="' + escapeHtml(normalizeSearchText(searchText)) + '" data-people="' + escapeHtml(people) + '" onclick="selectPreassignCandidate(\\'' + escapeJs(item.sourceKey || '') + '\\', this)">' +
+      return '<div class="preassign-candidate ' + (selected ? 'selected ' : '') + (alreadyAssigned ? 'assigned' : '') + '" data-search="' + escapeHtml(normalizeSearchText(searchText)) + '" data-people="' + escapeHtml(people) + '" data-assigned="' + (alreadyAssigned ? '1' : '0') + '" onclick="selectPreassignCandidate(\\'' + escapeJs(item.sourceKey || '') + '\\', this)">' +
         '<strong>' + escapeHtml(item.nombre || 'Sin nombre') + '</strong>' +
         '<div class="muted">' + escapeHtml(item.preassignKind || '-') + ' / ' + escapeHtml(item.tipo || '-') + ' / ' + escapeHtml(item.habitaciones || 1) + ' hab(s)</div>' +
         '<div class="muted">' + people + ' persona(s) sugeridas por cuarto / ' + escapeHtml(item.telefono || '') + '</div>' +
@@ -8096,6 +8100,7 @@ function pageHtml() {
       const query = normalizeSearchText(input?.value || '');
       const minPeople = Number(document.getElementById('preassignPeopleMin')?.value || 0);
       const maxPeople = Number(document.getElementById('preassignPeopleMax')?.value || 0);
+      const assignedFilter = document.querySelector('input[name="preassignAssignedFilter"]:checked')?.value || 'all';
       let visible = 0;
 
       document.querySelectorAll('.preassign-candidate').forEach(candidate => {
@@ -8103,7 +8108,8 @@ function pageHtml() {
         const matchesText = !query || String(candidate.dataset.search || '').includes(query);
         const matchesMin = !minPeople || people >= minPeople;
         const matchesMax = !maxPeople || people <= maxPeople;
-        const matches = matchesText && matchesMin && matchesMax;
+        const matchesAssigned = assignedFilter !== 'unassigned' || candidate.dataset.assigned !== '1';
+        const matches = matchesText && matchesMin && matchesMax && matchesAssigned;
         candidate.style.display = matches ? '' : 'none';
         if (matches) {
           visible++;
