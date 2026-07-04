@@ -2518,8 +2518,52 @@ function getMysqlReports(range) {
           'monthStart', ${mysql.quote(monthStart)},
           'roomNumber', room.room_number,
           'roomType', rt.name,
-          'occupiedNights', COUNT(DISTINCT rn.id),
-          'lastOccupiedDate', IFNULL(DATE_FORMAT(MAX(rn.stay_date), '%d/%m/%Y'), ''),
+          'occupiedNights',
+            COUNT(DISTINCT rn.id)
+            +
+            (
+              SELECT COUNT(DISTINCT rack.report_date)
+              FROM rack_snapshots rack
+              JOIN rack_snapshot_rooms rack_room ON rack_room.rack_snapshot_id = rack.id
+              WHERE rack_room.room_id = room.id
+                AND rack.report_date BETWEEN ${mysql.quote(range.startIso)} AND ${mysql.quote(range.endIso)}
+                AND rack_room.room_status IN ('OC', 'OS', 'OL', 'OR', 'OSE', 'ND')
+                AND NOT EXISTS (
+                  SELECT 1
+                  FROM reservation_room_nights rn2
+                  JOIN reservations r2 ON r2.id = rn2.reservation_id
+                  WHERE rn2.room_id = room.id
+                    AND rn2.stay_date = rack.report_date
+                    AND rn2.occupancy_status = 'ocupada'
+                    AND r2.status != 'cancelada'
+                )
+            ),
+          'lastOccupiedDate',
+            CASE
+              WHEN MAX(rn.stay_date) IS NULL
+                AND (
+                  SELECT MAX(rack.report_date)
+                  FROM rack_snapshots rack
+                  JOIN rack_snapshot_rooms rack_room ON rack_room.rack_snapshot_id = rack.id
+                  WHERE rack_room.room_id = room.id
+                    AND rack.report_date BETWEEN ${mysql.quote(range.startIso)} AND ${mysql.quote(range.endIso)}
+                    AND rack_room.room_status IN ('OC', 'OS', 'OL', 'OR', 'OSE', 'ND')
+                ) IS NULL THEN ''
+              ELSE DATE_FORMAT(
+                GREATEST(
+                  COALESCE(MAX(rn.stay_date), '1000-01-01'),
+                  COALESCE((
+                    SELECT MAX(rack.report_date)
+                    FROM rack_snapshots rack
+                    JOIN rack_snapshot_rooms rack_room ON rack_room.rack_snapshot_id = rack.id
+                    WHERE rack_room.room_id = room.id
+                      AND rack.report_date BETWEEN ${mysql.quote(range.startIso)} AND ${mysql.quote(range.endIso)}
+                      AND rack_room.room_status IN ('OC', 'OS', 'OL', 'OR', 'OSE', 'ND')
+                  ), '1000-01-01')
+                ),
+                '%d/%m/%Y'
+              )
+            END,
           'lastDeepCleanDate', IFNULL(DATE_FORMAT(MAX(CASE WHEN ret.code = 'DEEP_CLEAN' THEN re.event_date END), '%d/%m/%Y'), ''),
           'lastAcMaintenanceDate', IFNULL(DATE_FORMAT(MAX(CASE WHEN ret.code = 'AC_MAINTENANCE' THEN re.event_date END), '%d/%m/%Y'), ''),
           'lastMaintenanceDate', IFNULL(DATE_FORMAT(MAX(CASE WHEN ret.code = 'MAINTENANCE' THEN re.event_date END), '%d/%m/%Y'), '')
@@ -2532,21 +2576,87 @@ function getMysqlReports(range) {
         LEFT JOIN room_events re ON re.room_id = room.id
         LEFT JOIN room_event_types ret ON ret.id = re.event_type_id
         GROUP BY room.id, room.room_number, rt.name
-        ORDER BY COUNT(DISTINCT rn.id) DESC, room.room_number;
+        ORDER BY (
+          COUNT(DISTINCT rn.id)
+          +
+          (
+            SELECT COUNT(DISTINCT rack.report_date)
+            FROM rack_snapshots rack
+            JOIN rack_snapshot_rooms rack_room ON rack_room.rack_snapshot_id = rack.id
+            WHERE rack_room.room_id = room.id
+              AND rack.report_date BETWEEN ${mysql.quote(range.startIso)} AND ${mysql.quote(range.endIso)}
+              AND rack_room.room_status IN ('OC', 'OS', 'OL', 'OR', 'OSE', 'ND')
+              AND NOT EXISTS (
+                SELECT 1
+                FROM reservation_room_nights rn2
+                JOIN reservations r2 ON r2.id = rn2.reservation_id
+                WHERE rn2.room_id = room.id
+                  AND rn2.stay_date = rack.report_date
+                  AND rn2.occupancy_status = 'ocupada'
+                  AND r2.status != 'cancelada'
+              )
+          )
+        ) DESC, room.room_number;
       `),
     serviceDue:
       mysql.queryJson(`
         SELECT JSON_OBJECT(
-          'roomNumber', room_number,
-          'roomType', room_type,
-          'lastDeepCleanDate', IFNULL(DATE_FORMAT(last_deep_clean_date, '%d/%m/%Y'), ''),
-          'daysSinceDeepClean', IFNULL(days_since_deep_clean, 9999),
-          'lastAcMaintenanceDate', IFNULL(DATE_FORMAT(last_ac_maintenance_date, '%d/%m/%Y'), ''),
-          'daysSinceAcMaintenance', IFNULL(days_since_ac_maintenance, 9999),
-          'occupiedNightsLast30Days', occupied_nights_last_30_days
+          'roomNumber', room.room_number,
+          'roomType', rt.name,
+          'lastDeepCleanDate', IFNULL(DATE_FORMAT(MAX(CASE WHEN ret.code = 'DEEP_CLEAN' THEN re.event_date END), '%d/%m/%Y'), ''),
+          'daysSinceDeepClean', IFNULL(DATEDIFF(CURDATE(), MAX(CASE WHEN ret.code = 'DEEP_CLEAN' THEN re.event_date END)), 9999),
+          'lastAcMaintenanceDate', IFNULL(DATE_FORMAT(MAX(CASE WHEN ret.code = 'AC_MAINTENANCE' THEN re.event_date END), '%d/%m/%Y'), ''),
+          'daysSinceAcMaintenance', IFNULL(DATEDIFF(CURDATE(), MAX(CASE WHEN ret.code = 'AC_MAINTENANCE' THEN re.event_date END)), 9999),
+          'occupiedNightsLast30Days',
+            COUNT(DISTINCT CASE WHEN rn.stay_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN rn.id END)
+            +
+            (
+              SELECT COUNT(DISTINCT rack.report_date)
+              FROM rack_snapshots rack
+              JOIN rack_snapshot_rooms rack_room ON rack_room.rack_snapshot_id = rack.id
+              WHERE rack_room.room_id = room.id
+                AND rack.report_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+                AND rack_room.room_status IN ('OC', 'OS', 'OL', 'OR', 'OSE', 'ND')
+                AND NOT EXISTS (
+                  SELECT 1
+                  FROM reservation_room_nights rn2
+                  JOIN reservations r2 ON r2.id = rn2.reservation_id
+                  WHERE rn2.room_id = room.id
+                    AND rn2.stay_date = rack.report_date
+                    AND rn2.occupancy_status = 'ocupada'
+                    AND r2.status != 'cancelada'
+                )
+            )
         )
-        FROM report_room_service_due
-        ORDER BY occupied_nights_last_30_days DESC, days_since_deep_clean DESC, room_number;
+        FROM rooms room
+        LEFT JOIN room_types rt ON rt.id = room.room_type_id
+        LEFT JOIN room_events re ON re.room_id = room.id
+        LEFT JOIN room_event_types ret ON ret.id = re.event_type_id
+        LEFT JOIN reservation_room_nights rn ON rn.room_id = room.id
+        GROUP BY room.id, room.room_number, rt.name
+        ORDER BY (
+          COUNT(DISTINCT CASE WHEN rn.stay_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN rn.id END)
+          +
+          (
+            SELECT COUNT(DISTINCT rack.report_date)
+            FROM rack_snapshots rack
+            JOIN rack_snapshot_rooms rack_room ON rack_room.rack_snapshot_id = rack.id
+            WHERE rack_room.room_id = room.id
+              AND rack.report_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+              AND rack_room.room_status IN ('OC', 'OS', 'OL', 'OR', 'OSE', 'ND')
+              AND NOT EXISTS (
+                SELECT 1
+                FROM reservation_room_nights rn2
+                JOIN reservations r2 ON r2.id = rn2.reservation_id
+                WHERE rn2.room_id = room.id
+                  AND rn2.stay_date = rack.report_date
+                  AND rn2.occupancy_status = 'ocupada'
+                  AND r2.status != 'cancelada'
+              )
+          )
+        ) DESC,
+        IFNULL(DATEDIFF(CURDATE(), MAX(CASE WHEN ret.code = 'DEEP_CLEAN' THEN re.event_date END)), 9999) DESC,
+        room.room_number;
       `),
     reservationsBySource:
       mysql.queryJson(`
@@ -2663,6 +2773,8 @@ function getFallbackReports(range) {
     new Map();
   const roomRotation =
     new Map();
+  const roomRotationDates =
+    new Set();
 
   reservations
     .filter(reservation =>
@@ -2728,9 +2840,15 @@ function getFallbackReports(range) {
                 ""
             };
 
-          row.occupiedNights += 1;
-          row.lastOccupiedDate =
-            displayDate;
+          const rotationKey =
+            `${reservation.roomNumber}:${displayDate}`;
+
+          if (!roomRotationDates.has(rotationKey)) {
+            row.occupiedNights += 1;
+            row.lastOccupiedDate =
+              displayDate;
+            roomRotationDates.add(rotationKey);
+          }
           roomRotation.set(
             reservation.roomNumber,
             row
@@ -2739,8 +2857,64 @@ function getFallbackReports(range) {
       });
     });
 
+  const latestRackStatus =
+    readLatestRackStatus();
   const rackRooms =
-    readLatestRackStatus()?.rooms || [];
+    latestRackStatus?.rooms || [];
+  const latestRackDisplayDate =
+    latestRackStatus?.reportDate || "";
+  const latestRackIsoDate =
+    displayDateToIso(latestRackDisplayDate);
+
+  if (
+    latestRackIsoDate
+    &&
+    latestRackIsoDate >= range.startIso
+    &&
+    latestRackIsoDate <= range.endIso
+  ) {
+    (latestRackStatus?.rooms || [])
+      .filter(room =>
+        ["OC", "OS", "OL", "OR", "OSE", "ND"].includes(room.status)
+      )
+      .forEach(room => {
+        const rotationKey =
+          `${room.room}:${latestRackDisplayDate}`;
+
+        if (roomRotationDates.has(rotationKey)) {
+          return;
+        }
+
+        const row =
+          roomRotation.get(room.room)
+          ||
+          {
+            roomNumber:
+              room.room,
+            roomType:
+              room.type || "",
+            occupiedNights:
+              0,
+            lastOccupiedDate:
+              "",
+            lastDeepCleanDate:
+              "",
+            lastAcMaintenanceDate:
+              "",
+            lastMaintenanceDate:
+              ""
+          };
+
+        row.occupiedNights += 1;
+        row.lastOccupiedDate =
+          latestRackDisplayDate;
+        roomRotationDates.add(rotationKey);
+        roomRotation.set(
+          room.room,
+          row
+        );
+      });
+  }
   const events =
     readEventBookings()
       .filter(event =>

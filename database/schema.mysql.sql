@@ -328,32 +328,85 @@ CREATE TABLE IF NOT EXISTS event_payment_vouchers (
 
 CREATE OR REPLACE VIEW report_daily_occupancy AS
 SELECT
-  d.stay_date,
+  occ.stay_date,
   COUNT(*) AS occupied_room_nights,
-  COUNT(DISTINCT d.room_id) AS occupied_rooms,
-  ROUND(COUNT(DISTINCT d.room_id) / NULLIF((SELECT COUNT(*) FROM rooms), 0) * 100, 2) AS occupancy_percent
-FROM reservation_room_nights d
-JOIN reservations r ON r.id = d.reservation_id
-WHERE r.status != 'cancelada'
-  AND d.occupancy_status = 'ocupada'
-GROUP BY d.stay_date;
+  COUNT(DISTINCT occ.room_id) AS occupied_rooms,
+  ROUND(COUNT(DISTINCT occ.room_id) / NULLIF((SELECT COUNT(*) FROM rooms), 0) * 100, 2) AS occupancy_percent
+FROM (
+  SELECT
+    d.stay_date,
+    d.room_id,
+    CONCAT('reservation:', d.id) AS source_key
+  FROM reservation_room_nights d
+  JOIN reservations r ON r.id = d.reservation_id
+  WHERE r.status != 'cancelada'
+    AND d.occupancy_status = 'ocupada'
+
+  UNION ALL
+
+  SELECT
+    rack.report_date AS stay_date,
+    rack_room.room_id,
+    CONCAT('rack:', rack.id, ':', rack_room.room_id) AS source_key
+  FROM rack_snapshots rack
+  JOIN rack_snapshot_rooms rack_room ON rack_room.rack_snapshot_id = rack.id
+  WHERE rack_room.room_status IN ('OC', 'OS', 'OL', 'OR', 'OSE', 'ND')
+    AND NOT EXISTS (
+      SELECT 1
+      FROM reservation_room_nights d2
+      JOIN reservations r2 ON r2.id = d2.reservation_id
+      WHERE d2.room_id = rack_room.room_id
+        AND d2.stay_date = rack.report_date
+        AND d2.occupancy_status = 'ocupada'
+        AND r2.status != 'cancelada'
+    )
+) occ
+GROUP BY occ.stay_date;
 
 CREATE OR REPLACE VIEW report_monthly_room_rotation AS
 SELECT
-  DATE_FORMAT(d.stay_date, '%Y-%m-01') AS month_start,
+  DATE_FORMAT(occ.stay_date, '%Y-%m-01') AS month_start,
   room.room_number,
   rt.name AS room_type,
-  COUNT(d.id) AS occupied_nights,
-  MAX(d.stay_date) AS last_occupied_date,
+  COUNT(DISTINCT occ.source_key) AS occupied_nights,
+  MAX(occ.stay_date) AS last_occupied_date,
   MAX(CASE WHEN ret.code = 'DEEP_CLEAN' THEN re.event_date END) AS last_deep_clean_date,
   MAX(CASE WHEN ret.code = 'AC_MAINTENANCE' THEN re.event_date END) AS last_ac_maintenance_date,
   MAX(CASE WHEN ret.code = 'MAINTENANCE' THEN re.event_date END) AS last_maintenance_date
 FROM rooms room
 LEFT JOIN room_types rt ON rt.id = room.room_type_id
-LEFT JOIN reservation_room_nights d ON d.room_id = room.id
+LEFT JOIN (
+  SELECT
+    d.stay_date,
+    d.room_id,
+    CONCAT('reservation:', d.id) AS source_key
+  FROM reservation_room_nights d
+  JOIN reservations r ON r.id = d.reservation_id
+  WHERE r.status != 'cancelada'
+    AND d.occupancy_status = 'ocupada'
+
+  UNION ALL
+
+  SELECT
+    rack.report_date AS stay_date,
+    rack_room.room_id,
+    CONCAT('rack:', rack.id, ':', rack_room.room_id) AS source_key
+  FROM rack_snapshots rack
+  JOIN rack_snapshot_rooms rack_room ON rack_room.rack_snapshot_id = rack.id
+  WHERE rack_room.room_status IN ('OC', 'OS', 'OL', 'OR', 'OSE', 'ND')
+    AND NOT EXISTS (
+      SELECT 1
+      FROM reservation_room_nights d2
+      JOIN reservations r2 ON r2.id = d2.reservation_id
+      WHERE d2.room_id = rack_room.room_id
+        AND d2.stay_date = rack.report_date
+        AND d2.occupancy_status = 'ocupada'
+        AND r2.status != 'cancelada'
+    )
+) occ ON occ.room_id = room.id
 LEFT JOIN room_events re ON re.room_id = room.id
 LEFT JOIN room_event_types ret ON ret.id = re.event_type_id
-GROUP BY DATE_FORMAT(d.stay_date, '%Y-%m-01'), room.id, room.room_number, rt.name;
+GROUP BY DATE_FORMAT(occ.stay_date, '%Y-%m-01'), room.id, room.room_number, rt.name;
 
 CREATE OR REPLACE VIEW report_room_service_due AS
 SELECT
@@ -363,12 +416,40 @@ SELECT
   DATEDIFF(CURDATE(), MAX(CASE WHEN ret.code = 'DEEP_CLEAN' THEN re.event_date END)) AS days_since_deep_clean,
   MAX(CASE WHEN ret.code = 'AC_MAINTENANCE' THEN re.event_date END) AS last_ac_maintenance_date,
   DATEDIFF(CURDATE(), MAX(CASE WHEN ret.code = 'AC_MAINTENANCE' THEN re.event_date END)) AS days_since_ac_maintenance,
-  COUNT(DISTINCT CASE WHEN rn.stay_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN rn.id END) AS occupied_nights_last_30_days
+  COUNT(DISTINCT CASE WHEN occ.stay_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN occ.source_key END) AS occupied_nights_last_30_days
 FROM rooms room
 LEFT JOIN room_types rt ON rt.id = room.room_type_id
 LEFT JOIN room_events re ON re.room_id = room.id
 LEFT JOIN room_event_types ret ON ret.id = re.event_type_id
-LEFT JOIN reservation_room_nights rn ON rn.room_id = room.id
+LEFT JOIN (
+  SELECT
+    d.stay_date,
+    d.room_id,
+    CONCAT('reservation:', d.id) AS source_key
+  FROM reservation_room_nights d
+  JOIN reservations r ON r.id = d.reservation_id
+  WHERE r.status != 'cancelada'
+    AND d.occupancy_status = 'ocupada'
+
+  UNION ALL
+
+  SELECT
+    rack.report_date AS stay_date,
+    rack_room.room_id,
+    CONCAT('rack:', rack.id, ':', rack_room.room_id) AS source_key
+  FROM rack_snapshots rack
+  JOIN rack_snapshot_rooms rack_room ON rack_room.rack_snapshot_id = rack.id
+  WHERE rack_room.room_status IN ('OC', 'OS', 'OL', 'OR', 'OSE', 'ND')
+    AND NOT EXISTS (
+      SELECT 1
+      FROM reservation_room_nights d2
+      JOIN reservations r2 ON r2.id = d2.reservation_id
+      WHERE d2.room_id = rack_room.room_id
+        AND d2.stay_date = rack.report_date
+        AND d2.occupancy_status = 'ocupada'
+        AND r2.status != 'cancelada'
+    )
+) occ ON occ.room_id = room.id
 GROUP BY room.id, room.room_number, rt.name;
 
 CREATE OR REPLACE VIEW report_reservations_by_source_month AS
