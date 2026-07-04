@@ -8037,7 +8037,7 @@ function pageHtml() {
           (
             !sameDayRack
             ||
-            getRackRoomCategory(room.status) !== 'blocked'
+            getRackRoomCategory(room.status) === 'available'
           )
         )
         .sort((left, right) => String(left.room || '').localeCompare(String(right.room || '')))
