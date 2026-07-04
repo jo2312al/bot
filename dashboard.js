@@ -5030,6 +5030,14 @@ function pageHtml() {
           <strong>Pendientes del dia</strong>
           <div class="muted">Reservas sin habitacion preasignada y continuaciones detectadas.</div>
           <div id="preassignPendingList" class="preassign-side-list"></div>
+          <hr>
+          <strong>Asignadas del dia</strong>
+          <div class="muted">Solo muestra preasignaciones guardadas para la fecha seleccionada.</div>
+          <div id="preassignAssignedList" class="preassign-side-list"></div>
+          <hr>
+          <strong>Autoasignadas del dia</strong>
+          <div class="muted">Habitaciones guardadas por Autoasignar en esa fecha.</div>
+          <div id="preassignAutoAssignedList" class="preassign-side-list"></div>
         </aside>
       </div>
     </section>
@@ -8098,6 +8106,10 @@ function pageHtml() {
           '<div class="muted">El tablero se carga cuando seleccionas una fecha.</div>';
         preassignPendingList.innerHTML =
           '<div class="muted">Sin fecha seleccionada.</div>';
+        preassignAssignedList.innerHTML =
+          '<div class="muted">Sin fecha seleccionada.</div>';
+        preassignAutoAssignedList.innerHTML =
+          '<div class="muted">Sin fecha seleccionada.</div>';
         return;
       }
 
@@ -8131,6 +8143,7 @@ function pageHtml() {
       }
 
       renderPreassignPendingList(pending, isoDate);
+      renderPreassignAssignedLists(assignments, isoDate);
     }
 
     function renderPreassignKpi(label, value) {
@@ -8392,7 +8405,7 @@ function pageHtml() {
         return;
       }
 
-      if (!confirm('Se guardaran ' + result.jobs.length + ' preasignacion(es) nuevas. No se movera lo ya asignado.')) {
+      if (!confirm('Se guardaran ' + result.jobs.length + ' preasignacion(es) nuevas para ' + (isoToDisplay(isoDate) || isoDate) + '. No se movera lo ya asignado.')) {
         return;
       }
 
@@ -8434,6 +8447,32 @@ function pageHtml() {
           '<div class="muted">' + escapeHtml(item.telefono || '') + '</div>' +
         '</div>'
       ).join('');
+    }
+
+    function renderPreassignAssignmentMiniRow(assignment) {
+      return '<div class="preassign-mini-row">' +
+        '<strong>Hab ' + escapeHtml(assignment.room || '-') + ' - ' + escapeHtml(assignment.guestName || 'Sin nombre') + '</strong>' +
+        '<div class="muted">' + escapeHtml(assignment.roomType || '-') + ' / ' + escapeHtml(assignment.people || 1) + ' persona(s) / ' + escapeHtml(assignment.origin || '-') + '</div>' +
+        '<div class="muted">' + escapeHtml(assignment.note || '') + '</div>' +
+      '</div>';
+    }
+
+    function renderPreassignAssignedLists(assignments, isoDate) {
+      const rows = (assignments || [])
+        .filter(assignment => assignment.date === isoDate)
+        .slice()
+        .sort((left, right) => String(left.room || '').localeCompare(String(right.room || '')));
+      const autoRows = rows.filter(assignment =>
+        normalizeSearchText(assignment.note).includes('autoasignado')
+      );
+
+      preassignAssignedList.innerHTML = rows.length
+        ? rows.map(renderPreassignAssignmentMiniRow).join('')
+        : '<div class="muted">Sin habitaciones asignadas para esta fecha.</div>';
+
+      preassignAutoAssignedList.innerHTML = autoRows.length
+        ? autoRows.map(renderPreassignAssignmentMiniRow).join('')
+        : '<div class="muted">Sin autoasignaciones para esta fecha.</div>';
     }
 
     function openPreassignModal(roomNumber) {
