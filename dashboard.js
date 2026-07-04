@@ -377,18 +377,18 @@ function getRoomCapacity(type) {
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
 
-  if (clean.includes("king")) {
-    return 2;
-  }
-
   if (
-    clean.includes("doble")
-    ||
     clean.includes("suite")
+    ||
+    clean.includes("doble")
     ||
     clean.includes("matrimonial")
   ) {
     return 4;
+  }
+
+  if (clean.includes("king")) {
+    return 2;
   }
 
   return 4;
@@ -4844,6 +4844,7 @@ function pageHtml() {
           <input id="preassignDate" type="date" onchange="renderPreassignmentBoard()">
         </label>
         <div id="preassignStatus" class="muted"></div>
+        <button onclick="autoPreassignRooms()">Autoasignar</button>
         <button class="primary" onclick="printPreassignment()">Imprimir / PDF</button>
       </div>
       <div id="preassignKpis" class="preassign-kpis"></div>
@@ -7821,6 +7822,16 @@ function pageHtml() {
       return Math.max(Math.ceil(total / rooms) || 1, 1);
     }
 
+    function countPreassignmentsForSource(assignments, sourceKey) {
+      if (!sourceKey) {
+        return 0;
+      }
+
+      return (assignments || []).filter(assignment =>
+        assignment.sourceKey === sourceKey
+      ).length;
+    }
+
     function getPreassignCapacity(room) {
       return getClientRoomCapacity(room?.type || '');
     }
@@ -7831,8 +7842,8 @@ function pageHtml() {
         .normalize('NFD')
         .replace(/[\\u0300-\\u036f]/g, '');
 
-      if (clean.includes('king')) return 2;
       if (clean.includes('doble') || clean.includes('suite') || clean.includes('matrimonial')) return 4;
+      if (clean.includes('king')) return 2;
       return 4;
     }
 
@@ -7954,6 +7965,179 @@ function pageHtml() {
         '<span>' + escapeHtml(room.status || '-') + ' / cap ' + getPreassignCapacity(room) + '</span>' +
         '<span class="guest">' + escapeHtml(label) + '</span>' +
       '</button>';
+    }
+
+    function preassignRackMatchesDate(isoDate) {
+      const rackDate = dashboardData?.rackStatus?.reportDate || '';
+      return Boolean(rackDate && isoToDisplay(isoDate) === rackDate);
+    }
+
+    function getPreassignRoomGroup(type) {
+      const clean = normalizeSearchText(type);
+
+      if (clean.includes('suite')) {
+        return 'suite';
+      }
+
+      if (clean.includes('king')) {
+        return 'king';
+      }
+
+      return 'double';
+    }
+
+    function getPreassignPreferredGroup(reservation) {
+      const people = getPreassignPeople(reservation);
+      const requestedGroup = getPreassignRoomGroup(reservation?.tipo || reservation?.habitacion || '');
+
+      if (requestedGroup === 'suite' || people >= 4) {
+        return 'suite';
+      }
+
+      if (people <= 2) {
+        return 'king';
+      }
+
+      return 'double';
+    }
+
+    function takePreassignRoom(pools, preferredGroup) {
+      const fallbackByGroup = {
+        suite: ['suite', 'double', 'king'],
+        king: ['king', 'double', 'suite'],
+        double: ['double', 'suite', 'king']
+      };
+
+      for (const group of fallbackByGroup[preferredGroup] || ['double', 'suite', 'king']) {
+        if (pools[group]?.length) {
+          return pools[group].shift();
+        }
+      }
+
+      return null;
+    }
+
+    function buildAutoPreassignJobs(isoDate) {
+      const rooms = dashboardData?.rackStatus?.rooms || [];
+      const assignments = getPreassignAssignmentsForDate(isoDate);
+      const assignedRooms = new Set(assignments.map(assignment => assignment.room));
+      const sameDayRack = preassignRackMatchesDate(isoDate);
+      const candidates = getPreassignCandidates(isoDate);
+      const jobs = [];
+      const pools = {
+        king: [],
+        suite: [],
+        double: []
+      };
+
+      rooms
+        .filter(room =>
+          !assignedRooms.has(room.room)
+          &&
+          (
+            !sameDayRack
+            ||
+            getRackRoomCategory(room.status) !== 'blocked'
+          )
+        )
+        .sort((left, right) => String(left.room || '').localeCompare(String(right.room || '')))
+        .forEach(room => {
+          pools[getPreassignRoomGroup(room.type)].push(room);
+        });
+
+      candidates
+        .map(candidate => ({
+          candidate,
+          preferredGroup: getPreassignPreferredGroup(candidate),
+          neededRooms: Math.max(Number(candidate.habitaciones || 1) - countPreassignmentsForSource(assignments, candidate.sourceKey), 0)
+        }))
+        .filter(item => item.neededRooms > 0)
+        .sort((left, right) => {
+          const priority = {
+            suite: 0,
+            king: 1,
+            double: 2
+          };
+          return priority[left.preferredGroup] - priority[right.preferredGroup];
+        })
+        .forEach(item => {
+          for (let index = 0; index < item.neededRooms; index++) {
+            const room = takePreassignRoom(pools, item.preferredGroup);
+
+            if (!room) {
+              return;
+            }
+
+            const people = getPreassignPeople(item.candidate);
+            jobs.push({
+              date: isoDate,
+              room: room.room,
+              roomType: room.type,
+              sourceKey: item.candidate.sourceKey || '',
+              guestName: item.candidate.nombre || 'Sin nombre',
+              adults: Math.ceil(Number(item.candidate.adultos || 0) / Math.max(Number(item.candidate.habitaciones || 1), 1)),
+              children: Math.ceil(Number(item.candidate.ninos || 0) / Math.max(Number(item.candidate.habitaciones || 1), 1)),
+              people,
+              origin: item.candidate.preassignKind === 'Continua' ? 'Ya hospedado' : 'Reserva',
+              status: 'preasignado',
+              note: 'Autoasignado: regla ' + item.preferredGroup
+            });
+          }
+        });
+
+      return {
+        jobs,
+        sameDayRack
+      };
+    }
+
+    async function autoPreassignRooms() {
+      const isoDate = preassignDate.value;
+
+      if (!isoDate) {
+        alert('Selecciona una fecha primero.');
+        return;
+      }
+
+      if (!dashboardData?.rackStatus?.rooms?.length) {
+        alert('Importa el rack antes de autoasignar.');
+        return;
+      }
+
+      const result = buildAutoPreassignJobs(isoDate);
+
+      if (!result.jobs.length) {
+        alert('No hay reservas pendientes o no quedan habitaciones para autoasignar.');
+        return;
+      }
+
+      if (!confirm('Se guardaran ' + result.jobs.length + ' preasignacion(es) nuevas. No se movera lo ya asignado.')) {
+        return;
+      }
+
+      let saved = 0;
+      let failed = 0;
+
+      for (const job of result.jobs) {
+        const response = await fetch('/api/room-preassignments', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(job)
+        });
+        const data = await response.json();
+
+        if (data.ok) {
+          saved++;
+        } else {
+          failed++;
+        }
+      }
+
+      await loadDashboard();
+      showView('preassign');
+      alert('Autoasignado: ' + saved + ' guardada(s)' + (failed ? ' / ' + failed + ' fallida(s)' : '') + (result.sameDayRack ? '. Rack del dia tomado en cuenta.' : '. Rack usado como inventario de tipos.'));
     }
 
     function renderPreassignPendingList(pending, isoDate) {
