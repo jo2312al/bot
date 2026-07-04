@@ -5916,6 +5916,7 @@ function pageHtml() {
       const todayIso = dashboardData.today;
       const todayDisplay = isoToDisplay(todayIso);
       const arrivals = dashboardData.todayArrivals || [];
+      const departures = getDeparturesForIsoDate(todayIso);
       const todayEvents = eventBookings.filter(event => event.eventDate === todayIso);
       const activeBlocks = roomBlocks.filter(block =>
         block.status === 'activo' &&
@@ -5934,11 +5935,13 @@ function pageHtml() {
         '<div class="report-kpis">' +
           renderReportKpi('Fecha', todayDisplay) +
           renderReportKpi('Llegadas', arrivals.length) +
+          renderReportKpi('Salidas', departures.length) +
           renderReportKpi('Ocupacion calendario', (dashboardData.todayReservations?.occupied || 0) + '/' + (dashboardData.totalRooms || 69)) +
           renderReportKpi('Eventos hoy', todayEvents.length) +
         '</div>' +
         '<div class="today-grid">' +
           renderTodayCard('Llegadas de hoy', arrivals.length ? arrivals.slice(0, 8).map(renderArrivalMiniItem).join('') : '<div class="muted">Sin llegadas registradas para hoy.</div>') +
+          renderTodayCard('Salidas de hoy', departures.length ? departures.slice(0, 10).map(renderDepartureMiniItem).join('') : '<div class="muted">Sin salidas calculadas para hoy.</div>') +
           renderTodayCard('Eventos de hoy', todayEvents.length ? todayEvents.map(renderEventMiniItem).join('') : '<div class="muted">Sin eventos hoy.</div>') +
           renderTodayCard('Pagos pendientes', paymentAlerts.length ? paymentAlerts.map(renderPaymentMiniItem).join('') : '<div class="muted">Sin saldos pendientes importantes.</div>') +
           renderTodayCard('Bloqueos activos', activeBlocks.length ? activeBlocks.map(renderBlockMiniItem).join('') : '<div class="muted">Sin habitaciones bloqueadas hoy.</div>') +
@@ -5954,6 +5957,45 @@ function pageHtml() {
         '<strong>' + escapeHtml(reservation.nombre || reservation.name || 'Reserva') + '</strong>' +
         '<div class="muted">' + escapeHtml(reservation.habitaciones || 1) + ' hab · ' + escapeHtml(reservation.tipo || '-') + ' · ' + escapeHtml(reservation.hora || '-') + '</div>' +
         '<div>' + escapeHtml(reservation.telefono || '') + '</div>' +
+      '</div>';
+    }
+
+    function getReservationCheckoutIso(reservation) {
+      const dates = Array.isArray(reservation?.dates)
+        ? reservation.dates
+        : [reservation?.fecha].filter(Boolean);
+      const lastDisplay = dates[dates.length - 1] || '';
+      const lastIso = displayToIsoClient(lastDisplay) || displayToIsoClient(reservation?.fecha || '');
+
+      if (!lastIso) {
+        return '';
+      }
+
+      const checkout = isoToDate(lastIso);
+      checkout.setDate(checkout.getDate() + 1);
+      return dateToIso(checkout);
+    }
+
+    function getDeparturesForIsoDate(isoDate) {
+      return (dashboardData?.groupReservations || [])
+        .filter(reservation =>
+          reservation.status !== 'cancelada'
+          &&
+          getReservationCheckoutIso(reservation) === isoDate
+        )
+        .sort((left, right) =>
+          String(left.roomNumber || '').localeCompare(String(right.roomNumber || ''))
+          ||
+          String(left.nombre || '').localeCompare(String(right.nombre || ''))
+        );
+    }
+
+    function renderDepartureMiniItem(reservation) {
+      const checkoutIso = getReservationCheckoutIso(reservation);
+      return '<div class="mini-item">' +
+        '<strong>' + escapeHtml(reservation.nombre || 'Sin nombre') + '</strong>' +
+        '<div class="muted">Salida ' + escapeHtml(isoToDisplay(checkoutIso) || '-') + ' Â· Hab ' + escapeHtml(reservation.roomNumber || '-') + ' Â· ' + escapeHtml(reservation.tipo || '-') + '</div>' +
+        '<div>' + escapeHtml(reservation.telefono || '') + (reservation.note ? ' Â· ' + escapeHtml(reservation.note) : '') + '</div>' +
       '</div>';
     }
 
@@ -6144,7 +6186,7 @@ function pageHtml() {
           openSearchDetailModal(
             'Historial de huesped',
             row?.guestName || 'Huesped',
-            renderGuestHistoryDetail(row || {})
+            renderGuestHistoryDetail(row || {}, data.history || [])
           );
         })
         .catch(error =>
@@ -6208,18 +6250,34 @@ function pageHtml() {
       '<div class="event-detail-box"><span>Nota</span><div>' + escapeHtml(reservation.note || reservation.nota || 'Sin nota') + '</div></div>';
     }
 
-    function renderGuestHistoryDetail(row) {
+    function renderGuestHistoryDetail(row, historyRows) {
+      const history = Array.isArray(historyRows) ? historyRows : [];
+      const last = history[0] || row || {};
+      const rooms = Array.from(new Set(history.map(item => item.assignedRoom).filter(Boolean))).slice(0, 5);
+      const notes = history.map(item => item.note).filter(Boolean).slice(0, 3);
+      const recentRows = history.slice(0, 8);
+
       return '<div class="event-detail-grid">' +
         renderDetailBox('Huesped', row.guestName || '-') +
         renderDetailBox('Telefono', row.phone || '-') +
-        renderDetailBox('Fechas', row.dates || row.startDate || '-') +
-        renderDetailBox('Fuente / estado', (row.source || '-') + ' / ' + (row.status || '-')) +
-        renderDetailBox('Habitacion', row.assignedRoom || '-') +
-        renderDetailBox('Tipo', row.roomType || '-') +
-        renderDetailBox('Tarifa', row.rate || '-') +
-        renderDetailBox('Folio', row.folio || '-') +
+        renderDetailBox('Estancias encontradas', history.length || (row.reservationId ? 1 : 0)) +
+        renderDetailBox('Ultima estancia', last.dates || last.startDate || '-') +
+        renderDetailBox('Ultima habitacion', last.assignedRoom || '-') +
+        renderDetailBox('Tipos usados', Array.from(new Set(history.map(item => item.roomType).filter(Boolean))).slice(0, 4).join(', ') || row.roomType || '-') +
+        renderDetailBox('Habitaciones usadas', rooms.join(', ') || '-') +
+        renderDetailBox('Ultima tarifa', last.rate || '-') +
       '</div>' +
-      '<div class="event-detail-box"><span>Nota</span><div>' + escapeHtml(row.note || 'Sin nota') + '</div></div>';
+      '<div class="event-detail-box"><span>Notas recientes</span><div>' + escapeHtml(notes.join(' | ') || row.note || 'Sin nota') + '</div></div>' +
+      '<div class="event-detail-box"><span>Ultimas estancias</span><div>' +
+        (recentRows.length
+          ? '<table class="report-table"><thead><tr><th>Fechas</th><th>Hab</th><th>Tipo</th><th>Estado</th><th>Folio</th></tr></thead><tbody>' +
+            recentRows.map(item =>
+              '<tr><td>' + escapeHtml(item.dates || item.startDate || '-') + '</td><td>' + escapeHtml(item.assignedRoom || '-') + '</td><td>' + escapeHtml(item.roomType || '-') + '</td><td>' + escapeHtml(item.status || '-') + '</td><td>' + escapeHtml(item.folio || '-') + '</td></tr>'
+            ).join('') +
+            '</tbody></table>'
+          : '<div class="muted">Sin historial adicional.</div>'
+        ) +
+      '</div></div>';
     }
 
     function renderQuoteDetail(quote) {
@@ -8001,7 +8059,51 @@ function pageHtml() {
       return 'double';
     }
 
-    function takePreassignRoom(pools, preferredGroup) {
+    function getPreassignPreferenceText(reservation) {
+      return normalizeSearchText([
+        reservation?.note,
+        reservation?.nota,
+        reservation?.tipo,
+        reservation?.habitacion,
+        reservation?.nombre
+      ].join(' '));
+    }
+
+    function scorePreassignRoomForReservation(room, reservation) {
+      const text = getPreassignPreferenceText(reservation);
+      const floor = Number(String(room?.room || '').slice(0, 1)) || 9;
+      let score = 0;
+
+      if (
+        text.includes('planta baja')
+        ||
+        text.includes('piso bajo')
+        ||
+        text.includes('adulto mayor')
+        ||
+        text.includes('discapacidad')
+        ||
+        text.includes('silla')
+        ||
+        text.includes('elevador')
+      ) {
+        score += floor * 10;
+      } else {
+        score += floor;
+      }
+
+      if (text.includes('suite') && getPreassignRoomGroup(room?.type) === 'suite') {
+        score -= 20;
+      }
+
+      if (text.includes('king') && getPreassignRoomGroup(room?.type) === 'king') {
+        score -= 10;
+      }
+
+      return score;
+    }
+
+    function takePreassignRoom(pools, preferredGroup, reservation) {
       const fallbackByGroup = {
         suite: ['suite', 'double', 'king'],
         king: ['king', 'double', 'suite'],
@@ -8010,6 +8112,11 @@ function pageHtml() {
 
       for (const group of fallbackByGroup[preferredGroup] || ['double', 'suite', 'king']) {
         if (pools[group]?.length) {
+          pools[group].sort((left, right) =>
+            scorePreassignRoomForReservation(left, reservation) - scorePreassignRoomForReservation(right, reservation)
+            ||
+            String(left.room || '').localeCompare(String(right.room || ''))
+          );
           return pools[group].shift();
         }
       }
@@ -8062,7 +8169,7 @@ function pageHtml() {
         })
         .forEach(item => {
           for (let index = 0; index < item.neededRooms; index++) {
-            const room = takePreassignRoom(pools, item.preferredGroup);
+            const room = takePreassignRoom(pools, item.preferredGroup, item.candidate);
 
             if (!room) {
               return;
