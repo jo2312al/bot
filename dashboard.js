@@ -4772,6 +4772,10 @@ function pageHtml() {
       background: #ecfdf5;
       border-color: #22c55e;
     }
+    .preassign-room.continued {
+      background: #eff6ff;
+      border-color: #60a5fa;
+    }
     .preassign-room.occupied {
       background: #fff1f2;
       border-color: #fda4af;
@@ -4829,6 +4833,10 @@ function pageHtml() {
     }
     .preassign-mini-row:last-child {
       border-bottom: 0;
+    }
+    .preassign-conflict-row {
+      border-left: 3px solid #f97316;
+      padding-left: 8px;
     }
     body.modal-open {
       overflow: hidden;
@@ -5101,6 +5109,10 @@ function pageHtml() {
           <div id="preassignRoomGrid" class="preassign-grid"></div>
         </div>
         <aside class="preassign-side-card">
+          <strong>Conflictos / revisar</strong>
+          <div class="muted">Reservas o habitaciones que necesitan atencion antes de imprimir.</div>
+          <div id="preassignConflictList" class="preassign-side-list"></div>
+          <hr>
           <strong>Pendientes del dia</strong>
           <div class="muted">Reservas sin habitacion preasignada y continuaciones detectadas.</div>
           <div id="preassignPendingList" class="preassign-side-list"></div>
@@ -8122,6 +8134,34 @@ function pageHtml() {
         );
     }
 
+    function getPreassignReservationIsoDates(reservation) {
+      return (Array.isArray(reservation?.dates) ? reservation.dates : [reservation?.fecha].filter(Boolean))
+        .map(date => {
+          const text = String(date || '').trim();
+          return text.includes('-')
+            ? text.slice(0, 10)
+            : displayToIsoClient(text);
+        })
+        .filter(Boolean)
+        .sort();
+    }
+
+    function getPreassignReservationBySourceKey(sourceKey) {
+      if (!sourceKey) {
+        return null;
+      }
+
+      return (dashboardData?.groupReservations || [])
+        .find(reservation => reservation.sourceKey === sourceKey);
+    }
+
+    function isPreassignContinuedAssignment(assignment, isoDate) {
+      const reservation = getPreassignReservationBySourceKey(assignment?.sourceKey);
+      const dates = getPreassignReservationIsoDates(reservation);
+
+      return dates.length > 1 && isoDate > dates[0];
+    }
+
     function getAssignedReservationKeys(isoDate) {
       return new Set(
         getPreassignAssignmentsForDate(isoDate)
@@ -8180,6 +8220,8 @@ function pageHtml() {
           '<div class="muted">El tablero se carga cuando seleccionas una fecha.</div>';
         preassignPendingList.innerHTML =
           '<div class="muted">Sin fecha seleccionada.</div>';
+        preassignConflictList.innerHTML =
+          '<div class="muted">Sin fecha seleccionada.</div>';
         preassignAssignedList.innerHTML =
           '<div class="muted">Sin fecha seleccionada.</div>';
         preassignAutoAssignedList.innerHTML =
@@ -8192,6 +8234,7 @@ function pageHtml() {
       const candidates = getPreassignCandidates(isoDate);
       const assignedKeys = getAssignedReservationKeys(isoDate);
       const pending = candidates.filter(item => !assignedKeys.has(item.sourceKey));
+      const conflicts = buildPreassignConflicts(isoDate);
 
       preassignStatus.textContent = 'Fecha: ' + escapeHtml(isoToDisplay(isoDate) || isoDate) +
         (dashboardData.rackStatus?.uploadedAt ? ' / Rack: ' + new Date(dashboardData.rackStatus.uploadedAt).toLocaleString() : ' / Sin rack cargado');
@@ -8216,6 +8259,7 @@ function pageHtml() {
           : '<div class="muted">No hay habitaciones en el rack para esta fecha.</div>';
       }
 
+      renderPreassignConflictList(conflicts);
       renderPreassignPendingList(pending, isoDate);
       renderPreassignAssignedLists(assignments, isoDate);
     }
@@ -8267,15 +8311,62 @@ function pageHtml() {
         .join(' / ') || '-';
     }
 
+    function buildPreassignConflicts(isoDate) {
+      const assignments = getPreassignAssignmentsForDate(isoDate);
+      const rooms = dashboardData?.rackStatus?.rooms || [];
+      const conflicts = [];
+      const roomCounts = {};
+      const autoPlan = buildAutoPreassignJobs(isoDate);
+
+      autoPlan.conflicts.forEach(conflict => conflicts.push(conflict));
+
+      assignments.forEach(assignment => {
+        const room = rooms.find(item => item.room === assignment.room) || {
+          room: assignment.room,
+          type: assignment.roomType
+        };
+        const capacity = getPreassignCapacity(room);
+        const people = Number(assignment.people || 0);
+
+        roomCounts[assignment.room] = (roomCounts[assignment.room] || 0) + 1;
+
+        if (people > capacity) {
+          conflicts.push({
+            title: 'Hab ' + assignment.room + ' excede capacidad',
+            detail: (assignment.guestName || 'Sin nombre') + ' tiene ' + people + ' persona(s), capacidad ' + capacity + '.'
+          });
+        }
+
+        if (normalizeSearchText(assignment.status) === 'revisar') {
+          conflicts.push({
+            title: 'Hab ' + assignment.room + ' marcada para revisar',
+            detail: assignment.guestName || 'Sin nombre'
+          });
+        }
+      });
+
+      Object.keys(roomCounts)
+        .filter(room => roomCounts[room] > 1)
+        .forEach(room => {
+          conflicts.push({
+            title: 'Habitacion duplicada ' + room,
+            detail: roomCounts[room] + ' preasignaciones guardadas en el mismo dia.'
+          });
+        });
+
+      return conflicts;
+    }
+
     function renderPreassignRoomButton(room, isoDate) {
       const category = getRackRoomCategory(room.status);
       const displayCategory = category === 'occupied' ? 'available' : category;
       const assignment = getPreassignRoomAssignment(room.room, isoDate);
+      const continued = assignment && isPreassignContinuedAssignment(assignment, isoDate);
       const className = assignment
-        ? 'assigned'
+        ? (continued ? 'continued' : 'assigned')
         : (displayCategory === 'available' && room.status === 'VS' ? 'dirty' : displayCategory);
       const label = assignment
-        ? assignment.guestName
+        ? ((continued ? 'Continua: ' : '') + assignment.guestName)
         : (displayCategory === 'available' ? 'Libre' : 'Bloqueada');
 
       return '<button class="preassign-room ' + className + '" onclick="openPreassignModal(\\'' + escapeJs(room.room || '') + '\\')">' +
@@ -8392,6 +8483,7 @@ function pageHtml() {
       const sameDayRack = preassignRackMatchesDate(isoDate);
       const candidates = getPreassignCandidates(isoDate);
       const jobs = [];
+      const conflicts = [];
       const pools = {
         king: [],
         suite: [],
@@ -8429,14 +8521,17 @@ function pageHtml() {
           return priority[left.preferredGroup] - priority[right.preferredGroup];
         })
         .forEach(item => {
+          let assignedCount = 0;
+
           for (let index = 0; index < item.neededRooms; index++) {
             const room = takePreassignRoom(pools, item.preferredGroup, item.candidate);
 
             if (!room) {
-              return;
+              break;
             }
 
             const people = getPreassignPeople(item.candidate);
+            assignedCount++;
             jobs.push({
               date: isoDate,
               room: room.room,
@@ -8451,10 +8546,23 @@ function pageHtml() {
               note: 'Autoasignado: regla ' + item.preferredGroup
             });
           }
+
+          if (assignedCount < item.neededRooms) {
+            const labels = {
+              king: 'King',
+              suite: 'Suite',
+              double: 'Doble'
+            };
+            conflicts.push({
+              title: item.candidate.nombre || 'Reserva sin nombre',
+              detail: 'Faltan ' + (item.neededRooms - assignedCount) + ' habitacion(es). Preferencia: ' + (labels[item.preferredGroup] || item.preferredGroup) + '.'
+            });
+          }
         });
 
       return {
         jobs,
+        conflicts,
         sameDayRack
       };
     }
@@ -8506,6 +8614,20 @@ function pageHtml() {
       await loadDashboard();
       showView('preassign');
       alert('Autoasignado: ' + saved + ' guardada(s)' + (failed ? ' / ' + failed + ' fallida(s)' : '') + (result.sameDayRack ? '. Rack del dia tomado en cuenta.' : '. Rack usado como inventario de tipos.'));
+    }
+
+    function renderPreassignConflictList(conflicts) {
+      if (!conflicts.length) {
+        preassignConflictList.innerHTML = '<div class="muted">Sin conflictos detectados.</div>';
+        return;
+      }
+
+      preassignConflictList.innerHTML = conflicts.map(conflict =>
+        '<div class="preassign-mini-row preassign-conflict-row">' +
+          '<strong>' + escapeHtml(conflict.title || 'Revisar') + '</strong>' +
+          '<div class="muted">' + escapeHtml(conflict.detail || '') + '</div>' +
+        '</div>'
+      ).join('');
     }
 
     function renderPreassignPendingList(pending, isoDate) {
@@ -8834,6 +8956,93 @@ function pageHtml() {
       document.body.classList.remove('modal-open');
     }
 
+    function renderPreassignPrintTypeSummary(rooms, assignments) {
+      const counts = {};
+
+      (rooms || []).forEach(room => {
+        const type = getPreassignTypeLabel(room.type);
+        const category = getRackRoomCategory(room.status);
+
+        if (!counts[type]) {
+          counts[type] = {
+            total: 0,
+            assigned: 0,
+            available: 0,
+            occupied: 0,
+            blocked: 0
+          };
+        }
+
+        counts[type].total++;
+
+        if (category === 'available') {
+          counts[type].available++;
+        } else if (category === 'occupied') {
+          counts[type].occupied++;
+        } else {
+          counts[type].blocked++;
+        }
+      });
+
+      (assignments || []).forEach(assignment => {
+        const room = (rooms || []).find(item => item.room === assignment.room);
+        const type = getPreassignTypeLabel(room?.type || assignment.roomType);
+
+        if (!counts[type]) {
+          counts[type] = {
+            total: 0,
+            assigned: 0,
+            available: 0,
+            occupied: 0,
+            blocked: 0
+          };
+        }
+
+        counts[type].assigned++;
+      });
+
+      return Object.keys(counts)
+        .sort((left, right) => left.localeCompare(right))
+        .map(type =>
+          '<tr><td><strong>' + escapeHtml(type) + '</strong></td><td>' + counts[type].total + '</td><td>' + counts[type].assigned + '</td><td>' + Math.max(counts[type].available - counts[type].assigned, 0) + '</td><td>' + counts[type].occupied + '</td><td>' + counts[type].blocked + '</td></tr>'
+        )
+        .join('') || '<tr><td colspan="6">Sin habitaciones en rack.</td></tr>';
+    }
+
+    function renderPreassignPrintRack(rooms, assignments, isoDate) {
+      const byFloor = (rooms || []).reduce((acc, room) => {
+        const floor = String(room.room || '').slice(0, 1) || '-';
+        if (!acc[floor]) {
+          acc[floor] = [];
+        }
+        acc[floor].push(room);
+        return acc;
+      }, {});
+
+      return Object.keys(byFloor)
+        .sort()
+        .map(floor => {
+          const rows = byFloor[floor]
+            .sort((left, right) => String(left.room || '').localeCompare(String(right.room || '')))
+            .map(room => {
+              const assignment = assignments.find(item => item.room === room.room);
+              const category = getRackRoomCategory(room.status);
+              const status = assignment
+                ? (isPreassignContinuedAssignment(assignment, isoDate) ? 'Continua preasignada' : 'Preasignada')
+                : (category === 'occupied' ? 'Ocupada rack' : (category === 'available' ? 'Libre' : 'Bloqueada'));
+              const guest = assignment
+                ? assignment.guestName || 'Sin nombre'
+                : '';
+
+              return '<tr><td><strong>' + escapeHtml(room.room || '-') + '</strong></td><td>' + escapeHtml(room.type || '-') + '</td><td>' + escapeHtml(room.status || '-') + '</td><td>' + escapeHtml(status) + '</td><td>' + escapeHtml(guest) + '</td><td>' + escapeHtml(assignment?.note || '') + '</td></tr>';
+            })
+            .join('');
+
+          return '<h2>Piso ' + escapeHtml(floor) + '</h2><table><thead><tr><th>Hab</th><th>Tipo</th><th>Rack</th><th>Estado</th><th>Huesped</th><th>Notas</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        })
+        .join('') || '<table><tbody><tr><td>Sin rack cargado.</td></tr></tbody></table>';
+    }
+
     function printPreassignment() {
       const isoDate = preassignDate.value;
 
@@ -8846,13 +9055,22 @@ function pageHtml() {
       const assignments = getPreassignAssignmentsForDate(isoDate)
         .slice()
         .sort((left, right) => String(left.room || '').localeCompare(String(right.room || '')));
+      const rooms = (dashboardData?.rackStatus?.rooms || [])
+        .slice()
+        .sort((left, right) => String(left.room || '').localeCompare(String(right.room || '')));
+      const conflicts = buildPreassignConflicts(isoDate);
       const pending = getPreassignCandidates(isoDate)
         .filter(item => !getAssignedReservationKeys(isoDate).has(item.sourceKey));
       const rows = assignments.length
         ? assignments.map(item =>
-          '<tr><td><strong>' + escapeHtml(item.room || '') + '</strong></td><td>' + escapeHtml(item.guestName || '') + '</td><td>' + escapeHtml(item.people || '') + '</td><td>' + escapeHtml(item.roomType || '') + '</td><td>' + escapeHtml(item.origin || '') + '</td><td>' + escapeHtml(item.status || '') + '</td><td>' + escapeHtml(item.note || '') + '</td></tr>'
+          '<tr><td><strong>' + escapeHtml(item.room || '') + '</strong></td><td>' + escapeHtml(item.guestName || '') + '</td><td>' + escapeHtml(item.people || '') + '</td><td>' + escapeHtml(item.roomType || '') + '</td><td>' + escapeHtml(item.origin || '') + '</td><td>' + escapeHtml(isPreassignContinuedAssignment(item, isoDate) ? 'continua' : item.status || '') + '</td><td>' + escapeHtml(item.note || '') + '</td></tr>'
         ).join('')
         : '<tr><td colspan="7">Sin preasignaciones guardadas.</td></tr>';
+      const conflictRows = conflicts.length
+        ? conflicts.map(item =>
+          '<tr><td><strong>' + escapeHtml(item.title || '') + '</strong></td><td>' + escapeHtml(item.detail || '') + '</td></tr>'
+        ).join('')
+        : '<tr><td colspan="2">Sin conflictos detectados.</td></tr>';
       const pendingRows = pending.length
         ? pending.map(item =>
           '<tr><td>' + escapeHtml(item.nombre || '') + '</td><td>' + escapeHtml(item.preassignKind || '') + '</td><td>' + escapeHtml(item.tipo || '') + '</td><td>' + escapeHtml(getPreassignPeople(item)) + '</td><td>' + escapeHtml(item.telefono || '') + '</td></tr>'
@@ -8860,11 +9078,15 @@ function pageHtml() {
         : '<tr><td colspan="5">Sin pendientes detectados.</td></tr>';
       const html =
         '<!doctype html><html><head><meta charset="utf-8"><title>Preasignacion ' + escapeHtml(display) + '</title>' +
-        '<style>body{font-family:Arial,sans-serif;color:#111827;margin:24px}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:22px 0 8px}.muted{color:#64748b}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #cbd5e1;padding:7px;text-align:left;vertical-align:top;font-size:12px}th{background:#f1f5f9}.actions{text-align:right;margin-bottom:12px}@media print{.actions{display:none}body{margin:10mm}}</style>' +
+        '<style>body{font-family:Arial,sans-serif;color:#111827;margin:24px}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:22px 0 8px;break-after:avoid}.muted{color:#64748b}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}.box{border:1px solid #cbd5e1;padding:8px}.box strong{display:block;font-size:18px}table{width:100%;border-collapse:collapse;margin-top:8px;break-inside:auto}tr{break-inside:avoid}th,td{border:1px solid #cbd5e1;padding:6px;text-align:left;vertical-align:top;font-size:11px}th{background:#f1f5f9}.actions{text-align:right;margin-bottom:12px}@media print{.actions{display:none}body{margin:8mm}.page-break{break-before:page}}</style>' +
         '</head><body><div class="actions"><button onclick="window.print()">Imprimir / guardar PDF</button></div>' +
         '<h1>Preasignacion de habitaciones</h1><div class="muted">Hotel Villa Margaritas / ' + escapeHtml(display) + '</div>' +
+        '<div class="summary"><div class="box"><span>Preasignadas</span><strong>' + assignments.length + '</strong></div><div class="box"><span>Pendientes</span><strong>' + pending.length + '</strong></div><div class="box"><span>Conflictos</span><strong>' + conflicts.length + '</strong></div><div class="box"><span>Rack</span><strong>' + rooms.length + '</strong></div></div>' +
+        '<h2>Resumen por tipo</h2><table><thead><tr><th>Tipo</th><th>Total</th><th>Preasig.</th><th>Libres</th><th>Ocupadas rack</th><th>Bloq.</th></tr></thead><tbody>' + renderPreassignPrintTypeSummary(rooms, assignments) + '</tbody></table>' +
+        '<h2>Conflictos / revisar</h2><table><thead><tr><th>Detalle</th><th>Motivo</th></tr></thead><tbody>' + conflictRows + '</tbody></table>' +
         '<h2>Habitaciones asignadas</h2><table><thead><tr><th>Hab</th><th>Huesped</th><th>Pers.</th><th>Tipo</th><th>Origen</th><th>Estado</th><th>Notas</th></tr></thead><tbody>' + rows + '</tbody></table>' +
         '<h2>Pendientes</h2><table><thead><tr><th>Huesped</th><th>Tipo</th><th>Habitacion solicitada</th><th>Pers./cuarto</th><th>Telefono</th></tr></thead><tbody>' + pendingRows + '</tbody></table>' +
+        '<div class="page-break"></div><h1>Mapa completo del rack</h1><div class="muted">Libre, preasignada, continuacion, ocupada rack o bloqueada.</div>' + renderPreassignPrintRack(rooms, assignments, isoDate) +
         '<script>window.onload=function(){window.print();}<\\/script></body></html>';
       const printWindow = window.open('', '_blank');
 
