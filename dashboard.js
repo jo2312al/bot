@@ -465,32 +465,106 @@ function normalizePreassignment(input) {
   };
 }
 
+function getPreassignmentReservationDates(assignment) {
+  if (!assignment.sourceKey) {
+    return [
+      assignment.date
+    ];
+  }
+
+  const reservation =
+    readGroupReservations()
+      .find(row =>
+        row.sourceKey === assignment.sourceKey
+      );
+  const dates =
+    Array.isArray(reservation?.dates)
+      ? reservation.dates
+      : [reservation?.fecha].filter(Boolean);
+  const isoDates =
+    dates
+      .map(date =>
+        String(date || "").includes("-")
+          ? String(date).slice(0, 10)
+          : displayDateToIso(date)
+      )
+      .filter(Boolean)
+      .filter(date =>
+        date >= assignment.date
+      );
+
+  return isoDates.length
+    ? Array.from(new Set(isoDates))
+    : [
+      assignment.date
+    ];
+}
+
+function buildExpandedPreassignments(assignment) {
+  const dates =
+    getPreassignmentReservationDates(assignment);
+  const baseId =
+    String(assignment.id || `pre:${Date.now()}:${Math.random().toString(16).slice(2)}`);
+
+  return dates.map(date => ({
+    ...assignment,
+    id:
+      dates.length > 1
+        ? `${baseId}:${date}`
+        : baseId,
+    date
+  }));
+}
+
 function saveRoomPreassignment(input) {
   const assignment =
     normalizePreassignment(input);
+  const expandedAssignments =
+    buildExpandedPreassignments(assignment);
   const assignments =
     readRoomPreassignments();
+  const targetDates =
+    new Set(
+      expandedAssignments.map(item =>
+        item.date
+      )
+    );
+  const replaceExisting =
+    item =>
+      item.id === assignment.id
+      ||
+      (
+        assignment.sourceKey
+        &&
+        item.sourceKey === assignment.sourceKey
+        &&
+        item.room === assignment.room
+        &&
+        targetDates.has(item.date)
+      );
   const duplicateRoom =
     assignments.find(item =>
-      item.date === assignment.date
+      targetDates.has(item.date)
       &&
       item.room === assignment.room
       &&
-      item.id !== assignment.id
+      !replaceExisting(item)
     );
 
   if (duplicateRoom) {
-    throw new Error("Esa habitacion ya esta preasignada para ese dia");
+    throw new Error(`Esa habitacion ya esta preasignada para ${isoToDisplayDate(duplicateRoom.date) || duplicateRoom.date}`);
   }
 
   const next =
     assignments.filter(item =>
-      item.id !== assignment.id
+      !replaceExisting(item)
     );
-  next.push(assignment);
+  expandedAssignments.forEach(item =>
+    next.push(item)
+  );
   saveRoomPreassignments(next);
 
-  return assignment;
+  return expandedAssignments[0];
 }
 
 function deleteRoomPreassignment(id) {
