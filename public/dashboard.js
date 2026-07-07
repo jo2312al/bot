@@ -687,12 +687,12 @@ function openSearchDetailModal(title, subtitle, bodyHtml) {
   searchDetailSubtitle.textContent = subtitle || '';
   searchDetailBody.innerHTML = bodyHtml || '<div class="muted">Sin detalle.</div>';
   searchDetailModalBackdrop.classList.remove('hidden');
-  document.body.classList.add('modal-open');
+  document.body.classList.add('app-modal-open');
 }
 
 function closeSearchDetailModal() {
   searchDetailModalBackdrop.classList.add('hidden');
-  document.body.classList.remove('modal-open');
+  document.body.classList.remove('app-modal-open');
 }
 
 function renderSearchReservationDetail(reservation) {
@@ -1335,7 +1335,7 @@ async function saveQuoteMenuCatalog() {
 function openQuoteMenuModal() {
   renderQuoteMenuEditor();
   quoteMenuModalBackdrop.classList.remove('hidden');
-  document.body.classList.add('modal-open');
+  document.body.classList.add('app-modal-open');
 }
 
 function closeQuoteMenuModal() {
@@ -1346,7 +1346,7 @@ function closeQuoteMenuModal() {
     confirmDeleteBackdrop.classList.contains('hidden') &&
     confirmRackBackdrop.classList.contains('hidden')
   ) {
-    document.body.classList.remove('modal-open');
+    document.body.classList.remove('app-modal-open');
   }
 }
 
@@ -1748,7 +1748,7 @@ function openEventDetail(eventId) {
       : '<div class="muted">Sin comprobantes guardados.</div>');
 
   eventDetailModalBackdrop.classList.remove('hidden');
-  document.body.classList.add('modal-open');
+  document.body.classList.add('app-modal-open');
   renderEventEditAvailability();
 }
 
@@ -1821,7 +1821,7 @@ function closeEventDetailModal() {
     quoteEventModalBackdrop.classList.contains('hidden') &&
     helpModalBackdrop.classList.contains('hidden')
   ) {
-    document.body.classList.remove('modal-open');
+    document.body.classList.remove('app-modal-open');
   }
 }
 
@@ -1897,7 +1897,7 @@ function createEventFromQuotation(quotationId) {
   quoteEventModalStatusText.textContent = '';
   renderEventAvailability('quote');
   quoteEventModalBackdrop.classList.remove('hidden');
-  document.body.classList.add('modal-open');
+  document.body.classList.add('app-modal-open');
 }
 
 function closeQuoteEventModal() {
@@ -1909,7 +1909,7 @@ function closeQuoteEventModal() {
     quoteMenuModalBackdrop.classList.contains('hidden') &&
     helpModalBackdrop.classList.contains('hidden')
   ) {
-    document.body.classList.remove('modal-open');
+    document.body.classList.remove('app-modal-open');
   }
 }
 
@@ -2881,7 +2881,7 @@ function openPreassignModal(roomNumber) {
   preassignModalSubtitle.textContent = (isoToDisplay(isoDate) || isoDate) + ' / ' + (room.type || '-') + ' / Estado rack ' + (room.status || '-');
   preassignModalBody.innerHTML = renderPreassignModalBody(room, assignment, isoDate);
   preassignModalBackdrop.classList.remove('hidden');
-  document.body.classList.add('modal-open');
+  document.body.classList.add('app-modal-open');
   updatePreassignCapacityHelp();
 }
 
@@ -3142,7 +3142,7 @@ function closePreassignModal() {
   preassignModalBackdrop.classList.add('hidden');
   pendingPreassignRoom = null;
   selectedPreassignCandidateKey = '';
-  document.body.classList.remove('modal-open');
+  document.body.classList.remove('app-modal-open');
 }
 
 function renderPreassignPrintTypeSummary(rooms, assignments) {
@@ -3300,13 +3300,13 @@ function setRackRoomOccupied(room) {
       ' / Estado actual: ' + escapeHtml(rackRoom?.status || '-') +
     '</div>';
   confirmRackBackdrop.classList.remove('hidden');
-  document.body.classList.add('modal-open');
+  document.body.classList.add('app-modal-open');
 }
 
 function closeRackConfirm() {
   confirmRackBackdrop.classList.add('hidden');
   pendingRackRoom = null;
-  document.body.classList.remove('modal-open');
+  document.body.classList.remove('app-modal-open');
 }
 
 async function confirmRackRoomOccupied() {
@@ -3592,13 +3592,13 @@ function openGroupSendConfirm(reservations, source) {
     ? 'La reserva ' + source + ' se enviara al grupo de reservas.'
     : count + ' reservas ' + source + ' se enviaran al grupo de reservas.';
   groupSendConfirmBackdrop.classList.remove('hidden');
-  document.body.classList.add('modal-open');
+  document.body.classList.add('app-modal-open');
 }
 
 function closeGroupSendConfirm() {
   groupSendConfirmBackdrop.classList.add('hidden');
   pendingGroupReservations = [];
-  document.body.classList.remove('modal-open');
+  document.body.classList.remove('app-modal-open');
 }
 
 async function sendPendingReservationsToGroup() {
@@ -3853,7 +3853,7 @@ function renderDayOccupancyPie(row, compact) {
   const arrivalDegrees = total ? Math.min((arrivals / total) * 360, 360) : 0;
   const continuingDegrees = total ? Math.min((continuing / total) * 360, 360 - arrivalDegrees) : 0;
 
-  return '<div class="' + (compact ? 'day-breakdown' : 'modal-day-breakdown') + '">' +
+  return '<div class="' + (compact ? 'day-breakdown' : 'app-modal-day-breakdown') + '">' +
     '<div class="day-pie" style="--arrivals:' + arrivalDegrees + 'deg;--continuing:' + continuingDegrees + 'deg"></div>' +
     '<div class="day-pie-legend">' +
       '<span><i class="day-pie-arrivals"></i>Entradas hoy: <strong>' + arrivals + '</strong></span>' +
@@ -4079,7 +4079,7 @@ function openDayModal(isoDate) {
     dayModalSubtitle.textContent = 'Selecciona una fecha valida en el calendario.';
     dayModalBody.innerHTML = '<div class="muted">No se pudo identificar la fecha del dia. Cierra este modal y vuelve a tocar Ver en el calendario.</div>';
     dayModalBackdrop.classList.remove('hidden');
-    document.body.classList.add('modal-open');
+    document.body.classList.add('app-modal-open');
     return;
   }
 
@@ -4125,22 +4125,22 @@ function openDayModal(isoDate) {
     dayModalBody.innerHTML =
       dayDownloadButton +
       renderDayOccupancyPie(row, false) +
-      '<div class="modal-kpis">' +
-        '<div class="modal-kpi"><span class="muted">Entradas</span><strong>0</strong></div>' +
-        '<div class="modal-kpi"><span class="muted">Habitaciones ocupadas</span><strong>' + row.occupied + '/' + row.total + '</strong></div>' +
-        '<div class="modal-kpi"><span class="muted">Adultos</span><strong>0</strong></div>' +
-        '<div class="modal-kpi"><span class="muted">Menores</span><strong>0</strong></div>' +
+      '<div class="app-modal-kpis">' +
+        '<div class="app-modal-kpi"><span class="muted">Entradas</span><strong>0</strong></div>' +
+        '<div class="app-modal-kpi"><span class="muted">Habitaciones ocupadas</span><strong>' + row.occupied + '/' + row.total + '</strong></div>' +
+        '<div class="app-modal-kpi"><span class="muted">Adultos</span><strong>0</strong></div>' +
+        '<div class="app-modal-kpi"><span class="muted">Menores</span><strong>0</strong></div>' +
       '</div>' +
       '<div class="muted">No hay entradas detectadas para este dia.' + (row.continuing ? ' Si hay habitaciones que continuan de dias anteriores.' : '') + '</div>';
   } else {
     dayModalBody.innerHTML =
       dayDownloadButton +
       renderDayOccupancyPie(row, false) +
-      '<div class="modal-kpis">' +
-        '<div class="modal-kpi"><span class="muted">Entradas</span><strong>' + row.reservations.length + '</strong></div>' +
-        '<div class="modal-kpi"><span class="muted">Habitaciones ocupadas</span><strong>' + row.occupied + '/' + row.total + '</strong></div>' +
-        '<div class="modal-kpi"><span class="muted">Adultos</span><strong>' + totals.adultos + '</strong></div>' +
-        '<div class="modal-kpi"><span class="muted">Menores</span><strong>' + totals.ninos + '</strong></div>' +
+      '<div class="app-modal-kpis">' +
+        '<div class="app-modal-kpi"><span class="muted">Entradas</span><strong>' + row.reservations.length + '</strong></div>' +
+        '<div class="app-modal-kpi"><span class="muted">Habitaciones ocupadas</span><strong>' + row.occupied + '/' + row.total + '</strong></div>' +
+        '<div class="app-modal-kpi"><span class="muted">Adultos</span><strong>' + totals.adultos + '</strong></div>' +
+        '<div class="app-modal-kpi"><span class="muted">Menores</span><strong>' + totals.ninos + '</strong></div>' +
       '</div>' +
       '<div class="summary-chips" style="margin-bottom:12px">' +
         '<span class="chip">Bot ' + totals.bot + '</span>' +
@@ -4173,7 +4173,7 @@ function openDayModal(isoDate) {
   }
 
   dayModalBackdrop.classList.remove('hidden');
-  document.body.classList.add('modal-open');
+  document.body.classList.add('app-modal-open');
 }
 
 function closeDayModal() {
@@ -4184,7 +4184,7 @@ function closeDayModal() {
   pendingDeleteReservation = null;
   pendingEditReservation = null;
   pendingArrivalReservation = null;
-  document.body.classList.remove('modal-open');
+  document.body.classList.remove('app-modal-open');
 }
 
 function displayToIso(value) {
@@ -4241,7 +4241,7 @@ function openReservationEdit(index) {
   editReservationNote.value = reservation.note || '';
   reservationEditSubtitle.textContent = reservation.source ? 'Fuente: ' + reservation.source : '';
   reservationEditBackdrop.classList.remove('hidden');
-  document.body.classList.add('modal-open');
+  document.body.classList.add('app-modal-open');
 }
 
 function closeReservationEdit() {
@@ -4249,7 +4249,7 @@ function closeReservationEdit() {
   pendingEditReservation = null;
 
   if (dayModalBackdrop.classList.contains('hidden')) {
-    document.body.classList.remove('modal-open');
+    document.body.classList.remove('app-modal-open');
   }
 }
 
@@ -4287,7 +4287,7 @@ function openReservationArrivalFor(reservation) {
   reservationArrivalHelp.textContent =
     'Escribe o selecciona una habitacion. Al asignarla se guardara como ocupada; no se enviara aviso al grupo.';
   reservationArrivalBackdrop.classList.remove('hidden');
-  document.body.classList.add('modal-open');
+  document.body.classList.add('app-modal-open');
 }
 
 function closeReservationArrival() {
@@ -4295,7 +4295,7 @@ function closeReservationArrival() {
   pendingArrivalReservation = null;
 
   if (dayModalBackdrop.classList.contains('hidden')) {
-    document.body.classList.remove('modal-open');
+    document.body.classList.remove('app-modal-open');
   }
 }
 
@@ -4393,7 +4393,7 @@ function confirmDeleteReservation(index) {
       (reservation.tipo ? ' / ' + escapeHtml(reservation.tipo) : '') +
     '</div>';
   confirmDeleteBackdrop.classList.remove('hidden');
-  document.body.classList.add('modal-open');
+  document.body.classList.add('app-modal-open');
 }
 
 function closeDeleteConfirm() {
@@ -4401,7 +4401,7 @@ function closeDeleteConfirm() {
   pendingDeleteReservation = null;
 
   if (dayModalBackdrop.classList.contains('hidden')) {
-    document.body.classList.remove('modal-open');
+    document.body.classList.remove('app-modal-open');
   }
 }
 

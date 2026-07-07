@@ -94,6 +94,8 @@ let dashboardSearchService =
 
 const PORT =
   Number(process.env.DASHBOARD_PORT || 3333);
+const DASHBOARD_ASSET_VERSION =
+  "modal-fix-20260707";
 const {
   deleteRoomPreassignment,
   readRoomPreassignments,
@@ -3124,7 +3126,7 @@ function pageHtml() {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Hotel Villa Margaritas - Dashboard</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="/public/dashboard.css" rel="stylesheet">
+  <link href="/public/dashboard.css?v=${DASHBOARD_ASSET_VERSION}" rel="stylesheet">
 </head>
 <body>
   <header>
@@ -3778,52 +3780,52 @@ function pageHtml() {
     </section>
     </div>
   </main>
-  <div id="helpModalBackdrop" class="modal-backdrop hidden" onclick="closeHelp()">
-    <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="helpModalTitle" onclick="event.stopPropagation()">
-      <div class="modal-head">
+  <div id="helpModalBackdrop" class="app-modal-backdrop hidden" onclick="closeHelp()">
+    <div class="app-modal confirm-app-modal" role="dialog" aria-modal="true" aria-labelledby="helpModalTitle" onclick="event.stopPropagation()">
+      <div class="app-modal-head">
         <div>
           <strong id="helpModalTitle">Ayuda</strong>
           <div class="muted">Guia rapida de uso</div>
         </div>
         <button onclick="closeHelp()">Cerrar</button>
       </div>
-      <div id="helpModalBody" class="modal-body help-content"></div>
+      <div id="helpModalBody" class="app-modal-body help-content"></div>
     </div>
   </div>
-  <div id="searchDetailModalBackdrop" class="modal-backdrop hidden" onclick="closeSearchDetailModal()">
-    <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="searchDetailTitle" onclick="event.stopPropagation()">
-      <div class="modal-head">
+  <div id="searchDetailModalBackdrop" class="app-modal-backdrop hidden" onclick="closeSearchDetailModal()">
+    <div class="app-modal confirm-app-modal" role="dialog" aria-modal="true" aria-labelledby="searchDetailTitle" onclick="event.stopPropagation()">
+      <div class="app-modal-head">
         <div>
           <strong id="searchDetailTitle">Detalle</strong>
           <div id="searchDetailSubtitle" class="muted"></div>
         </div>
         <button onclick="closeSearchDetailModal()">Cerrar</button>
       </div>
-      <div id="searchDetailBody" class="modal-body"></div>
+      <div id="searchDetailBody" class="app-modal-body"></div>
     </div>
   </div>
-  <div id="dayModalBackdrop" class="modal-backdrop hidden" onclick="closeDayModal()">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="dayModalTitle" onclick="event.stopPropagation()">
-      <div class="modal-head">
+  <div id="dayModalBackdrop" class="app-modal-backdrop hidden" onclick="closeDayModal()">
+    <div class="app-modal" role="dialog" aria-modal="true" aria-labelledby="dayModalTitle" onclick="event.stopPropagation()">
+      <div class="app-modal-head">
         <div>
           <strong id="dayModalTitle">Reservas del dia</strong>
           <div id="dayModalSubtitle" class="muted"></div>
         </div>
         <button onclick="closeDayModal()">Cerrar</button>
       </div>
-      <div id="dayModalBody" class="modal-body"></div>
+      <div id="dayModalBody" class="app-modal-body"></div>
     </div>
   </div>
-  <div id="reservationEditBackdrop" class="modal-backdrop hidden" onclick="closeReservationEdit()">
-    <div class="modal reservation-edit-modal" role="dialog" aria-modal="true" aria-labelledby="reservationEditTitle" onclick="event.stopPropagation()">
-      <div class="modal-head">
+  <div id="reservationEditBackdrop" class="app-modal-backdrop hidden" onclick="closeReservationEdit()">
+    <div class="app-modal reservation-edit-app-modal" role="dialog" aria-modal="true" aria-labelledby="reservationEditTitle" onclick="event.stopPropagation()">
+      <div class="app-modal-head">
         <div>
           <strong id="reservationEditTitle">Editar reserva</strong>
           <div id="reservationEditSubtitle" class="muted"></div>
         </div>
         <button onclick="closeReservationEdit()">Cerrar</button>
       </div>
-      <div class="modal-body">
+      <div class="app-modal-body">
         <div class="reservation-edit-grid">
           <label class="wide">Cliente<input id="editReservationName" autocomplete="off"></label>
           <label>Telefono<input id="editReservationPhone" inputmode="tel"></label>
@@ -3844,16 +3846,16 @@ function pageHtml() {
       </div>
     </div>
   </div>
-  <div id="reservationArrivalBackdrop" class="modal-backdrop hidden" onclick="closeReservationArrival()">
-    <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="reservationArrivalTitle" onclick="event.stopPropagation()">
-      <div class="modal-head">
+  <div id="reservationArrivalBackdrop" class="app-modal-backdrop hidden" onclick="closeReservationArrival()">
+    <div class="app-modal confirm-app-modal" role="dialog" aria-modal="true" aria-labelledby="reservationArrivalTitle" onclick="event.stopPropagation()">
+      <div class="app-modal-head">
         <div>
           <strong id="reservationArrivalTitle">Registrar llegada</strong>
           <div id="reservationArrivalSubtitle" class="muted"></div>
         </div>
         <button onclick="closeReservationArrival()">Cerrar</button>
       </div>
-      <div class="modal-body">
+      <div class="app-modal-body">
         <div id="reservationArrivalDetails" class="day-reservation-details"></div>
         <label style="display:block; margin-top:16px">Habitacion asignada (opcional)
           <input id="reservationArrivalRoom" list="reservationArrivalRoomOptions" inputmode="numeric" placeholder="Ej. 101">
@@ -3869,29 +3871,29 @@ function pageHtml() {
       </div>
     </div>
   </div>
-  <div id="preassignModalBackdrop" class="modal-backdrop hidden" onclick="closePreassignModal()">
-    <div class="modal reservation-edit-modal" role="dialog" aria-modal="true" aria-labelledby="preassignModalTitle" onclick="event.stopPropagation()">
-      <div class="modal-head">
+  <div id="preassignModalBackdrop" class="app-modal-backdrop hidden" onclick="closePreassignModal()">
+    <div class="app-modal reservation-edit-app-modal" role="dialog" aria-modal="true" aria-labelledby="preassignModalTitle" onclick="event.stopPropagation()">
+      <div class="app-modal-head">
         <div>
           <strong id="preassignModalTitle">Preasignar habitacion</strong>
           <div id="preassignModalSubtitle" class="muted"></div>
         </div>
         <button onclick="closePreassignModal()">Cerrar</button>
       </div>
-      <div class="modal-body">
-        <div id="preassignModalBody" class="preassign-modal-grid"></div>
+      <div class="app-modal-body">
+        <div id="preassignModalBody" class="preassign-app-modal-grid"></div>
       </div>
     </div>
   </div>
-  <div id="groupSendConfirmBackdrop" class="modal-backdrop hidden" onclick="closeGroupSendConfirm()">
-    <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="groupSendConfirmTitle" onclick="event.stopPropagation()">
-      <div class="modal-head">
+  <div id="groupSendConfirmBackdrop" class="app-modal-backdrop hidden" onclick="closeGroupSendConfirm()">
+    <div class="app-modal confirm-app-modal" role="dialog" aria-modal="true" aria-labelledby="groupSendConfirmTitle" onclick="event.stopPropagation()">
+      <div class="app-modal-head">
         <div>
           <strong id="groupSendConfirmTitle">Enviar reserva al grupo</strong>
           <div id="groupSendConfirmText" class="muted"></div>
         </div>
       </div>
-      <div class="modal-body">
+      <div class="app-modal-body">
         <div class="confirm-actions">
           <button onclick="closeGroupSendConfirm()">No</button>
           <button class="primary" onclick="sendPendingReservationsToGroup()">Si, enviar al grupo</button>
@@ -3899,15 +3901,15 @@ function pageHtml() {
       </div>
     </div>
   </div>
-  <div id="confirmDeleteBackdrop" class="modal-backdrop hidden" onclick="closeDeleteConfirm()">
-    <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirmDeleteTitle" onclick="event.stopPropagation()">
-      <div class="modal-head">
+  <div id="confirmDeleteBackdrop" class="app-modal-backdrop hidden" onclick="closeDeleteConfirm()">
+    <div class="app-modal confirm-app-modal" role="dialog" aria-modal="true" aria-labelledby="confirmDeleteTitle" onclick="event.stopPropagation()">
+      <div class="app-modal-head">
         <div>
           <strong id="confirmDeleteTitle">Eliminar reserva</strong>
           <div class="muted">Esta accion libera el inventario del calendario.</div>
         </div>
       </div>
-      <div class="modal-body">
+      <div class="app-modal-body">
         <div id="confirmDeleteText"></div>
         <div class="confirm-actions">
           <button onclick="closeDeleteConfirm()">Cancelar</button>
@@ -3916,15 +3918,15 @@ function pageHtml() {
       </div>
     </div>
   </div>
-  <div id="confirmRackBackdrop" class="modal-backdrop hidden" onclick="closeRackConfirm()">
-    <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirmRackTitle" onclick="event.stopPropagation()">
-      <div class="modal-head">
+  <div id="confirmRackBackdrop" class="app-modal-backdrop hidden" onclick="closeRackConfirm()">
+    <div class="app-modal confirm-app-modal" role="dialog" aria-modal="true" aria-labelledby="confirmRackTitle" onclick="event.stopPropagation()">
+      <div class="app-modal-head">
         <div>
           <strong id="confirmRackTitle">Marcar habitacion ocupada</strong>
           <div class="muted">Actualiza el ultimo rack guardado.</div>
         </div>
       </div>
-      <div class="modal-body">
+      <div class="app-modal-body">
         <div id="confirmRackText"></div>
         <div class="confirm-actions">
           <button onclick="closeRackConfirm()">Cancelar</button>
@@ -3933,16 +3935,16 @@ function pageHtml() {
       </div>
     </div>
   </div>
-  <div id="quoteMenuModalBackdrop" class="modal-backdrop hidden" onclick="closeQuoteMenuModal()">
-    <div class="modal quote-catalog-modal" role="dialog" aria-modal="true" aria-labelledby="quoteMenuModalTitle" onclick="event.stopPropagation()">
-      <div class="modal-head">
+  <div id="quoteMenuModalBackdrop" class="app-modal-backdrop hidden" onclick="closeQuoteMenuModal()">
+    <div class="app-modal quote-catalog-app-modal" role="dialog" aria-modal="true" aria-labelledby="quoteMenuModalTitle" onclick="event.stopPropagation()">
+      <div class="app-modal-head">
         <div>
           <strong id="quoteMenuModalTitle">Catalogo de platillos</strong>
           <div class="muted">Edita precios y descripciones para el menu rapido de cotizaciones.</div>
         </div>
         <button onclick="closeQuoteMenuModal()">Cerrar</button>
       </div>
-      <div class="modal-body">
+      <div class="app-modal-body">
         <div class="quote-menu-editor">
           <div class="quote-menu-editor-head">
             <div>
@@ -3960,16 +3962,16 @@ function pageHtml() {
       </div>
     </div>
   </div>
-  <div id="quoteEventModalBackdrop" class="modal-backdrop hidden" onclick="closeQuoteEventModal()">
-    <div class="modal reservation-edit-modal" role="dialog" aria-modal="true" aria-labelledby="quoteEventModalTitle" onclick="event.stopPropagation()">
-      <div class="modal-head">
+  <div id="quoteEventModalBackdrop" class="app-modal-backdrop hidden" onclick="closeQuoteEventModal()">
+    <div class="app-modal reservation-edit-app-modal" role="dialog" aria-modal="true" aria-labelledby="quoteEventModalTitle" onclick="event.stopPropagation()">
+      <div class="app-modal-head">
         <div>
           <strong id="quoteEventModalTitle">Apartar salon desde cotizacion</strong>
           <div id="quoteEventModalSubtitle" class="muted"></div>
         </div>
         <button onclick="closeQuoteEventModal()">Cerrar</button>
       </div>
-      <div class="modal-body">
+      <div class="app-modal-body">
         <div class="reservation-edit-grid">
           <label>Fecha evento<input id="quoteEventModalDate" type="date" onchange="renderEventAvailability('quote')"></label>
           <label>Salon<select id="quoteEventModalHall" onchange="renderEventAvailability('quote')"></select></label>
@@ -3993,16 +3995,16 @@ function pageHtml() {
       </div>
     </div>
   </div>
-  <div id="eventDetailModalBackdrop" class="modal-backdrop hidden" onclick="closeEventDetailModal()">
-    <div class="modal reservation-edit-modal" role="dialog" aria-modal="true" aria-labelledby="eventDetailTitle" onclick="event.stopPropagation()">
-      <div class="modal-head">
+  <div id="eventDetailModalBackdrop" class="app-modal-backdrop hidden" onclick="closeEventDetailModal()">
+    <div class="app-modal reservation-edit-app-modal" role="dialog" aria-modal="true" aria-labelledby="eventDetailTitle" onclick="event.stopPropagation()">
+      <div class="app-modal-head">
         <div>
           <strong id="eventDetailTitle">Evento</strong>
           <div id="eventDetailSubtitle" class="muted"></div>
         </div>
         <button onclick="closeEventDetailModal()">Cerrar</button>
       </div>
-      <div id="eventDetailBody" class="modal-body"></div>
+      <div id="eventDetailBody" class="app-modal-body"></div>
     </div>
   </div>
   <script>
@@ -4010,8 +4012,7 @@ function pageHtml() {
       hotelRateOptions: ${JSON.stringify(HOTEL_RATE_OPTIONS)}
     };
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="/public/dashboard.js"></script>
+  <script src="/public/dashboard.js?v=${DASHBOARD_ASSET_VERSION}"></script>
 </body>
 </html>`;
 }
