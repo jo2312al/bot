@@ -66,6 +66,9 @@ const {
   handleRoomPreassignmentRoute
 } = require("./dashboard/routes/roomPreassignmentRoutes");
 const {
+  handleRoomBlockRoute
+} = require("./dashboard/routes/roomBlockRoutes");
+const {
   EVENT_HALLS,
   getEventVoucher,
   getQuotation,
@@ -4233,54 +4236,25 @@ const server =
     }
 
     if (
-      req.method === "GET"
+      (
+        req.method === "GET"
+        ||
+        req.method === "POST"
+      )
       &&
       url.pathname === "/api/room-blocks"
     ) {
-      try {
-        sendJson(res, 200, {
-          ok:
-            true,
-          blocks:
-            readRoomBlocks()
+      const handled =
+        await handleRoomBlockRoute(req, res, url, {
+          readBody,
+          readRoomBlocks,
+          saveRoomBlock,
+          sendJson
         });
-      } catch (error) {
-        sendJson(res, 500, {
-          ok:
-            false,
-          error:
-            error.message || "No se pudieron cargar bloqueos"
-        });
+
+      if (handled) {
+        return;
       }
-
-      return;
-    }
-
-    if (
-      req.method === "POST"
-      &&
-      url.pathname === "/api/room-blocks"
-    ) {
-      try {
-        const body =
-          await readBody(req);
-
-        sendJson(res, 200, {
-          ok:
-            true,
-          block:
-            saveRoomBlock(body)
-        });
-      } catch (error) {
-        sendJson(res, 400, {
-          ok:
-            false,
-          error:
-            error.message || "No se pudo guardar el bloqueo"
-        });
-      }
-
-      return;
     }
 
     if (
