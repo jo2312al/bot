@@ -95,7 +95,7 @@ let dashboardSearchService =
 const PORT =
   Number(process.env.DASHBOARD_PORT || 3333);
 const DASHBOARD_ASSET_VERSION =
-  "stitch-room-type-colors-20260707";
+  "report-visual-dashboard-20260707";
 const {
   deleteRoomPreassignment,
   readRoomPreassignments,

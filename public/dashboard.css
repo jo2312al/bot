@@ -1012,8 +1012,9 @@ label {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff8f6;
-  padding: 12px;
+  padding: 16px;
   min-width: 0;
+  overflow: hidden;
 }
 .report-card.wide {
   grid-column: 1 / -1;
@@ -1047,15 +1048,155 @@ label {
   margin-bottom: 14px;
 }
 .report-kpi {
+  position: relative;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff1ec;
-  padding: 10px;
+  padding: 14px 14px 14px 54px;
+  min-height: 104px;
+  overflow: hidden;
 }
 .report-kpi strong {
   display: block;
-  font-size: 24px;
+  font-size: 28px;
   margin-top: 4px;
+  color: var(--accent);
+}
+.report-kpi small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.25;
+  margin-top: 4px;
+}
+.report-kpi-icon {
+  position: absolute;
+  left: 12px;
+  top: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: var(--gold);
+  color: var(--gold-ink);
+}
+.report-kpi-icon .material-symbols-outlined {
+  font-size: 20px;
+}
+.report-occupancy-chart {
+  align-items: end;
+  background: linear-gradient(180deg, #fff8f6, #fff1ec);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 5px;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(18px, 1fr);
+  height: 190px;
+  margin-top: 12px;
+  overflow-x: auto;
+  padding: 14px 12px 10px;
+}
+.report-day-bar {
+  align-items: center;
+  display: grid;
+  gap: 6px;
+  grid-template-rows: 1fr auto;
+  height: 100%;
+  min-width: 18px;
+}
+.report-day-track {
+  align-items: end;
+  background: rgba(68, 42, 34, .08);
+  border-radius: 999px;
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+  width: 100%;
+}
+.report-day-track span {
+  background: linear-gradient(180deg, var(--gold), var(--accent-soft));
+  border-radius: 999px;
+  display: block;
+  min-height: 3px;
+  width: 100%;
+}
+.report-day-bar strong {
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+}
+.report-ranking,
+.report-source-bars {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+.report-rank-row,
+.report-source-row {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(92px, .35fr) minmax(0, 1fr) auto;
+}
+.report-source-row {
+  grid-template-columns: minmax(120px, .45fr) minmax(0, 1fr);
+}
+.report-rank-row span,
+.report-source-row span {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+}
+.report-progress {
+  background: rgba(68, 42, 34, .08);
+  border-radius: 999px;
+  height: 12px;
+  overflow: hidden;
+}
+.report-progress span {
+  background: linear-gradient(90deg, var(--gold), var(--accent-soft));
+  border-radius: 999px;
+  display: block;
+  height: 100%;
+  min-width: 4px;
+}
+.report-service-cards,
+.report-event-summary {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  margin-top: 12px;
+}
+.report-service-card,
+.report-event-summary div {
+  background: #faf9f6;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+.report-service-card.urgent {
+  background: #fff1ec;
+  border-color: #d8b4b4;
+}
+.report-service-card strong,
+.report-service-card span,
+.report-service-card small,
+.report-event-summary span,
+.report-event-summary strong {
+  display: block;
+}
+.report-service-card span,
+.report-service-card small,
+.report-event-summary span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.report-service-card b,
+.report-event-summary strong {
+  color: var(--accent);
+  font-size: 20px;
 }
 .room-event-form {
   display: grid;
@@ -1844,6 +1985,19 @@ body.app-modal-open {
   }
   .app-modal-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .report-kpis,
+  .report-grid,
+  .report-service-cards,
+  .report-event-summary {
+    grid-template-columns: 1fr;
+  }
+  .report-rank-row,
+  .report-source-row {
+    grid-template-columns: 1fr;
+  }
+  .report-occupancy-chart {
+    height: 150px;
   }
   textarea {
     min-height: 280px;
