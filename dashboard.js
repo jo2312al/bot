@@ -95,7 +95,7 @@ let dashboardSearchService =
 const PORT =
   Number(process.env.DASHBOARD_PORT || 3333);
 const DASHBOARD_ASSET_VERSION =
-  "report-visual-dashboard-20260707";
+  "search-refresh-actions-20260707";
 const {
   deleteRoomPreassignment,
   readRoomPreassignments,
@@ -3168,8 +3168,8 @@ function pageHtml() {
         <p id="pageSubtitle">Resumen de operaciones y estado actual del hotel.</p>
       </div>
       <div class="hero-actions">
-        <button onclick="runGlobalSearch()"><span class="material-symbols-outlined">search</span><span>Buscar</span></button>
-        <button class="primary" onclick="loadDashboard()"><span class="material-symbols-outlined">refresh</span><span>Actualizar</span></button>
+        <button onclick="openGlobalSearch()" data-global-search-trigger><span class="material-symbols-outlined">search</span><span>Buscar</span></button>
+        <button class="primary" onclick="loadDashboard()" data-dashboard-refresh><span class="material-symbols-outlined">refresh</span><span>Actualizar</span></button>
       </div>
     </section>
 
@@ -3194,7 +3194,7 @@ function pageHtml() {
             <strong>Vista de hoy</strong><button class="help-button" onclick="openHelp('today')" title="Ayuda">?</button>
             <div class="muted">Resumen rapido para recepcion: llegadas, ocupacion, eventos, pagos y bloqueos activos.</div>
           </div>
-          <button class="primary" onclick="loadDashboard()">Actualizar</button>
+          <button class="primary" onclick="loadDashboard()" data-dashboard-refresh>Actualizar</button>
         </div>
         <div id="todayView"></div>
       </section>
@@ -3271,7 +3271,7 @@ function pageHtml() {
           <strong>Proximas reservas por fecha</strong><button class="help-button" onclick="openHelp('upcoming')" title="Ayuda">?</button>
           <div id="updatedAt" class="muted"></div>
         </div>
-        <button class="primary" onclick="loadDashboard()">Actualizar</button>
+        <button class="primary" onclick="loadDashboard()" data-dashboard-refresh>Actualizar</button>
       </div>
       <div id="occupancy"></div>
     </section>

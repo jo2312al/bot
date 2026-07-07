@@ -11,6 +11,7 @@ let pendingPreassignRoom = null;
 let selectedPreassignCandidateKey = "";
 let activeModalIsoDate = "";
 let reportsData = null;
+let dashboardLoading = false;
 let quoteSectionsData = [
   {
     title: 'Hospedaje',
@@ -301,67 +302,94 @@ function renderBotStatuses(instances) {
   }).join('');
 }
 
+function setDashboardRefreshState(isLoading, message) {
+  dashboardLoading = isLoading;
+  document.querySelectorAll('[data-dashboard-refresh]').forEach(button => {
+    button.disabled = isLoading;
+    button.classList.toggle('is-loading', isLoading);
+  });
+
+  if (typeof updatedAt !== 'undefined' && updatedAt) {
+    updatedAt.textContent = message || (isLoading ? 'Actualizando...' : updatedAt.textContent);
+  }
+}
+
 async function loadDashboard() {
-  const response = await fetch('/api/summary');
-  const data = await response.json();
-  dashboardData = data;
-
-  if (!closeStart.value) {
-    closeStart.value = data.today;
-    closeEnd.value = data.today;
-    selectedStart = data.today;
-    selectedEnd = data.today;
-    calendarDate = isoToDate(data.today);
+  if (dashboardLoading) {
+    return;
   }
 
-  activeCount.textContent = data.totals.active;
-  groupReservationCount.textContent = data.totals.groupReservations;
-  todayReservationCount.textContent = data.todayReservations?.reservations || 0;
-  todayReservationRooms.textContent =
-    (data.todayReservations?.occupied || 0) +
-    '/' +
-    (data.totalRooms || 69) +
-    ' habitaciones';
-  canceledCount.textContent = data.totals.canceled;
-  limits.innerHTML = Object.entries(data.limits)
-    .map(([type, limit]) => '<span><b>' + escapeHtml(type) + '</b><b>' + limit + '</b></span>')
-    .join('');
-  updatedAt.textContent = 'Actualizado: ' + new Date(data.generatedAt).toLocaleString();
-  if (!reportMonth.value) {
-    reportMonth.value = String(data.today || '').slice(0, 7);
+  setDashboardRefreshState(true, 'Actualizando...');
+
+  try {
+    const response = await fetch('/api/summary');
+    if (!response.ok) {
+      throw new Error('HTTP ' + response.status);
+    }
+    const data = await response.json();
+    dashboardData = data;
+
+    if (!closeStart.value) {
+      closeStart.value = data.today;
+      closeEnd.value = data.today;
+      selectedStart = data.today;
+      selectedEnd = data.today;
+      calendarDate = isoToDate(data.today);
+    }
+
+    activeCount.textContent = data.totals.active;
+    groupReservationCount.textContent = data.totals.groupReservations;
+    todayReservationCount.textContent = data.todayReservations?.reservations || 0;
+    todayReservationRooms.textContent =
+      (data.todayReservations?.occupied || 0) +
+      '/' +
+      (data.totalRooms || 69) +
+      ' habitaciones';
+    canceledCount.textContent = data.totals.canceled;
+    limits.innerHTML = Object.entries(data.limits)
+      .map(([type, limit]) => '<span><b>' + escapeHtml(type) + '</b><b>' + limit + '</b></span>')
+      .join('');
+    updatedAt.textContent = 'Actualizado: ' + new Date(data.generatedAt).toLocaleString();
+    if (!reportMonth.value) {
+      reportMonth.value = String(data.today || '').slice(0, 7);
+    }
+    if (!roomEventDate.value) {
+      roomEventDate.value = data.today;
+    }
+    renderRackDashboard(data.rackStatus);
+    renderRackRoomGrid(data.rackStatus);
+    overbookingAlerts.innerHTML = renderOverbookingAlerts(data.overbookingAlerts || []);
+    todayArrivals.innerHTML = renderTodayArrivals(data.todayArrivals || []);
+    quoteMenuItems = Array.isArray(data.quotationMenu) ? data.quotationMenu : [];
+    eventHalls = Array.isArray(data.eventHalls) ? data.eventHalls : [];
+    eventBookings = Array.isArray(data.eventBookings) ? data.eventBookings : [];
+    roomBlocks = Array.isArray(data.roomBlocks) ? data.roomBlocks : [];
+    if (!blockStart.value) {
+      blockStart.value = data.today;
+      blockEnd.value = data.today;
+    }
+    renderQuoteMenuOptions();
+    renderQuoteMenuEditor();
+    renderQuoteSections();
+    renderQuotationList(data.quotations || []);
+    renderHallSelects();
+    renderEventAlerts();
+    renderEventCalendar();
+    renderEventList();
+    renderTodayView();
+    renderRoomBlocks();
+    occupancy.innerHTML = renderOccupancy(data.occupancy);
+    reservations.innerHTML = renderReservations(data.reservations);
+    renderManualCheckoutPreview();
+    updateSelectionSummary();
+    renderCalendar();
+    renderGroupReservationDetail(closeStart.value || data.today);
+    renderPreassignmentBoard();
+  } catch (error) {
+    setDashboardRefreshState(false, 'No se pudo actualizar: ' + (error.message || 'error desconocido'));
+  } finally {
+    setDashboardRefreshState(false);
   }
-  if (!roomEventDate.value) {
-    roomEventDate.value = data.today;
-  }
-  renderRackDashboard(data.rackStatus);
-  renderRackRoomGrid(data.rackStatus);
-  overbookingAlerts.innerHTML = renderOverbookingAlerts(data.overbookingAlerts || []);
-  todayArrivals.innerHTML = renderTodayArrivals(data.todayArrivals || []);
-  quoteMenuItems = Array.isArray(data.quotationMenu) ? data.quotationMenu : [];
-  eventHalls = Array.isArray(data.eventHalls) ? data.eventHalls : [];
-  eventBookings = Array.isArray(data.eventBookings) ? data.eventBookings : [];
-  roomBlocks = Array.isArray(data.roomBlocks) ? data.roomBlocks : [];
-  if (!blockStart.value) {
-    blockStart.value = data.today;
-    blockEnd.value = data.today;
-  }
-  renderQuoteMenuOptions();
-  renderQuoteMenuEditor();
-  renderQuoteSections();
-  renderQuotationList(data.quotations || []);
-  renderHallSelects();
-  renderEventAlerts();
-  renderEventCalendar();
-  renderEventList();
-  renderTodayView();
-  renderRoomBlocks();
-  occupancy.innerHTML = renderOccupancy(data.occupancy);
-  reservations.innerHTML = renderReservations(data.reservations);
-  renderManualCheckoutPreview();
-  updateSelectionSummary();
-  renderCalendar();
-  renderGroupReservationDetail(closeStart.value || data.today);
-  renderPreassignmentBoard();
 }
 
 function renderTodayView() {
@@ -530,6 +558,25 @@ function handleGlobalSearchKey(event) {
   }
 }
 
+function openGlobalSearch() {
+  const searchPanel = document.querySelector('.global-search-panel');
+  if (searchPanel) {
+    searchPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    searchPanel.classList.add('search-panel-active');
+    window.setTimeout(() => searchPanel.classList.remove('search-panel-active'), 1400);
+  }
+
+  globalSearchResults.classList.remove('hidden');
+  if (!globalSearchInput.value.trim()) {
+    globalSearchResults.innerHTML = '<div class="muted">Escribe nombre, telefono, folio, habitacion, evento o cotizacion y presiona Buscar.</div>';
+    globalSearchInput.focus();
+    return;
+  }
+
+  globalSearchInput.focus();
+  runGlobalSearch();
+}
+
 async function runGlobalSearch() {
   const query = globalSearchInput.value.trim();
 
@@ -542,15 +589,19 @@ async function runGlobalSearch() {
   globalSearchResults.classList.remove('hidden');
   globalSearchResults.innerHTML = '<div class="muted">Buscando...</div>';
 
-  const response = await fetch('/api/search?q=' + encodeURIComponent(query));
-  const data = await response.json();
+  try {
+    const response = await fetch('/api/search?q=' + encodeURIComponent(query));
+    const data = await response.json();
 
-  if (!data.ok) {
-    globalSearchResults.innerHTML = '<div class="muted">' + escapeHtml(data.error || 'No se pudo buscar') + '</div>';
-    return;
+    if (!data.ok) {
+      globalSearchResults.innerHTML = '<div class="muted">' + escapeHtml(data.error || 'No se pudo buscar') + '</div>';
+      return;
+    }
+
+    renderGlobalSearchResults(data.results || {});
+  } catch (error) {
+    globalSearchResults.innerHTML = '<div class="muted">No se pudo buscar: ' + escapeHtml(error.message || '') + '</div>';
   }
-
-  renderGlobalSearchResults(data.results || {});
 }
 
 function renderGlobalSearchResults(results) {

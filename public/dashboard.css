@@ -320,6 +320,12 @@ main {
   background:
     linear-gradient(135deg, rgba(254, 214, 91, .12), transparent 34%),
     var(--panel);
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.global-search-panel.search-panel-active {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(254, 214, 91, .2), 0 8px 28px var(--shadow-warm);
+  transform: translateY(-2px);
 }
 .search-controls {
   display: flex;
@@ -393,6 +399,12 @@ button:hover {
 button:disabled {
   cursor: wait;
   opacity: .65;
+}
+button.is-loading .material-symbols-outlined {
+  animation: spinIcon .9s linear infinite;
+}
+@keyframes spinIcon {
+  to { transform: rotate(360deg); }
 }
 button.primary {
   background: var(--accent);
