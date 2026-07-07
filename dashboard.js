@@ -95,7 +95,7 @@ let dashboardSearchService =
 const PORT =
   Number(process.env.DASHBOARD_PORT || 3333);
 const DASHBOARD_ASSET_VERSION =
-  "heritage-hearth-20260707";
+  "stitch-warm-gold-20260707";
 const {
   deleteRoomPreassignment,
   readRoomPreassignments,
@@ -3128,26 +3128,50 @@ function pageHtml() {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=Literata:wght@600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="/public/dashboard.css?v=${DASHBOARD_ASSET_VERSION}" rel="stylesheet">
 </head>
 <body>
-  <header>
-    <h1>Hotel Villa Margaritas - Dashboard del bot</h1>
-    <div class="muted">Reservas, ocupacion por fecha y cancelacion de folios</div>
+  <header class="mobile-topbar">
+    <div class="brand-mark">VM</div>
+    <div>
+      <h1>Villa Margaritas</h1>
+      <div class="muted">Heritage Boutique Hotel</div>
+    </div>
   </header>
   <main>
     <nav class="view-tabs">
-      <button id="tab-today" onclick="showView('today')">Hoy</button>
-      <button id="tab-main" class="active" onclick="showView('main')">Principal</button>
-      <button id="tab-calendar" onclick="showView('calendar')">Calendario</button>
-      <button id="tab-preassign" onclick="showView('preassign')">Preasignar</button>
-      <button id="tab-reservations" onclick="showView('reservations')">Reservas</button>
-      <button id="tab-quotes" onclick="showView('quotes')">Cotizaciones</button>
-      <button id="tab-events" onclick="showView('events')">Eventos</button>
-      <button id="tab-rack" onclick="showView('rack')">Rack</button>
-      <button id="tab-reports" onclick="showView('reports')">Reportes</button>
+      <div class="sidebar-brand">
+        <div class="brand-mark">VM</div>
+        <div>
+          <strong>Villa Margaritas</strong>
+          <span>Heritage Boutique Hotel</span>
+        </div>
+      </div>
+      <button class="nav-new-reservation" onclick="showView('reservations')"><span class="material-symbols-outlined">add</span><span>Nueva Reserva</span></button>
+      <button id="tab-today" onclick="showView('today')"><span class="material-symbols-outlined">today</span><span>Hoy</span></button>
+      <button id="tab-main" class="active" onclick="showView('main')"><span class="material-symbols-outlined">dashboard</span><span>Principal</span></button>
+      <button id="tab-calendar" onclick="showView('calendar')"><span class="material-symbols-outlined">calendar_month</span><span>Calendario</span></button>
+      <button id="tab-preassign" onclick="showView('preassign')"><span class="material-symbols-outlined">assignment_ind</span><span>Preasignar</span></button>
+      <button id="tab-reservations" onclick="showView('reservations')"><span class="material-symbols-outlined">book_online</span><span>Reservas</span></button>
+      <button id="tab-quotes" onclick="showView('quotes')"><span class="material-symbols-outlined">request_quote</span><span>Cotizaciones</span></button>
+      <button id="tab-events" onclick="showView('events')"><span class="material-symbols-outlined">event</span><span>Eventos</span></button>
+      <button id="tab-rack" onclick="showView('rack')"><span class="material-symbols-outlined">grid_view</span><span>Rack</span></button>
+      <button id="tab-reports" onclick="showView('reports')"><span class="material-symbols-outlined">analytics</span><span>Reportes</span></button>
     </nav>
+
+    <section class="page-hero">
+      <div>
+        <div class="eyebrow">Dashboard operativo</div>
+        <h2 id="pageTitle">Vista Principal</h2>
+        <p id="pageSubtitle">Resumen de operaciones y estado actual del hotel.</p>
+      </div>
+      <div class="hero-actions">
+        <button onclick="runGlobalSearch()"><span class="material-symbols-outlined">search</span><span>Buscar</span></button>
+        <button class="primary" onclick="loadDashboard()"><span class="material-symbols-outlined">refresh</span><span>Actualizar</span></button>
+      </div>
+    </section>
 
     <section class="panel global-search-panel">
       <div class="toolbar">

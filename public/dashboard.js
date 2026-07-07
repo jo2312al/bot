@@ -495,6 +495,27 @@ function showView(name) {
     }
   });
 
+  const pageCopy = {
+    today: ['Vista de hoy', 'Resumen rapido para recepcion: llegadas, salidas, eventos, pagos y bloqueos activos.'],
+    main: ['Vista Principal', 'Resumen de operaciones y estado actual del hotel.'],
+    calendar: ['Calendario de reservas', 'Ocupacion diaria, cierres de fechas y desglose operativo por dia.'],
+    preassign: ['Preasignacion de habitaciones', 'Prepara llegadas, continuaciones y huespedes sin reservacion antes de recibirlos.'],
+    reservations: ['Reservas', 'Captura manual, importacion CSV, notas internas y cancelacion de folios.'],
+    quotes: ['Cotizaciones', 'Documentos visuales o formales para grupos, salones, menus y hospedaje.'],
+    events: ['Eventos', 'Calendario de salones, pagos, comprobantes y seguimiento de eventos.'],
+    rack: ['Rack de habitaciones', 'Lectura de rack, habitaciones por piso y bloqueos operativos.'],
+    reports: ['Reportes operativos', 'Ocupacion, rotacion, mantenimiento, fuentes y eventos del mes.']
+  };
+  const [title, subtitle] = pageCopy[name] || pageCopy.main;
+
+  if (typeof pageTitle !== 'undefined') {
+    pageTitle.textContent = title;
+  }
+
+  if (typeof pageSubtitle !== 'undefined') {
+    pageSubtitle.textContent = subtitle;
+  }
+
   if (name === 'reports') {
     loadReports();
   }
