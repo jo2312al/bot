@@ -25,6 +25,9 @@
   --room-clean: #c8d4ce;
   --room-dirty: #d8b4b4;
   --room-blocked: #c0c0c0;
+  --room-king: #ffdbce;
+  --room-double: #c8d4ce;
+  --room-suite: #fed65b;
   --shadow-warm: rgba(93, 64, 55, 0.08);
 }
 * { box-sizing: border-box; }
@@ -730,20 +733,20 @@ th {
   border-color: rgba(68, 42, 34, .2);
 }
 .rack-room.available {
-  background: var(--room-clean);
-  border-color: rgba(68, 42, 34, .12);
+  background: #faf9f6;
+  border-color: rgba(68, 42, 34, .14);
 }
 .rack-room.available-type-king {
-  background: var(--room-clean);
-  border-color: rgba(68, 42, 34, .12);
+  background: var(--room-king);
+  border-color: rgba(68, 42, 34, .16);
 }
 .rack-room.available-type-double {
-  background: var(--room-clean);
-  border-color: rgba(68, 42, 34, .12);
+  background: var(--room-double);
+  border-color: rgba(68, 42, 34, .14);
 }
 .rack-room.available-type-suite {
-  background: var(--room-clean);
-  border-color: rgba(68, 42, 34, .12);
+  background: var(--room-suite);
+  border-color: rgba(68, 42, 34, .18);
 }
 .rack-room.blocked {
   background: var(--room-blocked);
