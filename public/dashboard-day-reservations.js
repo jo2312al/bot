@@ -99,7 +99,7 @@ function openDayModal(isoDate) {
           '</div>' +
           '<div class="day-reservation-actions">' +
             renderNoteEditor(item) +
-            '<div><button class="compact" onclick="openReservationArrival(' + index + ')">' + (item.arrivalAt ? 'Ver llegada' : 'Registrar llegada') + '</button> <button class="compact" onclick="openReservationEdit(' + index + ')">Editar</button> <button class="danger compact" onclick="confirmDeleteReservation(' + index + ')">Eliminar</button></div>' +
+            '<div><button class="compact" onclick="openReservationArrival(' + index + ')">' + (item.arrivalAt ? 'Ver llegada' : 'Registrar llegada') + '</button> <button class="compact" onclick="openReservationEdit(' + index + ')">Editar</button> <button class="compact" onclick="resendReservationToGroupByKey(\'' + escapeJs(getReservationClientKey(item)) + '\')">Reenviar</button> <button class="danger compact" onclick="confirmDeleteReservation(' + index + ')">Eliminar</button></div>' +
           '</div>' +
         '</article>';
       }).join('') +
@@ -194,8 +194,8 @@ function openReservationArrival(index) {
 }
 
 function openReservationArrivalByKey(sourceKey) {
-  const reservation = (dashboardData?.groupReservations || [])
-    .find(item => item.sourceKey === sourceKey);
+  const reservation =
+    findReservationByClientKey(sourceKey);
 
   openReservationArrivalFor(reservation);
 }
@@ -368,4 +368,3 @@ async function deleteSelectedReservation() {
     openDayModal(activeModalIsoDate);
   }
 }
-

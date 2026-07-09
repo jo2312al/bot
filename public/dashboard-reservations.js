@@ -45,16 +45,60 @@ function renderReservations(rows) {
   }
 
   return '<div class="table-wrap"><table><thead><tr><th>Folio</th><th>Cliente</th><th>Habitacion</th><th>Fechas</th><th>Nota</th><th>Estado</th><th></th></tr></thead><tbody>' +
-    rows.map(row => '<tr>' +
+    rows.map(row => {
+      const reservationKey =
+        getReservationClientKey(row);
+
+      return '<tr>' +
       '<td>#' + escapeHtml(row.folio || '') + '</td>' +
       '<td>' + escapeHtml(row.nombre || 'Sin nombre') + '<br><span class="muted">' + escapeHtml(row.telefono || '') + '</span></td>' +
       '<td>' + escapeHtml(row.habitacion || '') + '<br><span class="muted">' + escapeHtml(row.habitaciones || 1) + ' hab(s)</span>' + (row.servicioEspecial ? '<br><span class="muted">' + escapeHtml(row.servicioEspecial) + '</span>' : '') + '</td>' +
       '<td>' + escapeHtml((row.dates || [row.fecha]).join(', ')) + '<br><span class="muted">' + (row.noches || 1) + ' noche(s)</span></td>' +
       '<td>' + renderNoteEditor(row) + '</td>' +
       '<td><span class="pill ' + escapeHtml(row.status || '') + '">' + escapeHtml(row.status || 'activa') + '</span></td>' +
-      '<td><button class="compact" onclick="openReservationArrivalByKey(\'' + escapeJs(row.sourceKey || (row.folio ? 'folio:' + row.folio : '')) + '\')">' + (row.arrivalAt ? 'Ver llegada' : 'Registrar llegada') + '</button></td>' +
-    '</tr>').join('') +
+      '<td><div class="summary-chips">' +
+        '<button class="compact" onclick="openReservationArrivalByKey(\'' + escapeJs(reservationKey) + '\')">' + (row.arrivalAt ? 'Ver llegada' : 'Registrar llegada') + '</button>' +
+        '<button class="compact" onclick="resendReservationToGroupByKey(\'' + escapeJs(reservationKey) + '\')">Reenviar</button>' +
+      '</div></td>' +
+    '</tr>';
+    }).join('') +
   '</tbody></table></div>';
+}
+
+function getReservationClientKey(reservation) {
+  return reservation?.sourceKey || (reservation?.folio ? 'folio:' + reservation.folio : '');
+}
+
+function findReservationByClientKey(key) {
+  const normalized =
+    String(key || '').trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  return [
+    ...(dashboardData?.groupReservations || []),
+    ...(dashboardData?.reservations || [])
+  ].find(reservation =>
+    getReservationClientKey(reservation) === normalized
+    ||
+    reservation.sourceKey === normalized
+    ||
+    (reservation.folio && normalized === 'folio:' + reservation.folio)
+  );
+}
+
+function resendReservationToGroupByKey(key) {
+  const reservation =
+    findReservationByClientKey(key);
+
+  if (!reservation) {
+    alert('No se encontro la reserva para reenviar.');
+    return;
+  }
+
+  openGroupSendConfirm([reservation], 'reenviada');
 }
 
 function renderNoteEditor(row) {
@@ -310,4 +354,3 @@ function downloadTemplateCsv() {
   link.click();
   URL.revokeObjectURL(link.href);
 }
-

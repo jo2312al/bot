@@ -439,11 +439,14 @@ function renderTodayCard(title, body) {
 }
 
 function renderArrivalMiniItem(reservation) {
-  return '<div class="mini-item">' +
+  const reservationKey =
+    getReservationClientKey(reservation);
+
+  return '<button class="mini-item search-result-button" onclick="openReservationArrivalByKey(\'' + escapeJs(reservationKey) + '\')">' +
     '<strong>' + escapeHtml(reservation.nombre || reservation.name || 'Reserva') + '</strong>' +
     '<div class="muted">' + escapeHtml(reservation.habitaciones || 1) + ' hab · ' + escapeHtml(reservation.tipo || '-') + ' · ' + escapeHtml(reservation.hora || '-') + '</div>' +
     '<div>' + escapeHtml(reservation.telefono || '') + '</div>' +
-  '</div>';
+  '</button>';
 }
 
 function getReservationCheckoutIso(reservation) {
@@ -552,4 +555,3 @@ function showView(name) {
     renderPreassignmentBoard();
   }
 }
-

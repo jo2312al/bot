@@ -22,7 +22,10 @@ function renderTodayArrivals(rows) {
   return '<div class="arrival-list">' +
     rows.map(row => {
       const arrival = getReservationArrivalState(row);
-      return '<div class="arrival-item ' + arrival.className + '">' +
+      const reservationKey =
+        getReservationClientKey(row);
+
+      return '<button class="arrival-item ' + arrival.className + '" onclick="openReservationArrivalByKey(\'' + escapeJs(reservationKey) + '\')">' +
         '<div>' +
           '<strong>' + escapeHtml(row.nombre || 'Sin nombre') + '</strong>' +
           '<div class="muted">' +
@@ -33,7 +36,7 @@ function renderTodayArrivals(rows) {
           (row.note ? '<div class="muted">Nota: ' + escapeHtml(row.note) + '</div>' : '') +
         '</div>' +
         '<span class="pill ' + arrival.className + '">' + arrival.label + '</span>' +
-      '</div>';
+      '</button>';
     }).join('') +
   '</div>';
 }
@@ -137,4 +140,3 @@ function getReservationTimeDisplay(value) {
     ? value + ' (sistema ' + parsed.display + ')'
     : value + ' (hora no detectada)';
 }
-

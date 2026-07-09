@@ -975,6 +975,13 @@ label {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
+  width: 100%;
+  text-align: left;
+  color: var(--text);
+  font-weight: 400;
+}
+.arrival-item:hover {
+  border-color: var(--accent);
 }
 .arrival-item.arrived,
 .day-reservation-item.arrived {
