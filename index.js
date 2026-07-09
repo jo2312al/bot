@@ -52,10 +52,9 @@ const {
   "./services/botStatusService"
 );
 const {
-  readPendingReservationGroupNotifications,
-  markReservationGroupNotificationSent
+  createGroupReservationNotificationWorker
 } = require(
-  "./services/groupReservationNotificationService"
+  "./services/groupReservationNotificationWorker"
 );
 
 const BOT_ID =
@@ -69,6 +68,13 @@ const ACTIVE_HOURS =
 const BOT_TIME_ZONE =
   process.env.BOT_TIME_ZONE || "America/Mexico_City";
 
+const groupReservationNotificationWorker =
+  createGroupReservationNotificationWorker({
+    botId: BOT_ID,
+    groupId: GROUP_ID,
+    log
+  });
+
 let reconnectTimer =
   null;
 
@@ -79,12 +85,6 @@ let isStarting =
   false;
 
 let authResetDone =
-  false;
-
-let groupNotificationTimer =
-  null;
-
-let isFlushingGroupNotifications =
   false;
 
 function getScheduleStatus() {
@@ -141,110 +141,6 @@ function updateScheduleStatus() {
   });
 
   return schedule;
-}
-
-function formatReservationGroupNotification(notification) {
-  const reservations =
-    notification.reservations || [];
-  const sourceLabels =
-    Array.from(
-      new Set(
-        reservations
-          .map(reservation =>
-            String(reservation.sourceLabel || "").trim()
-          )
-          .filter(Boolean)
-      )
-    );
-  const heading =
-    sourceLabels.length === 1 && reservations.length === 1
-      ? `🏨 ${sourceLabels[0].toUpperCase()}`
-      : sourceLabels.length === 1
-        ? `🏨 ${sourceLabels[0].toUpperCase()} (${reservations.length})`
-        : reservations.length === 1
-          ? "🏨 NUEVA RESERVA"
-          : `🏨 NUEVAS RESERVAS IMPORTADAS (${reservations.length})`;
-  const details =
-    reservations.map((reservation, index) => {
-      const dates =
-        Array.isArray(reservation.dates) && reservation.dates.length
-          ? reservation.dates.join(" al ")
-          : reservation.fecha;
-      const nights =
-        Math.max(
-          (reservation.dates || []).length - 1,
-          1
-        );
-      const lines = [
-        reservations.length > 1 ? `*${index + 1}.*` : "",
-        reservation.folio ? `🎟️ #${reservation.folio}` : "",
-        `📝 ${reservation.nombre}`,
-        `📅 ${dates}`,
-        `🌙 Noches: ${nights}`,
-        `🏨 Habitaciones: ${reservation.habitaciones || 1}`,
-        `👥 Huespedes: ${reservation.adultos || 0} adulto(s), ${reservation.ninos || 0} niño(s)`,
-        reservation.tipo ? `🛏️ ${reservation.tipo}` : "",
-        reservation.roomNumber ? `🔑 Habitacion asignada: ${reservation.roomNumber}` : "",
-        reservation.telefono ? `📞 ${reservation.telefono}` : "",
-        reservation.hora ? `⏰ ${reservation.hora}` : "",
-        reservation.tarifa ? `💰 ${reservation.tarifa}` : "",
-        reservation.mananera ? "🌅 Tarifa mañanera" : "",
-        Number(reservation.extraAmount || 0) > 0
-          ? `➕ Extra adulto(s): ${reservation.extraAdults || 0} / +$${Number(reservation.extraAmount || 0).toLocaleString("es-MX")}`
-          : "",
-        reservation.note ? `📝 Nota: ${reservation.note}` : ""
-      ];
-
-      return lines.filter(Boolean).join("\n");
-    });
-
-  return [heading, ...details].join("\n\n");
-}
-
-async function flushGroupReservationNotifications(sock) {
-  if (BOT_ID !== "principal" || isFlushingGroupNotifications) {
-    return;
-  }
-
-  isFlushingGroupNotifications = true;
-
-  try {
-    const pending =
-      readPendingReservationGroupNotifications();
-
-    for (const notification of pending) {
-      await sock.sendMessage(GROUP_ID, {
-        text: formatReservationGroupNotification(notification)
-      });
-      markReservationGroupNotificationSent(notification.id);
-      await delay(1500);
-    }
-  } catch (error) {
-    log({
-      usuario: "Sistema",
-      modulo: "Reservas",
-      accion: `No se pudo enviar reserva al grupo: ${getErrorMessage(error)}`
-    });
-  } finally {
-    isFlushingGroupNotifications = false;
-  }
-}
-
-function startGroupReservationNotificationPolling(sock) {
-  if (BOT_ID !== "principal") {
-    return;
-  }
-
-  if (groupNotificationTimer) {
-    clearInterval(groupNotificationTimer);
-  }
-
-  flushGroupReservationNotifications(sock);
-  groupNotificationTimer =
-    setInterval(
-      () => flushGroupReservationNotifications(sock),
-      5000
-    );
 }
 
 // ==========================================
@@ -545,7 +441,7 @@ async function startBot() {
           schedule: getScheduleStatus().detail
         });
 
-        startGroupReservationNotificationPolling(sock);
+        groupReservationNotificationWorker.start(sock);
 
         log({usuario: "Sistema", modulo: "Core", accion: `✅ ${BOT_LABEL} CONECTADO`});
 
@@ -559,6 +455,8 @@ async function startBot() {
         connection ===
         "close"
       ) {
+
+        groupReservationNotificationWorker.stop();
 
         log({usuario: "Sistema", modulo: "Core", accion: "❌ DESCONECTADO"});
 
