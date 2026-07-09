@@ -95,12 +95,14 @@ let dashboardSearchService =
 const PORT =
   Number(process.env.DASHBOARD_PORT || 3333);
 const DASHBOARD_ASSET_VERSION =
-  "dashboard-modules-20260709";
+  "dashboard-domain-modules-20260709";
 const DASHBOARD_SCRIPT_FILES = [
   "dashboard-core.js",
   "dashboard-search.js",
   "dashboard-reports.js",
-  "dashboard-operations.js",
+  "dashboard-arrivals.js",
+  "dashboard-quotes.js",
+  "dashboard-events.js",
   "dashboard-rack-preassign.js",
   "dashboard-calendar-reservations.js",
   "dashboard-files-utils.js"
