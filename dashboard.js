@@ -95,7 +95,16 @@ let dashboardSearchService =
 const PORT =
   Number(process.env.DASHBOARD_PORT || 3333);
 const DASHBOARD_ASSET_VERSION =
-  "search-refresh-actions-20260707";
+  "dashboard-modules-20260709";
+const DASHBOARD_SCRIPT_FILES = [
+  "dashboard-core.js",
+  "dashboard-search.js",
+  "dashboard-reports.js",
+  "dashboard-operations.js",
+  "dashboard-rack-preassign.js",
+  "dashboard-calendar-reservations.js",
+  "dashboard-files-utils.js"
+];
 const {
   deleteRoomPreassignment,
   readRoomPreassignments,
@@ -1162,6 +1171,14 @@ function staticContentType(filePath) {
   if (ext === ".svg") return "image/svg+xml";
 
   return "application/octet-stream";
+}
+
+function dashboardScriptTags() {
+  return DASHBOARD_SCRIPT_FILES
+    .map(file =>
+      `<script src="/public/${file}?v=${DASHBOARD_ASSET_VERSION}"></script>`
+    )
+    .join("\n  ");
 }
 
 function cleanPdfText(value) {
@@ -4065,7 +4082,7 @@ function pageHtml() {
       hotelRateOptions: ${JSON.stringify(HOTEL_RATE_OPTIONS)}
     };
   </script>
-  <script src="/public/dashboard.js?v=${DASHBOARD_ASSET_VERSION}"></script>
+  ${dashboardScriptTags()}
 </body>
 </html>`;
 }
