@@ -330,8 +330,8 @@ async function sendPendingReservationsToGroup() {
   }
 
   manualReservationStatus.textContent = data.count === 1
-    ? 'Reserva encolada para enviar al grupo.'
-    : data.count + ' reservas encoladas para enviar al grupo.';
+    ? 'Reserva preparada. El bot la enviara al grupo en unos segundos.'
+    : data.count + ' reservas preparadas. El bot las enviara al grupo en unos segundos.';
   closeGroupSendConfirm();
 }
 
