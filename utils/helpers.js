@@ -1,9 +1,20 @@
-function generarFolio() {
+function generarFolio(prefix = "B") {
+  const cleanPrefix =
+    String(prefix || "B")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 3)
+    ||
+    "B";
 
-  return Math.floor(
+  const number =
+    Math.floor(
     10000 +
     Math.random() * 90000
   );
+
+  return `${cleanPrefix}-${number}`;
 
 }
 

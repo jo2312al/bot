@@ -359,6 +359,8 @@ function getDatesForNights(startDisplay, nightsValue) {
 function normalizeManualReservation(input) {
   const pricedInput =
     applyReservationPricing(input);
+  const source =
+    pricedInput.source || "manual";
   const fecha =
     String(pricedInput.fecha || "").includes("-")
       ? isoToDisplayDate(pricedInput.fecha)
@@ -388,10 +390,10 @@ function normalizeManualReservation(input) {
 
   return {
     source:
-      pricedInput.source || "manual",
+      source,
     sourceKey,
     folio:
-      pricedInput.folio || sourceKey.replace("manual:", "M-").slice(0, 18),
+      pricedInput.folio || generateReservationFolio(source),
     timestamp:
       new Date().toISOString(),
     nombre:
@@ -430,6 +432,30 @@ function normalizeManualReservation(input) {
     status:
       "activa"
   };
+}
+
+function generateReservationFolio(source) {
+  const prefixes = {
+    manual: "M",
+    excel: "E",
+    bot: "B"
+  };
+  const prefix =
+    prefixes[String(source || "").toLowerCase()] || "R";
+  const time =
+    Date.now()
+      .toString(36)
+      .toUpperCase()
+      .slice(-5);
+  const random =
+    Math.random()
+      .toString(36)
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(2, 5)
+      .padEnd(3, "0");
+
+  return `${prefix}-${time}${random}`;
 }
 
 function parseCsv(text) {

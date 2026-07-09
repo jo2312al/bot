@@ -46,8 +46,31 @@ function writeQueue(rows) {
   );
 }
 
+function getReservationSourceLabel(source) {
+  const normalized =
+    String(source || "")
+      .trim()
+      .toLowerCase();
+
+  if (normalized === "manual") {
+    return "Reserva call center";
+  }
+
+  if (normalized === "bot") {
+    return "Reserva bot";
+  }
+
+  return "";
+}
+
 function cleanReservation(reservation = {}) {
+  const source =
+    String(reservation.source || "").trim();
+
   return {
+    source,
+    sourceLabel:
+      String(reservation.sourceLabel || getReservationSourceLabel(source)).trim(),
     nombre:
       String(reservation.nombre || "Sin nombre").trim(),
     telefono:

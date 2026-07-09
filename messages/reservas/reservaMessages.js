@@ -56,7 +56,7 @@ function reservaGrupo({
       ? `\n${mensajeTarifa}`
       : "";
 
-  return `${requiereAnticipo ? "🏨 NUEVA RESERVA PENDIENTE DE ANTICIPO" : "🏨 NUEVA RESERVA"}
+  return `${requiereAnticipo ? "🏨 RESERVA BOT PENDIENTE DE ANTICIPO" : "🏨 RESERVA BOT"}
 
 🎟️ #${folio}
 📝 ${data.nombre}

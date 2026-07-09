@@ -146,10 +146,24 @@ function updateScheduleStatus() {
 function formatReservationGroupNotification(notification) {
   const reservations =
     notification.reservations || [];
+  const sourceLabels =
+    Array.from(
+      new Set(
+        reservations
+          .map(reservation =>
+            String(reservation.sourceLabel || "").trim()
+          )
+          .filter(Boolean)
+      )
+    );
   const heading =
-    reservations.length === 1
-      ? "🏨 NUEVA RESERVA"
-      : `🏨 NUEVAS RESERVAS IMPORTADAS (${reservations.length})`;
+    sourceLabels.length === 1 && reservations.length === 1
+      ? `🏨 ${sourceLabels[0].toUpperCase()}`
+      : sourceLabels.length === 1
+        ? `🏨 ${sourceLabels[0].toUpperCase()} (${reservations.length})`
+        : reservations.length === 1
+          ? "🏨 NUEVA RESERVA"
+          : `🏨 NUEVAS RESERVAS IMPORTADAS (${reservations.length})`;
   const details =
     reservations.map((reservation, index) => {
       const dates =
