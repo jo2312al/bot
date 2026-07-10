@@ -2436,6 +2436,94 @@ function getReports({ month } = {}) {
   return getFallbackReports(range);
 }
 
+function normalizeAuditDate(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))
+    ? String(value)
+    : getMexicoTodayIso();
+}
+
+function getAuditReports({ date } = {}) {
+  const auditDate = normalizeAuditDate(date);
+
+  if (!mysql.ensureSchema()) {
+    const displayDate = isoToDisplayDate(auditDate);
+    const stays = readCalendarReservations().filter(reservation =>
+      Array.isArray(reservation.dates) && reservation.dates.includes(displayDate)
+    ).map(reservation => ({
+      room: reservation.roomNumber || "",
+      guestName: reservation.nombre || "",
+      startDate: reservation.fecha || "",
+      endDate: reservation.dates?.[reservation.dates.length - 1] || "",
+      roomType: reservation.tipo || "",
+      pax: Number(reservation.adultos || 0) + Number(reservation.ninos || 0),
+      rate: reservation.tarifa || "",
+      extras: 0
+    }));
+    return { mode: "fallback", date: auditDate, rents: stays, balances: [], movements: [] };
+  }
+
+  return {
+    mode: "mysql",
+    date: auditDate,
+    rents: mysql.queryJson(`
+      SELECT JSON_OBJECT(
+        'room', COALESCE(room.room_number, ''), 'guestName', guest.name,
+        'startDate', DATE_FORMAT(reservation.start_date, '%d/%m/%Y'),
+        'endDate', DATE_FORMAT(MAX(stay.stay_date), '%d/%m/%Y'),
+        'roomType', COALESCE(room_type.name, ''),
+        'pax', reservation.adults_count + reservation.children_count,
+        'rate', reservation.rate_text,
+        'extras', COALESCE(SUM(CASE WHEN DATE(movement.occurred_at) = ${mysql.quote(auditDate)} THEN movement.charge_amount ELSE 0 END), 0)
+      )
+      FROM reservations reservation
+      JOIN guests guest ON guest.id = reservation.guest_id
+      JOIN reservation_dates stay ON stay.reservation_id = reservation.id AND stay.stay_date = ${mysql.quote(auditDate)}
+      LEFT JOIN rooms room ON room.id = reservation.assigned_room_id
+      LEFT JOIN room_types room_type ON room_type.id = reservation.room_type_id
+      LEFT JOIN checkins checkin ON checkin.reservation_id = reservation.id
+      LEFT JOIN account_movements movement ON movement.checkin_id = checkin.id
+      WHERE reservation.status != 'cancelada'
+      GROUP BY reservation.id, room.room_number, guest.name, reservation.start_date, room_type.name, reservation.adults_count, reservation.children_count, reservation.rate_text
+      ORDER BY room.room_number, guest.name;
+    `),
+    balances: mysql.queryJson(`
+      SELECT JSON_OBJECT(
+        'room', checkin.room_number_snapshot, 'guestName', checkin.guest_name_snapshot,
+        'startDate', DATE_FORMAT(reservation.start_date, '%d/%m/%Y'),
+        'endDate', DATE_FORMAT(MAX(stay.stay_date), '%d/%m/%Y'),
+        'nights', COUNT(DISTINCT stay.stay_date), 'roomType', COALESCE(room_type.name, ''),
+        'pax', COALESCE(reservation.adults_count, 0) + COALESCE(reservation.children_count, 0),
+        'rate', COALESCE(reservation.rate_text, ''),
+        'balance', COALESCE(SUM(movement.charge_amount - movement.payment_amount), 0),
+        'paymentMethod', COALESCE(MAX(NULLIF(movement.payment_method, '')), '')
+      )
+      FROM checkins checkin
+      LEFT JOIN reservations reservation ON reservation.id = checkin.reservation_id
+      LEFT JOIN reservation_dates stay ON stay.reservation_id = reservation.id
+      LEFT JOIN rooms room ON room.id = checkin.room_id
+      LEFT JOIN room_types room_type ON room_type.id = reservation.room_type_id
+      LEFT JOIN account_movements movement ON movement.checkin_id = checkin.id AND DATE(movement.occurred_at) <= ${mysql.quote(auditDate)}
+      WHERE DATE(checkin.checked_in_at) <= ${mysql.quote(auditDate)}
+        AND (checkin.checked_out_at IS NULL OR DATE(checkin.checked_out_at) > ${mysql.quote(auditDate)})
+      GROUP BY checkin.id, checkin.room_number_snapshot, checkin.guest_name_snapshot, reservation.start_date, room_type.name, reservation.adults_count, reservation.children_count, reservation.rate_text
+      ORDER BY checkin.room_number_snapshot;
+    `),
+    movements: mysql.queryJson(`
+      SELECT JSON_OBJECT(
+        'room', movement.room_number_snapshot, 'guestName', guest.name,
+        'time', DATE_FORMAT(movement.occurred_at, '%H:%i:%s'),
+        'reference', movement.reference_code, 'concept', movement.concept,
+        'charge', movement.charge_amount, 'payment', movement.payment_amount,
+        'paymentMethod', movement.payment_method
+      )
+      FROM account_movements movement
+      JOIN guests guest ON guest.id = movement.guest_id
+      WHERE DATE(movement.occurred_at) = ${mysql.quote(auditDate)}
+      ORDER BY movement.room_number_snapshot, movement.occurred_at;
+    `)
+  };
+}
+
 function getMysqlReports(range) {
   const monthStart =
     `${range.month}-01`;
@@ -3869,6 +3957,13 @@ function pageHtml() {
           Mes
           <input id="reportMonth" type="month" onchange="loadReports()">
         </label>
+        <label>
+          Día auditoría
+          <input id="reportAuditDate" type="date">
+        </label>
+        <button onclick="printAuditReport('rents')">Imprimir sábana</button>
+        <button onclick="printAuditReport('balances')">Imprimir saldos</button>
+        <button onclick="printAuditReport('movements')">Imprimir cargos y créditos</button>
         <button onclick="downloadReportCsv('all')">CSV completo</button>
         <button onclick="downloadReportCsv('occupancy')">CSV ocupacion</button>
         <button onclick="downloadReportCsv('rotation')">CSV rotacion</button>
@@ -4358,6 +4453,19 @@ const server =
         });
       }
 
+      return;
+    }
+
+    if (
+      req.method === "GET"
+      &&
+      url.pathname === "/api/reports/audit"
+    ) {
+      try {
+        sendJson(res, 200, { ok: true, reports: getAuditReports({ date: url.searchParams.get("date") }) });
+      } catch (error) {
+        sendJson(res, 500, { ok: false, error: error.message || "No se pudieron generar los reportes de auditoría" });
+      }
       return;
     }
 

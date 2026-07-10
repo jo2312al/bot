@@ -341,3 +341,47 @@ function downloadReportCsv(type) {
   window.location.href = '/api/reports/export-csv?month=' + encodeURIComponent(month) + '&type=' + encodeURIComponent(type || 'all');
 }
 
+async function printAuditReport(type) {
+  const date = reportAuditDate.value || dashboardData?.today || new Date().toISOString().slice(0, 10);
+  const response = await fetch('/api/reports/audit?date=' + encodeURIComponent(date));
+  const data = await response.json();
+  if (!data.ok) return alert(data.error || 'No se pudo generar el reporte.');
+
+  const reports = data.reports || {};
+  const rows = type === 'rents' ? reports.rents : (type === 'balances' ? reports.balances : reports.movements);
+  const title = type === 'rents'
+    ? 'Sábana de Rentas y Extras'
+    : (type === 'balances' ? 'Lista de Huéspedes con Saldos Actuales' : 'Reporte de Cargos y Créditos por Concepto');
+  const headers = type === 'rents'
+    ? ['Hab.', 'Nombre', 'Fha. Ent.', 'Fha. Sal.', 'T. H.', 'Pax', 'Tarifa', 'Extras']
+    : (type === 'balances'
+      ? ['Hab.', 'Nombre', 'Fha. Ent.', 'Fha. Sal.', 'Noc.', 'T. H.', 'Pax', 'Tarifa', 'Saldo', 'Forma pago']
+      : ['Hab.', 'Hora', 'Referencia', 'Huésped', 'Concepto', 'Cargos', 'Créditos', 'Forma pago']);
+  const cells = row => type === 'rents'
+    ? [row.room, row.guestName, row.startDate, row.endDate, row.roomType, row.pax, row.rate, formatAuditMoney(row.extras)]
+    : (type === 'balances'
+      ? [row.room, row.guestName, row.startDate, row.endDate, row.nights, row.roomType, row.pax, row.rate, formatAuditMoney(row.balance), row.paymentMethod]
+      : [row.room, row.time, row.reference, row.guestName, row.concept, formatAuditMoney(row.charge), formatAuditMoney(row.payment), row.paymentMethod]);
+  const totalCharge = rows.reduce((sum, row) => sum + Number(row.charge || row.extras || 0), 0);
+  const totalPayment = rows.reduce((sum, row) => sum + Number(row.payment || 0), 0);
+  const displayDate = isoToDisplay(date) || date;
+  const html =
+    '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>' + escapeHtml(title) + '</title>' +
+    '<style>@page{size:letter landscape;margin:10mm}body{font-family:Arial,sans-serif;color:#111;font-size:11px}.actions{text-align:right;margin-bottom:8px}.head{display:grid;grid-template-columns:1fr 2fr 1fr;align-items:start;border-bottom:2px solid #111;padding:4px 0 10px}.head h1{font-size:18px;margin:0;text-align:center}.head h2{font-size:15px;margin:4px 0 0;text-align:center}.head .right{text-align:right}table{width:100%;border-collapse:collapse;margin-top:12px}th{font-family:Georgia,serif;font-weight:400;text-align:left;border-bottom:2px solid #111;padding:4px}td{border-bottom:1px solid #ddd;padding:3px 4px;vertical-align:top}.num{text-align:right}.total td{border-top:2px solid #111;font-weight:700}@media print{.actions{display:none}}</style>' +
+    '</head><body><div class="actions"><button onclick="window.print()">Imprimir / guardar PDF</button></div>' +
+    '<header class="head"><div><strong>Coach Guest</strong><br>Ver. 2013</div><div><h1>HOTEL VILLA MARGARITAS</h1><h2>' + escapeHtml(title) + ' del día ' + escapeHtml(displayDate) + '</h2></div><div class="right">Impreso: ' + escapeHtml(new Intl.DateTimeFormat('es-MX', { dateStyle: 'short', timeZone: 'America/Mexico_City' }).format(new Date())) + '<br>Hora: ' + escapeHtml(new Intl.DateTimeFormat('es-MX', { timeStyle: 'medium', timeZone: 'America/Mexico_City' }).format(new Date())) + '</div></header>' +
+    '<table><thead><tr>' + headers.map(header => '<th>' + escapeHtml(header) + '</th>').join('') + '</tr></thead><tbody>' +
+    (rows.length ? rows.map(row => '<tr>' + cells(row).map((cell, index) => '<td class="' + ((type === 'movements' && index >= 5) || (type !== 'movements' && index >= 6) ? 'num' : '') + '">' + escapeHtml(cell === undefined || cell === null ? '' : cell) + '</td>').join('') + '</tr>').join('') : '<tr><td colspan="' + headers.length + '">Sin datos disponibles para este día.</td></tr>') +
+    '<tr class="total"><td colspan="' + Math.max(headers.length - 2, 1) + '">Totales (' + rows.length + ' registros)</td><td class="num">' + (type === 'movements' || type === 'rents' ? formatAuditMoney(totalCharge) : '') + '</td><td class="num">' + (type === 'movements' ? formatAuditMoney(totalPayment) : '') + '</td></tr>' +
+    '</tbody></table></body></html>';
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) return alert('Permite ventanas emergentes para imprimir.');
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => printWindow.print(), 250);
+}
+
+function formatAuditMoney(value) {
+  return Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
