@@ -69,6 +69,9 @@ const {
   handleRoomBlockRoute
 } = require("./dashboard/routes/roomBlockRoutes");
 const {
+  createRackEmergencyRouteHandler
+} = require("./dashboard/routes/rackEmergencyRoutes");
+const {
   EVENT_HALLS,
   getEventVoucher,
   getQuotation,
@@ -94,6 +97,10 @@ let dashboardSearchService =
 
 const PORT =
   Number(process.env.DASHBOARD_PORT || 3333);
+const RACK_EMERGENCY_USER =
+  process.env.RACK_EMERGENCY_USER || "";
+const RACK_EMERGENCY_PASSWORD =
+  process.env.RACK_EMERGENCY_PASSWORD || "";
 const DASHBOARD_ASSET_VERSION =
   "dashboard-resend-arrivals-20260709";
 const DASHBOARD_SCRIPT_FILES = [
@@ -125,6 +132,17 @@ const {
   readGroupReservations,
   readLatestRackStatus
 });
+const handleRackEmergencyRoute =
+  createRackEmergencyRouteHandler({
+    readBody,
+    readLatestRackStatus,
+    sendJson,
+    updateRackRoomStatus,
+    username:
+      RACK_EMERGENCY_USER,
+    password:
+      RACK_EMERGENCY_PASSWORD
+  });
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
@@ -4096,6 +4114,10 @@ const server =
   http.createServer(async (req, res) => {
     const url =
       new URL(req.url, `http://${req.headers.host}`);
+
+    if (await handleRackEmergencyRoute(req, res, url)) {
+      return;
+    }
 
     if (
       req.method === "GET"
