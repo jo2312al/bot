@@ -288,18 +288,22 @@ function rackEmergencyPageHtml() {
         return;
       }
 
-      const counts = rackStatus?.counts || {};
       const title = "Rack " + (rackStatus?.reportDate || "") + " " + (rackStatus?.reportTime || "");
       const rows = rooms.map(room =>
-        '<tr><td><strong>' + escapeHtml(room.room || "") + '</strong></td><td>' + escapeHtml(room.type || "-") + '</td><td>' + escapeHtml(room.status || "-") + '</td><td>' + escapeHtml(room.statusLabel || statusLabels[room.status] || "-") + '</td></tr>'
+        '<div class="rack-print-room">' +
+          '<span class="room-number">' + escapeHtml(room.room || "") + '</span>' +
+          '<span class="room-status">' + escapeHtml(room.status || "-") + '</span>' +
+          '<strong>' + escapeHtml(getRackPrintTypeLabel(room.type)) + '</strong>' +
+          '<span class="room-blank">( &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; )</span>' +
+        '</div>'
       ).join("");
       const html =
         '<!doctype html><html><head><meta charset="utf-8"><title>' + escapeHtml(title) + '</title>' +
-        '<style>body{font-family:Arial,sans-serif;color:#1f2933;margin:24px}h1{font-size:22px;margin:0 0 4px}.muted{color:#64748b}.actions{text-align:right;margin-bottom:12px}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}.box{border:1px solid #cbd5e1;padding:8px}.box strong{display:block;font-size:18px}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #cbd5e1;padding:6px;text-align:left;font-size:11px}th{background:#f1f5f9}tr{break-inside:avoid}@media print{.actions{display:none}body{margin:8mm}}</style>' +
+        '<style>@page{size:letter landscape;margin:10mm}body{font-family:Arial,sans-serif;color:#000;margin:22px 34px;font-size:15px}.actions{text-align:right;margin-bottom:8px}.rack-print-head{position:relative;text-align:center;margin-bottom:14px}.rack-print-head h1{font-size:15px;letter-spacing:.5px;margin:0;text-transform:uppercase}.rack-print-head div{font-size:15px}.rack-print-date{position:absolute;right:0;top:0;text-align:right;font-weight:700;line-height:1.35}.rack-print-date span{display:block;font-size:14px;font-weight:400}.rack-print-grid{display:grid;grid-template-columns:repeat(5,1fr);column-gap:34px;row-gap:22px}.rack-print-room{white-space:nowrap;display:flex;gap:9px;align-items:baseline}.room-number{min-width:34px;text-align:right}.room-status{display:inline-block;min-width:34px;text-align:center;border-bottom:2px solid #000;line-height:1}.room-blank{margin-left:auto}.rack-print-legend{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:26px;font-size:15px;line-height:1.55}.rack-print-legend div{break-inside:avoid}.summary{display:none}@media print{.actions{display:none}body{margin:0}}</style>' +
         '</head><body><div class="actions"><button onclick="window.print()">Imprimir / guardar PDF</button></div>' +
-        '<h1>Rack de habitaciones</h1><div class="muted">Hotel Villa Margaritas / ' + escapeHtml(rackStatus?.reportDate || "-") + ' ' + escapeHtml(rackStatus?.reportTime || "") + ' / Impreso: ' + escapeHtml(new Date().toLocaleString()) + '</div>' +
-        '<div class="summary"><div class="box"><span>Total</span><strong>' + escapeHtml(counts.total || rooms.length) + '</strong></div><div class="box"><span>Ocupadas</span><strong>' + escapeHtml(counts.occupied?.total || 0) + '</strong></div><div class="box"><span>VL limpias</span><strong>' + escapeHtml(counts.availableClean?.total || 0) + '</strong></div><div class="box"><span>VS sucias</span><strong>' + escapeHtml(counts.availableDirty?.total || 0) + '</strong></div></div>' +
-        '<table><thead><tr><th>Habitacion</th><th>Tipo</th><th>Estado</th><th>Descripcion</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+        '<div class="rack-print-head"><h1>Hotel Villa Margaritas</h1><div>Reporte ama de llaves todo el hotel</div><div class="rack-print-date"><span>' + escapeHtml(rackStatus?.reportDate || "-") + '</span>T.M.<br>' + escapeHtml(rackStatus?.reportTime || "") + '</div></div>' +
+        '<div class="rack-print-grid">' + rows + '</div>' +
+        renderRackPrintLegend() +
         '</body></html>';
       const printWindow = window.open("", "_blank");
 
@@ -312,6 +316,28 @@ function rackEmergencyPageHtml() {
       printWindow.document.close();
       printWindow.focus();
       setTimeout(() => printWindow.print(), 250);
+    }
+
+    function getRackPrintTypeLabel(type) {
+      const normalized = String(type || "").toLowerCase();
+
+      if (normalized.includes("king")) {
+        return "KING";
+      }
+
+      if (normalized.includes("suite")) {
+        return "SUIT";
+      }
+
+      return "DOBL";
+    }
+
+    function renderRackPrintLegend() {
+      return '<div class="rack-print-legend">' +
+        '<div>BLO BLOQUEO<br>NM NO MOLESTAR<br>VS VACIO SUCIO<br>CH CAMBIO DE HABITACION<br>OS OCUPADA SUCIA</div>' +
+        '<div>VL VACIO<br>ND NO DURMIO<br>A PRE-ASIGNADO-LIMPIO<br>FS FUERA DE SERVICIO<br>OR OCUPADO RECIENTE</div>' +
+        '<div>OC OCUPADO<br>OSE OCUPADO SIN EQUIPAJE<br>AS ASIGNADO-SUCIO<br>OL OCUPADO LIMPIO</div>' +
+      '</div>';
     }
 
     function selectRoom(room, status) {
