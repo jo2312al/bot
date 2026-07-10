@@ -107,7 +107,7 @@ const RACK_EMERGENCY_USER =
 const RACK_EMERGENCY_PASSWORD =
   process.env.RACK_EMERGENCY_PASSWORD || "";
 const DASHBOARD_ASSET_VERSION =
-  "dashboard-audit-print-fallback-20260710";
+  "dashboard-checkin-edit-ledger-20260710";
 const DASHBOARD_SCRIPT_FILES = [
   "dashboard-core.js",
   "dashboard-search.js",
@@ -2617,6 +2617,18 @@ function getAuditReports({ date } = {}) {
         AND (checkin.checked_out_at IS NULL OR DATE(checkin.checked_out_at) >= ${mysql.quote(auditDate)})
         AND checkin.room_id IS NOT NULL
         AND NULLIF(checkin.room_number_snapshot, '') IS NOT NULL
+        AND EXISTS (
+          SELECT 1
+          FROM rack_snapshots rack
+          JOIN rack_snapshot_rooms rack_room ON rack_room.rack_snapshot_id = rack.id
+          WHERE rack_room.room_id = checkin.room_id
+            AND rack_room.room_status IN ('OC', 'OS', 'OL', 'OR', 'OSE', 'ND')
+            AND rack.report_date = (
+              SELECT MAX(latest_rack.report_date)
+              FROM rack_snapshots latest_rack
+              WHERE latest_rack.report_date <= ${mysql.quote(auditDate)}
+            )
+        )
       GROUP BY checkin.id, checkin.room_number_snapshot, checkin.guest_name_snapshot, reservation.start_date, room_type.name, reservation.adults_count, reservation.children_count, reservation.rate_text, movement_total.balance, movement_total.payment_method
       ORDER BY CAST(checkin.room_number_snapshot AS UNSIGNED), checkin.room_number_snapshot;
     `),
@@ -4328,7 +4340,7 @@ function pageHtml() {
           </div>
           <div class="confirm-actions"><button class="primary" onclick="saveRackMovement()">Guardar movimiento</button></div>
         </div>
-        <div class="confirm-actions rack-guest-actions"><button onclick="printRackGuestReservation()">Imprimir reserva</button><button class="danger" onclick="checkoutRackGuest()">Hacer check-out (pasar a VS)</button></div>
+        <div class="confirm-actions rack-guest-actions"><button onclick="toggleRackCheckinEdit(true)">Editar check-in</button><button onclick="printRackGuestReservation()">Imprimir reserva</button><button class="danger" onclick="checkoutRackGuest()">Hacer check-out (pasar a VS)</button></div>
       </div>
     </div>
   </div>
@@ -4354,7 +4366,7 @@ function pageHtml() {
           </div>
           <div class="confirm-actions"><button class="primary" onclick="saveRackMovement()">Guardar movimiento</button></div>
         </div>
-        <div class="confirm-actions rack-guest-actions"><button onclick="printRackGuestReservation()">Imprimir reserva</button><button class="danger" onclick="checkoutRackGuest()">Hacer check-out (pasar a VS)</button></div>
+        <div class="confirm-actions rack-guest-actions"><button onclick="toggleRackCheckinEdit(true)">Editar check-in</button><button onclick="printRackGuestReservation()">Imprimir reserva</button><button class="danger" onclick="checkoutRackGuest()">Hacer check-out (pasar a VS)</button></div>
       </div>
     </div>
   </div>
@@ -5267,6 +5279,28 @@ const server =
         sendJson(res, 200, { ok: true, checkin: checkinLedger.addMovement(body) });
       } catch (error) {
         sendJson(res, 400, { ok: false, error: error.message || "No se pudo guardar el movimiento" });
+      }
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/checkins/update"
+    ) {
+      try {
+        const body = await readBody(req);
+        const oldRoom = String(body.room || body.currentRoom || "").replace(/\D/g, "");
+        const checkin = checkinLedger.updateCheckin(body);
+        if (oldRoom && oldRoom !== String(checkin?.room || "")) {
+          updateRackRoomStatus({ room: oldRoom, status: "VS", guestName: "" });
+        }
+        if (checkin?.room) {
+          updateRackRoomStatus({ room: checkin.room, status: "OC", guestName: checkin.guestName || "" });
+        }
+        sendJson(res, 200, { ok: true, checkin });
+      } catch (error) {
+        sendJson(res, 400, { ok: false, error: error.message || "No se pudo actualizar el check-in" });
       }
       return;
     }

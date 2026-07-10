@@ -46,6 +46,11 @@ function createCheckinLedgerService(mysql) {
         'folio', COALESCE(reservation.folio, ''),
         'rate', COALESCE(reservation.rate_text, ''),
         'startDate', DATE_FORMAT(reservation.start_date, '%Y-%m-%d'),
+        'endDate', (
+          SELECT DATE_FORMAT(DATE_ADD(MAX(stay.stay_date), INTERVAL 1 DAY), '%Y-%m-%d')
+          FROM reservation_dates stay WHERE stay.reservation_id = reservation.id
+        ),
+        'roomType', COALESCE(room_type.name, ''),
         'pax', COALESCE(reservation.adults_count, 0) + COALESCE(reservation.children_count, 0),
         'notes', COALESCE(reservation_note.note, ''),
         'balance', (
@@ -67,6 +72,7 @@ function createCheckinLedgerService(mysql) {
       )
       FROM checkins checkin
       LEFT JOIN reservations reservation ON reservation.id = checkin.reservation_id
+      LEFT JOIN room_types room_type ON room_type.id = reservation.room_type_id
       LEFT JOIN reservation_notes reservation_note ON reservation_note.reservation_id = reservation.id
       WHERE checkin.room_number_snapshot = ${mysql.quote(roomNumber)}
         AND checkin.status = 'activo'
@@ -121,10 +127,97 @@ function createCheckinLedgerService(mysql) {
     return getCheckinByRoom(input.room);
   }
 
+  function updateCheckin(input) {
+    requireDatabase();
+    const current = getCheckinByRoom(input.room || input.currentRoom);
+    if (!current) throw new Error('No hay un check-in activo para esta habitacion.');
+
+    const checkinId = Number(current.id);
+    const guestName = String(input.guestName || current.guestName || '').trim();
+    const roomNumber = String(input.newRoom || input.room || current.room || '').replace(/\D/g, '');
+    const startDate = normalizeIsoDate(input.startDate || current.startDate);
+    const endDate = normalizeIsoDate(input.endDate || current.endDate);
+    const pax = Math.max(Number(input.pax || current.pax || 1), 1);
+    const rate = String(input.rate ?? current.rate ?? '').trim();
+    const notes = String(input.notes ?? current.notes ?? '').trim();
+
+    if (!guestName) throw new Error('El nombre del huesped es requerido.');
+    if (!roomNumber) throw new Error('La habitacion es requerida.');
+
+    const rooms = mysql.queryJson(`
+      SELECT JSON_OBJECT('id', id, 'roomNumber', room_number)
+      FROM rooms WHERE room_number = ${mysql.quote(roomNumber)}
+      LIMIT 1;
+    `);
+    const room = rooms[0];
+    if (!room?.id) throw new Error('Habitacion no encontrada.');
+
+    mysql.runSql(`
+      UPDATE guests guest
+      JOIN checkins checkin ON checkin.guest_id = guest.id
+      SET guest.name = ${mysql.quote(guestName)}
+      WHERE checkin.id = ${checkinId};
+    `);
+
+    mysql.runSql(`
+      UPDATE checkins
+      SET
+        room_id = ${Number(room.id)},
+        room_number_snapshot = ${mysql.quote(roomNumber)},
+        guest_name_snapshot = ${mysql.quote(guestName)}
+      WHERE id = ${checkinId};
+    `);
+
+    mysql.runSql(`
+      UPDATE account_movements
+      SET
+        room_id = ${Number(room.id)},
+        room_number_snapshot = ${mysql.quote(roomNumber)}
+      WHERE checkin_id = ${checkinId};
+    `);
+
+    if (current.reservationId) {
+      mysql.runSql(`
+        UPDATE reservations
+        SET
+          assigned_room_id = ${Number(room.id)},
+          start_date = ${startDate ? mysql.quote(startDate) : "start_date"},
+          adults_count = ${pax},
+          children_count = 0,
+          rate_text = ${mysql.quote(rate)}
+        WHERE id = ${Number(current.reservationId)};
+      `);
+
+      if (startDate) {
+        replaceReservationDates(Number(current.reservationId), startDate, endDate || startDate);
+      }
+
+      mysql.runSql(`
+        INSERT INTO reservation_notes (
+          reservation_key,
+          reservation_id,
+          note
+        )
+        SELECT source_key, id, ${mysql.quote(notes)}
+        FROM reservations
+        WHERE id = ${Number(current.reservationId)}
+        ON DUPLICATE KEY UPDATE
+          reservation_id = VALUES(reservation_id),
+          note = VALUES(note);
+      `);
+    }
+
+    return getCheckinByRoom(roomNumber);
+  }
+
   function checkout(room) {
     requireDatabase();
     const checkin = getCheckinByRoom(room);
     if (!checkin) return null;
+    const balance = Number(checkin.balance || 0);
+    if (balance > 0.009) {
+      throw new Error('No se puede hacer check-out: la habitacion tiene cargos pendientes por ' + balance.toFixed(2) + '.');
+    }
 
     mysql.runSql(`
       UPDATE checkins
@@ -135,7 +228,37 @@ function createCheckinLedgerService(mysql) {
     return checkin;
   }
 
-  return { recordCheckin, getCheckinByRoom, addMovement, checkout };
+  function normalizeIsoDate(value) {
+    const text = String(value || '').slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
+  }
+
+  function replaceReservationDates(reservationId, startDate, endDate) {
+    const start = new Date(startDate + 'T00:00:00Z');
+    const end = new Date((endDate || startDate) + 'T00:00:00Z');
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
+
+    mysql.runSql(`DELETE FROM reservation_dates WHERE reservation_id = ${reservationId};`);
+
+    const dates = [];
+    const cursor = new Date(start);
+    const final = end > start ? end : new Date(start.getTime() + 86400000);
+    while (cursor < final && dates.length < 370) {
+      dates.push(cursor.toISOString().slice(0, 10));
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+
+    if (!dates.length) {
+      dates.push(startDate);
+    }
+
+    mysql.runSql(`
+      INSERT INTO reservation_dates (reservation_id, stay_date)
+      VALUES ${dates.map(date => `(${reservationId}, ${mysql.quote(date)})`).join(', ')};
+    `);
+  }
+
+  return { recordCheckin, getCheckinByRoom, addMovement, updateCheckin, checkout };
 }
 
 module.exports = { createCheckinLedgerService };

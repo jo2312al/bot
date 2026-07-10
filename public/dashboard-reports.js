@@ -365,21 +365,46 @@ async function printAuditReport(type) {
   const totalCharge = rows.reduce((sum, row) => sum + Number(row.charge || row.extras || 0), 0);
   const totalPayment = rows.reduce((sum, row) => sum + Number(row.payment || 0), 0);
   const displayDate = isoToDisplay(date) || date;
+  const bodyContent = type === 'movements'
+    ? renderAuditMovementSections(rows, headers)
+    : '<table><thead><tr>' + headers.map(header => '<th>' + escapeHtml(header) + '</th>').join('') + '</tr></thead><tbody>' +
+      (rows.length ? rows.map(row => '<tr>' + cells(row).map((cell, index) => '<td class="' + (index >= 6 ? 'num' : '') + '">' + escapeHtml(cell === undefined || cell === null ? '' : cell) + '</td>').join('') + '</tr>').join('') : '<tr><td colspan="' + headers.length + '">Sin datos disponibles para este día.</td></tr>') +
+      '<tr class="total"><td colspan="' + Math.max(headers.length - 2, 1) + '">Totales (' + rows.length + ' registros)</td><td class="num">' + (type === 'rents' ? formatAuditMoney(totalCharge) : '') + '</td><td class="num"></td></tr>' +
+      '</tbody></table>';
   const html =
     '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>' + escapeHtml(title) + '</title>' +
-    '<style>@page{size:letter landscape;margin:10mm}body{font-family:Arial,sans-serif;color:#111;font-size:11px}.actions{text-align:right;margin-bottom:8px}.head{display:grid;grid-template-columns:1fr 2fr 1fr;align-items:start;border-bottom:2px solid #111;padding:4px 0 10px}.head h1{font-size:18px;margin:0;text-align:center}.head h2{font-size:15px;margin:4px 0 0;text-align:center}.head .right{text-align:right}table{width:100%;border-collapse:collapse;margin-top:12px}th{font-family:Georgia,serif;font-weight:400;text-align:left;border-bottom:2px solid #111;padding:4px}td{border-bottom:1px solid #ddd;padding:3px 4px;vertical-align:top}.num{text-align:right}.total td{border-top:2px solid #111;font-weight:700}@media print{.actions{display:none}}</style>' +
+    '<style>@page{size:letter landscape;margin:10mm}body{font-family:Arial,sans-serif;color:#111;font-size:11px}.actions{text-align:right;margin-bottom:8px}.head{display:grid;grid-template-columns:1fr 2fr 1fr;align-items:start;border-bottom:2px solid #111;padding:4px 0 10px}.head h1{font-size:18px;margin:0;text-align:center}.head h2{font-size:15px;margin:4px 0 0;text-align:center}.head .right{text-align:right}.section-title{font-size:13px;margin:16px 0 0;border-bottom:1px solid #111;padding-bottom:3px;text-transform:uppercase}table{width:100%;border-collapse:collapse;margin-top:8px}th{font-family:Georgia,serif;font-weight:400;text-align:left;border-bottom:2px solid #111;padding:4px}td{border-bottom:1px solid #ddd;padding:3px 4px;vertical-align:top}.num{text-align:right}.total td{border-top:2px solid #111;font-weight:700}@media print{.actions{display:none}}</style>' +
     '</head><body><div class="actions"><button onclick="window.print()">Imprimir / guardar PDF</button></div>' +
     '<header class="head"><div><strong>Coach Guest</strong><br>Ver. 2013</div><div><h1>HOTEL VILLA MARGARITAS</h1><h2>' + escapeHtml(title) + ' del día ' + escapeHtml(displayDate) + '</h2></div><div class="right">Impreso: ' + escapeHtml(new Intl.DateTimeFormat('es-MX', { dateStyle: 'short', timeZone: 'America/Mexico_City' }).format(new Date())) + '<br>Hora: ' + escapeHtml(new Intl.DateTimeFormat('es-MX', { timeStyle: 'medium', timeZone: 'America/Mexico_City' }).format(new Date())) + '</div></header>' +
-    '<table><thead><tr>' + headers.map(header => '<th>' + escapeHtml(header) + '</th>').join('') + '</tr></thead><tbody>' +
-    (rows.length ? rows.map(row => '<tr>' + cells(row).map((cell, index) => '<td class="' + ((type === 'movements' && index >= 5) || (type !== 'movements' && index >= 6) ? 'num' : '') + '">' + escapeHtml(cell === undefined || cell === null ? '' : cell) + '</td>').join('') + '</tr>').join('') : '<tr><td colspan="' + headers.length + '">Sin datos disponibles para este día.</td></tr>') +
-    '<tr class="total"><td colspan="' + Math.max(headers.length - 2, 1) + '">Totales (' + rows.length + ' registros)</td><td class="num">' + (type === 'movements' || type === 'rents' ? formatAuditMoney(totalCharge) : '') + '</td><td class="num">' + (type === 'movements' ? formatAuditMoney(totalPayment) : '') + '</td></tr>' +
-    '</tbody></table></body></html>';
+    bodyContent + '</body></html>';
   const printWindow = window.open('', '_blank');
   if (!printWindow) return alert('Permite ventanas emergentes para imprimir.');
   printWindow.document.write(html);
   printWindow.document.close();
   printWindow.focus();
   setTimeout(() => printWindow.print(), 250);
+}
+
+function renderAuditMovementSections(rows, headers) {
+  const charges = rows.filter(row => Number(row.charge || 0) > 0);
+  const credits = rows.filter(row => Number(row.payment || 0) > 0);
+  const chargeTotal = charges.reduce((sum, row) => sum + Number(row.charge || 0), 0);
+  const creditTotal = credits.reduce((sum, row) => sum + Number(row.payment || 0), 0);
+  return renderAuditMovementTable('Cargos', charges, headers, 'charge') +
+    renderAuditMovementTable('Creditos / pagos', credits, headers, 'payment') +
+    '<table><tbody><tr class="total"><td>Total cargos</td><td class="num">' + formatAuditMoney(chargeTotal) + '</td><td>Total creditos</td><td class="num">' + formatAuditMoney(creditTotal) + '</td><td>Saldo neto</td><td class="num">' + formatAuditMoney(chargeTotal - creditTotal) + '</td></tr></tbody></table>';
+}
+
+function renderAuditMovementTable(title, rows, headers, amountField) {
+  const total = rows.reduce((sum, row) => sum + Number(row[amountField] || 0), 0);
+  return '<h3 class="section-title">' + escapeHtml(title) + '</h3>' +
+    '<table><thead><tr>' + headers.map(header => '<th>' + escapeHtml(header) + '</th>').join('') + '</tr></thead><tbody>' +
+    (rows.length ? rows.map(row => '<tr>' +
+      [row.room, row.time, row.reference, row.guestName, row.concept, formatAuditMoney(row.charge), formatAuditMoney(row.payment), row.paymentMethod]
+        .map((cell, index) => '<td class="' + (index >= 5 ? 'num' : '') + '">' + escapeHtml(cell === undefined || cell === null ? '' : cell) + '</td>').join('') +
+      '</tr>').join('') : '<tr><td colspan="' + headers.length + '">Sin movimientos.</td></tr>') +
+    '<tr class="total"><td colspan="' + Math.max(headers.length - 2, 1) + '">Total ' + escapeHtml(title.toLowerCase()) + ' (' + rows.length + ' registros)</td><td class="num">' + (amountField === 'charge' ? formatAuditMoney(total) : '') + '</td><td class="num">' + (amountField === 'payment' ? formatAuditMoney(total) : '') + '</td></tr>' +
+    '</tbody></table>';
 }
 
 function formatAuditMoney(value) {

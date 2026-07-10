@@ -157,13 +157,38 @@ function renderRackGuestDetails(checkin) {
       '<div><span>Folio</span><strong>' + escapeHtml(checkin.folio || '-') + '</strong></div>' +
       '<div><span>Tarifa</span><strong>' + escapeHtml(checkin.rate || '-') + '</strong></div>' +
       '<div><span>Entrada</span><strong>' + escapeHtml(formatRackEntryDate(checkin.startDate, checkin.checkedInAt)) + '</strong></div>' +
+      '<div><span>Salida</span><strong>' + escapeHtml(formatRackEntryDate(checkin.endDate, '')) + '</strong></div>' +
       '<div><span>Pax</span><strong>' + escapeHtml(checkin.pax || '-') + '</strong></div>' +
       '<div><span>Saldo</span><strong>' + formatMoney(balance) + '</strong></div>' +
       '<div class="rack-guest-notes"><span>Observaciones</span><strong>' + escapeHtml(checkin.notes || 'Sin observaciones') + '</strong></div>' +
     '</div>' +
+    renderRackCheckinEditForm(checkin) +
     '<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Cargo</th><th>Pago</th></tr></thead><tbody>' +
     (movements.length ? movements.map(item => '<tr><td>' + escapeHtml(formatRackMovementDate(item.occurredAt)) + '</td><td>' + escapeHtml(item.concept || '-') + '</td><td>' + formatMoney(item.charge) + '</td><td>' + formatMoney(item.payment) + '</td></tr>').join('') : '<tr><td colspan="4" class="muted">Sin movimientos.</td></tr>') +
     '</tbody></table></div>';
+}
+
+function renderRackCheckinEditForm(checkin) {
+  return '<div id="rackCheckinEditForm" class="rack-movement-form hidden">' +
+    '<strong>Editar check-in</strong>' +
+    '<div class="reservation-edit-grid">' +
+      '<label>Huesped<input id="rackEditGuestName" value="' + escapeHtml(checkin.guestName || '') + '"></label>' +
+      '<label>Habitacion<input id="rackEditRoom" inputmode="numeric" value="' + escapeHtml(checkin.room || activeRackGuestRoom || '') + '"></label>' +
+      '<label>Entrada<input id="rackEditStart" type="date" value="' + escapeHtml(checkin.startDate || '') + '"></label>' +
+      '<label>Salida<input id="rackEditEnd" type="date" value="' + escapeHtml(checkin.endDate || '') + '"></label>' +
+      '<label>Pax<input id="rackEditPax" type="number" min="1" value="' + escapeHtml(checkin.pax || 1) + '"></label>' +
+      '<label>Tarifa<input id="rackEditRate" value="' + escapeHtml(checkin.rate || '') + '"></label>' +
+      '<label class="wide">Observaciones<textarea id="rackEditNotes" rows="3">' + escapeHtml(checkin.notes || '') + '</textarea></label>' +
+    '</div>' +
+    '<div class="confirm-actions"><button onclick="toggleRackCheckinEdit(false)">Cancelar</button><button class="primary" onclick="saveRackCheckinEdit()">Guardar cambios</button></div>' +
+  '</div>';
+}
+
+function toggleRackCheckinEdit(forceOpen) {
+  const form = document.getElementById('rackCheckinEditForm');
+  if (!form) return;
+  const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : form.classList.contains('hidden');
+  form.classList.toggle('hidden', !shouldOpen);
 }
 
 function formatRackEntryDate(value, fallback) {
@@ -190,7 +215,7 @@ function ensureRackGuestModal() {
             '<label>Cargo<input id="rackMovementCharge" type="number" min="0" step="0.01" value="0"></label>' +
             '<label>Pago<input id="rackMovementPayment" type="number" min="0" step="0.01" value="0"></label>' +
           '</div><div class="confirm-actions"><button class="primary" onclick="saveRackMovement()">Guardar movimiento</button></div></div>' +
-          '<div class="confirm-actions rack-guest-actions"><button onclick="printRackGuestReservation()">Imprimir reserva</button><button class="danger" onclick="checkoutRackGuest()">Hacer check-out (pasar a VS)</button></div>' +
+          '<div class="confirm-actions rack-guest-actions"><button onclick="toggleRackCheckinEdit(true)">Editar check-in</button><button onclick="printRackGuestReservation()">Imprimir reserva</button><button class="danger" onclick="checkoutRackGuest()">Hacer check-out (pasar a VS)</button></div>' +
         '</div></div></div>'
   );
 }
@@ -227,12 +252,12 @@ function printRackGuestReservation() {
       guestNumber: '',
       agency: '',
       seq: '1.4',
-      roomType: '',
+      roomType: checkin.roomType || '',
       roomsCount: '1',
-      peopleCount: '',
-      start: formatRackMovementDate(checkin.checkedInAt),
-      end: '',
-      rate: '',
+      peopleCount: checkin.pax || '',
+      start: formatRackEntryDate(checkin.startDate, checkin.checkedInAt),
+      end: formatRackEntryDate(checkin.endDate, ''),
+      rate: checkin.rate || '',
       deposit: '0.00',
       paymentMethod: '',
       travelPlan: '',
@@ -276,7 +301,35 @@ async function saveRackMovement() {
   renderRackGuestDetails(data.checkin);
 }
 
+async function saveRackCheckinEdit() {
+  if (!activeRackGuestRoom) return;
+  const response = await fetch('/api/checkins/update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      room: activeRackGuestRoom,
+      newRoom: document.getElementById('rackEditRoom').value,
+      guestName: document.getElementById('rackEditGuestName').value,
+      startDate: document.getElementById('rackEditStart').value,
+      endDate: document.getElementById('rackEditEnd').value,
+      pax: document.getElementById('rackEditPax').value,
+      rate: document.getElementById('rackEditRate').value,
+      notes: document.getElementById('rackEditNotes').value
+    })
+  });
+  const data = await response.json();
+  if (!data.ok) return alert(data.error || 'No se pudo actualizar el check-in.');
+  activeRackGuestRoom = data.checkin?.room || activeRackGuestRoom;
+  renderRackGuestDetails(data.checkin);
+  await loadDashboard();
+}
+
 async function checkoutRackGuest() {
+  const balance = Number(activeRackGuestCheckin?.balance || 0);
+  if (balance > 0.009) {
+    alert('No se puede hacer check-out: la habitacion tiene cargos pendientes por ' + formatMoney(balance) + '.');
+    return;
+  }
   if (!activeRackGuestRoom || !confirm('¿Confirmas el check-out? La habitación pasará a VS.')) return;
   const response = await fetch('/api/checkins/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ room: activeRackGuestRoom }) });
   const data = await response.json();
