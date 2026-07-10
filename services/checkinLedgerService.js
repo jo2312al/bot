@@ -33,7 +33,7 @@ function createCheckinLedgerService(mysql) {
     return getCheckinByRoom(roomNumber);
   }
 
-  function getCheckinByRoom(room) {
+  function getCheckinByRoom(room, allowLegacyLookup = true) {
     requireDatabase();
     const roomNumber = String(room || '').replace(/\D/g, '');
     const rows = mysql.queryJson(`
@@ -66,7 +66,28 @@ function createCheckinLedgerService(mysql) {
       ORDER BY checkin.checked_in_at DESC LIMIT 1;
     `);
 
-    return rows[0] || null;
+    if (rows[0] || !allowLegacyLookup) return rows[0] || null;
+
+    mysql.runSql(`
+      INSERT INTO checkins (
+        reservation_id, guest_id, room_id, guest_name_snapshot, room_number_snapshot
+      )
+      SELECT reservation.id, reservation.guest_id, room.id, guest.name, room.room_number
+      FROM reservations reservation
+      JOIN guests guest ON guest.id = reservation.guest_id
+      JOIN rooms room ON room.id = reservation.assigned_room_id
+      WHERE room.room_number = ${mysql.quote(roomNumber)}
+        AND reservation.arrival_at IS NOT NULL
+        AND reservation.status != 'cancelada'
+      ORDER BY reservation.arrival_at DESC
+      LIMIT 1
+      ON DUPLICATE KEY UPDATE
+        guest_id = VALUES(guest_id), room_id = VALUES(room_id),
+        guest_name_snapshot = VALUES(guest_name_snapshot),
+        room_number_snapshot = VALUES(room_number_snapshot), status = 'activo', checked_out_at = NULL;
+    `);
+
+    return getCheckinByRoom(roomNumber, false);
   }
 
   function addMovement(input) {
@@ -96,7 +117,7 @@ function createCheckinLedgerService(mysql) {
   function checkout(room) {
     requireDatabase();
     const checkin = getCheckinByRoom(room);
-    if (!checkin) throw new Error('No hay un check-in activo para esta habitación.');
+    if (!checkin) return null;
 
     mysql.runSql(`
       UPDATE checkins

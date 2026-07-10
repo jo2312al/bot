@@ -5019,9 +5019,13 @@ const server =
       url.pathname === "/api/checkins/room"
     ) {
       try {
+        const room = String(url.searchParams.get("room") || "").replace(/\D/g, "");
+        const checkin = checkinLedger.getCheckinByRoom(room);
+        const rackRoom = readLatestRackStatus()?.rooms?.find(item => item.room === room);
         sendJson(res, 200, {
           ok: true,
-          checkin: checkinLedger.getCheckinByRoom(url.searchParams.get("room"))
+          checkin,
+          rackGuestName: rackRoom?.guestName || ""
         });
       } catch (error) {
         sendJson(res, 400, { ok: false, error: error.message || "No se pudo consultar el check-in" });

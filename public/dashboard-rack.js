@@ -135,8 +135,10 @@ async function openRackGuestDetails(room) {
   const response = await fetch('/api/checkins/room?room=' + encodeURIComponent(room));
   const data = await response.json();
   if (!data.ok || !data.checkin) {
-    document.getElementById('rackGuestModalSubtitle').textContent = data.error || 'No hay check-in guardado para esta habitación.';
-    document.getElementById('rackGuestSummary').innerHTML = '<div class="muted">Registra el check-in para asociar huésped y movimientos.</div>';
+    document.getElementById('rackGuestModalSubtitle').textContent = data.error || 'Habitación ocupada sin check-in histórico.';
+    document.getElementById('rackGuestSummary').innerHTML = data.rackGuestName
+      ? '<div class="rack-guest-kpis"><div><span>Huésped en rack</span><strong>' + escapeHtml(data.rackGuestName) + '</strong></div></div><div class="muted">Este registro es anterior a la nueva tabla de check-ins; puedes hacer check-out, pero no agregar movimientos hasta vincularlo a una reserva.</div>'
+      : '<div class="muted">Registra el check-in para asociar huésped y movimientos.</div>';
     return;
   }
 
