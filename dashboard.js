@@ -102,7 +102,7 @@ const RACK_EMERGENCY_USER =
 const RACK_EMERGENCY_PASSWORD =
   process.env.RACK_EMERGENCY_PASSWORD || "";
 const DASHBOARD_ASSET_VERSION =
-  "dashboard-checkin-date-responsive-20260710";
+  "dashboard-checkin-rack-guest-20260710";
 const DASHBOARD_SCRIPT_FILES = [
   "dashboard-core.js",
   "dashboard-search.js",
@@ -4911,15 +4911,22 @@ const server =
             &&
             !isCurrentRoom
             &&
-            !["VL", "VS"].includes(rackRoom.status)
+            ![
+              "VL", "VS", "OC", "OS", "OL", "OR", "OSE", "ND"
+            ].includes(rackRoom.status)
           ) {
             throw new Error("La habitacion no esta disponible en el rack");
           }
 
-          if (rackRoom && !isCurrentRoom) {
+          if (rackRoom) {
             updateRackRoomStatus({
               room,
-              status: "OC"
+              status:
+                ["VL", "VS"].includes(rackRoom.status)
+                  ? "OC"
+                  : rackRoom.status,
+              guestName:
+                current.nombre
             });
           }
         }

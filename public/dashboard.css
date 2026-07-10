@@ -782,6 +782,14 @@ th {
   font-size: 11px;
   margin-top: 2px;
 }
+.rack-room .rack-room-guest,
+.floor-room .rack-room-guest {
+  color: var(--text);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .rack-room.occupied {
   background: var(--room-occupied);
   border-color: rgba(68, 42, 34, .2);
@@ -1640,6 +1648,9 @@ label {
 }
 .floor-room strong {
   font-size: 15px;
+}
+.floor-room .rack-room-guest {
+  font-size: 10px;
 }
 .floor-room.occupied { background: var(--room-occupied); border-color: rgba(68, 42, 34, .2); }
 .floor-room.clean { background: var(--room-clean); border-color: rgba(68, 42, 34, .12); }

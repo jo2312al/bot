@@ -423,25 +423,42 @@ function saveLatestRackStatus(nextStatus) {
 }
 
 function rebuildRackStatusFromRooms(status) {
-  const summary =
-    summarizeRackFull(
-      status.rooms || []
+  const rooms =
+    Array.isArray(status.rooms)
+      ? status.rooms
+      : [];
+  const occupied =
+    rooms.filter(room =>
+      ["OC", "OS", "OL", "OR", "OSE", "ND"].includes(room.status)
     );
+  const blocked =
+    rooms.filter(room =>
+      ["BLO", "FS"].includes(room.status)
+    );
+  const availableClean =
+    rooms.filter(room => room.status === "VL");
+  const availableDirty =
+    rooms.filter(room => room.status === "VS");
 
   return {
     ...status,
     counts:
-      summary.fullCounts,
-    rooms:
-      summary.rooms,
+      {
+        total: rooms.length,
+        occupied: countRackTypes(occupied),
+        blocked: countRackTypes(blocked),
+        availableClean: countRackTypes(availableClean),
+        availableDirty: countRackTypes(availableDirty)
+      },
+    rooms,
     occupied:
-      summary.occupied,
+      occupied,
     blocked:
-      summary.blocked,
+      blocked,
     availableClean:
-      summary.availableClean,
+      availableClean,
     availableDirty:
-      summary.availableDirty,
+      availableDirty,
     updatedAt:
       new Date()
         .toISOString()
@@ -450,7 +467,8 @@ function rebuildRackStatusFromRooms(status) {
 
 function updateRackRoomStatus({
   room,
-  status
+  status,
+  guestName
 }) {
   const current =
     readLatestRackStatus();
@@ -461,6 +479,10 @@ function updateRackRoomStatus({
 
   const normalizedStatus =
     normalizeStatus(status || "OC");
+  const shouldUpdateGuestName =
+    guestName !== undefined;
+  const normalizedGuestName =
+    String(guestName || "").trim();
 
   if (!current || !Array.isArray(current.rooms)) {
     throw new Error("No hay rack guardado para actualizar");
@@ -487,7 +509,10 @@ function updateRackRoomStatus({
         status:
           normalizedStatus,
         statusLabel:
-          RACK_STATUSES[normalizedStatus]
+          RACK_STATUSES[normalizedStatus],
+        ...(shouldUpdateGuestName
+          ? { guestName: normalizedGuestName }
+          : {})
       };
     });
 

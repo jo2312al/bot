@@ -106,6 +106,7 @@ function renderRackRoomGrid(status) {
         '<strong>' + escapeHtml(room.room) + '</strong>' +
         '<span>' + escapeHtml(room.type || '-') + '</span>' +
         '<span>' + escapeHtml(room.status || '-') + '</span>' +
+        (room.guestName ? '<span class="rack-room-guest" title="Huesped: ' + escapeHtml(room.guestName) + '">' + escapeHtml(room.guestName) + '</span>' : '') +
       '</button>';
     }).join('') +
     '</div>';
@@ -231,6 +232,7 @@ function renderRackFloorMap(rooms) {
                 '<strong>' + escapeHtml(room.room || '-') + '</strong>' +
                 '<span>' + escapeHtml(room.type || '-') + '</span>' +
                 '<span>' + escapeHtml(room.status || '-') + '</span>' +
+                (room.guestName ? '<span class="rack-room-guest" title="Huesped: ' + escapeHtml(room.guestName) + '">' + escapeHtml(room.guestName) + '</span>' : '') +
               '</button>';
             }).join('') +
           '</div>' +
