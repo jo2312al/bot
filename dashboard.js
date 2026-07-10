@@ -107,7 +107,7 @@ const RACK_EMERGENCY_USER =
 const RACK_EMERGENCY_PASSWORD =
   process.env.RACK_EMERGENCY_PASSWORD || "";
 const DASHBOARD_ASSET_VERSION =
-  "dashboard-rack-checkin-summary-20260710";
+  "dashboard-audit-print-fallback-20260710";
 const DASHBOARD_SCRIPT_FILES = [
   "dashboard-core.js",
   "dashboard-search.js",
@@ -1208,6 +1208,103 @@ function dashboardScriptTags() {
       `<script src="/public/${file}?v=${DASHBOARD_ASSET_VERSION}"></script>`
     )
     .join("\n  ");
+}
+
+function auditReportFallbackScript() {
+  return `<script>
+  (function () {
+    if (window.printAuditReport) return;
+
+    function auditEscape(value) {
+      return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function auditMoney(value) {
+      return Number(value || 0).toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    }
+
+    function auditDisplayDate(value) {
+      if (!value) return "";
+      var parts = String(value).slice(0, 10).split("-");
+      if (parts.length !== 3) return value;
+      return parts[2] + "/" + parts[1] + "/" + parts[0];
+    }
+
+    window.printAuditReport = async function (type) {
+      var input = document.getElementById("reportAuditDate");
+      var today = window.dashboardData && window.dashboardData.today;
+      var date = (input && input.value) || today || new Date().toISOString().slice(0, 10);
+      var response = await fetch("/api/reports/audit?date=" + encodeURIComponent(date));
+      var data = await response.json();
+      if (!data.ok) {
+        alert(data.error || "No se pudo generar el reporte.");
+        return;
+      }
+
+      var reports = data.reports || {};
+      var isRents = type === "rents";
+      var isBalances = type === "balances";
+      var rows = isRents ? (reports.rents || []) : (isBalances ? (reports.balances || []) : (reports.movements || []));
+      var title = isRents
+        ? "S\\u00e1bana de Rentas y Extras"
+        : (isBalances ? "Lista de Hu\\u00e9spedes con Saldos Actuales" : "Reporte de Cargos y Cr\\u00e9ditos por Concepto");
+      var headers = isRents
+        ? ["Hab.", "Nombre", "Fha. Ent.", "Fha. Sal.", "T. H.", "Pax", "Tarifa", "Extras"]
+        : (isBalances
+          ? ["Hab.", "Nombre", "Fha. Ent.", "Fha. Sal.", "Noc.", "T. H.", "Pax", "Tarifa", "Saldo", "Forma pago"]
+          : ["Hab.", "Hora", "Referencia", "Hu\\u00e9sped", "Concepto", "Cargos", "Cr\\u00e9ditos", "Forma pago"]);
+      var cells = function (row) {
+        if (isRents) return [row.room, row.guestName, row.startDate, row.endDate, row.roomType, row.pax, row.rate, auditMoney(row.extras)];
+        if (isBalances) return [row.room, row.guestName, row.startDate, row.endDate, row.nights, row.roomType, row.pax, row.rate, auditMoney(row.balance), row.paymentMethod];
+        return [row.room, row.time, row.reference, row.guestName, row.concept, auditMoney(row.charge), auditMoney(row.payment), row.paymentMethod];
+      };
+      var totalCharge = rows.reduce(function (sum, row) {
+        return sum + Number(row.charge || row.extras || 0);
+      }, 0);
+      var totalPayment = rows.reduce(function (sum, row) {
+        return sum + Number(row.payment || 0);
+      }, 0);
+      var now = new Date();
+      var printDate = new Intl.DateTimeFormat("es-MX", { dateStyle: "short", timeZone: "America/Mexico_City" }).format(now);
+      var printTime = new Intl.DateTimeFormat("es-MX", { timeStyle: "medium", timeZone: "America/Mexico_City" }).format(now);
+      var bodyRows = rows.length
+        ? rows.map(function (row) {
+          return "<tr>" + cells(row).map(function (cell, index) {
+            var numeric = (isRents || isBalances) ? index >= 6 : index >= 5;
+            return "<td class=\\"" + (numeric ? "num" : "") + "\\">" + auditEscape(cell) + "</td>";
+          }).join("") + "</tr>";
+        }).join("")
+        : "<tr><td colspan=\\"" + headers.length + "\\">Sin datos disponibles para este dia.</td></tr>";
+      var totalCols = Math.max(headers.length - 2, 1);
+      var totals = "<tr class=\\"total\\"><td colspan=\\"" + totalCols + "\\">Totales (" + rows.length + " registros)</td>" +
+        "<td class=\\"num\\">" + (isRents || !isBalances ? auditMoney(totalCharge) : "") + "</td>" +
+        "<td class=\\"num\\">" + (!isRents && !isBalances ? auditMoney(totalPayment) : "") + "</td></tr>";
+      var html =
+        "<!doctype html><html lang=\\"es\\"><head><meta charset=\\"utf-8\\"><title>" + auditEscape(title) + "</title>" +
+        "<style>@page{size:letter landscape;margin:10mm}body{font-family:Arial,sans-serif;color:#111;font-size:11px}.actions{text-align:right;margin-bottom:8px}.head{display:grid;grid-template-columns:1fr 2fr 1fr;align-items:start;border-bottom:2px solid #111;padding:4px 0 10px}.head h1{font-size:18px;margin:0;text-align:center}.head h2{font-size:15px;margin:4px 0 0;text-align:center}.head .right{text-align:right}table{width:100%;border-collapse:collapse;margin-top:12px}th{text-align:left;border-bottom:2px solid #111;padding:4px}td{border-bottom:1px solid #ddd;padding:3px 4px;vertical-align:top}.num{text-align:right}.total td{border-top:2px solid #111;font-weight:700}@media print{.actions{display:none}}</style>" +
+        "</head><body><div class=\\"actions\\"><button onclick=\\"window.print()\\">Imprimir / guardar PDF</button></div>" +
+        "<header class=\\"head\\"><div><strong>Coach Guest</strong><br>Ver. 2013</div><div><h1>HOTEL VILLA MARGARITAS</h1><h2>" + auditEscape(title) + " del dia " + auditEscape(auditDisplayDate(date)) + "</h2></div><div class=\\"right\\">Impreso: " + auditEscape(printDate) + "<br>Hora: " + auditEscape(printTime) + "</div></header>" +
+        "<table><thead><tr>" + headers.map(function (header) { return "<th>" + auditEscape(header) + "</th>"; }).join("") + "</tr></thead><tbody>" + bodyRows + totals + "</tbody></table></body></html>";
+      var printWindow = window.open("", "_blank");
+      if (!printWindow) {
+        alert("Permite ventanas emergentes para imprimir.");
+        return;
+      }
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(function () { printWindow.print(); }, 250);
+    };
+  })();
+  </script>`;
 }
 
 function cleanPdfText(value) {
@@ -4321,6 +4418,7 @@ function pageHtml() {
     };
   </script>
   ${dashboardScriptTags()}
+  ${auditReportFallbackScript()}
 </body>
 </html>`;
 }
