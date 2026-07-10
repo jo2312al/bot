@@ -373,9 +373,9 @@ function getManualRoomTypeFromCheckin() {
     : 'Doble';
 }
 
-function printCheckinSlip() {
+function printCheckinSlip(dataOverride) {
   const data =
-    getCheckinPrintData();
+    dataOverride || getCheckinPrintData();
 
   if (!data.guestName) {
     alert('Selecciona o escribe un huesped para imprimir.');

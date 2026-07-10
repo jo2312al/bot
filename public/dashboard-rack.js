@@ -198,6 +198,37 @@ function printRackGuestReservation() {
     return;
   }
 
+  if (typeof printCheckinSlip === 'function') {
+    printCheckinSlip({
+      slipNumber: checkin.reservationId || '',
+      guestName: checkin.guestName || '',
+      address: '',
+      city: '',
+      country: 'MEXICO',
+      company: '',
+      room: checkin.room || activeRackGuestRoom,
+      guestNumber: '',
+      agency: '',
+      seq: '1.4',
+      roomType: '',
+      roomsCount: '1',
+      peopleCount: '',
+      start: formatRackMovementDate(checkin.checkedInAt),
+      end: '',
+      rate: '',
+      deposit: '0.00',
+      paymentMethod: '',
+      travelPlan: '',
+      reservationDate: formatRackMovementDate(checkin.checkedInAt),
+      checkinUser: 'DASH',
+      time: formatRackMovementDate(checkin.checkedInAt),
+      extraCharges: ['', '', '', '', ''],
+      extraConcepts: ['', '', '', '', ''],
+      notes: 'Saldo actual: ' + formatMoney(checkin.balance)
+    });
+    return;
+  }
+
   const movements = Array.isArray(checkin.movements) ? checkin.movements : [];
   const rows = movements.length
     ? movements.map(item => '<tr><td>' + escapeHtml(formatRackMovementDate(item.occurredAt)) + '</td><td>' + escapeHtml(item.concept || '-') + '</td><td>' + formatMoney(item.charge) + '</td><td>' + formatMoney(item.payment) + '</td></tr>').join('')
