@@ -85,18 +85,38 @@ textarea {
 .mobile-topbar {
   background: rgba(255, 248, 246, .96);
   border-bottom: 1px solid var(--line);
-  padding: 0 40px;
+  padding: 0 34px;
   position: fixed;
   left: 0;
   right: 0;
   top: 0;
-  height: 64px;
+  min-height: 72px;
   z-index: 50;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   box-shadow: 0 2px 16px rgba(93, 64, 55, .06);
   backdrop-filter: blur(10px);
+}
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.header-logo {
+  width: 86px;
+  height: 58px;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 h1 {
   font-family: "Literata", Georgia, serif;
@@ -106,7 +126,7 @@ h1 {
   margin: 0 0 4px;
 }
 main {
-  padding: 96px 40px 56px;
+  padding: 104px 40px 56px;
   max-width: 1280px;
   margin: 0 auto 0 264px;
 }
@@ -144,7 +164,7 @@ main {
   gap: 8px;
   position: fixed;
   left: 0;
-  top: 64px;
+  top: 72px;
   bottom: 0;
   width: 264px;
   z-index: 40;
@@ -1990,17 +2010,18 @@ body.app-modal-open {
   .mobile-topbar {
     display: flex;
     height: auto;
-    min-height: 64px;
+    min-height: 72px;
     padding: 14px 20px;
+    align-items: center;
   }
   main {
     margin-left: 0;
-    padding: 88px 20px 40px;
+    padding: 96px 20px 40px;
     max-width: none;
   }
   .view-tabs {
     position: sticky;
-    top: 64px;
+    top: 72px;
     z-index: 25;
     width: auto;
     margin: 0 -20px 18px;
@@ -2111,7 +2132,8 @@ body.app-modal-open {
     width: auto;
     min-width: max-content;
   }
-  .hero-actions button {
+  .hero-actions button,
+  .header-actions button {
     width: auto;
   }
   .day-view {
@@ -2149,14 +2171,17 @@ body.app-modal-open {
 /* Pantallas compactas: evita cortes horizontales y deja los controles al alcance. */
 @media (max-width: 640px) {
   .mobile-topbar {
-    min-height: 58px;
+    min-height: 64px;
     padding: 8px 14px;
     gap: 9px;
   }
-  .mobile-topbar .brand-mark {
-    width: 36px;
-    height: 36px;
-    font-size: 13px;
+  .header-brand {
+    gap: 8px;
+    flex: 1 1 auto;
+  }
+  .header-logo {
+    width: 56px;
+    height: 42px;
   }
   .mobile-topbar h1 {
     font-size: 17px;
@@ -2169,18 +2194,23 @@ body.app-modal-open {
     text-overflow: ellipsis;
     max-width: 190px;
   }
+  .header-actions {
+    gap: 6px;
+  }
+  .header-actions button span:not(.material-symbols-outlined) {
+    display: none;
+  }
   .theme-toggle {
     width: 42px !important;
     min-width: 42px !important;
     height: 42px;
     padding: 0;
-    margin-left: auto;
   }
   main {
-    padding: 76px 14px 30px;
+    padding: 82px 14px 30px;
   }
   .view-tabs {
-    top: 58px;
+    top: 64px;
     margin: 0 -14px 14px;
     padding: 7px 14px;
     scrollbar-width: thin;

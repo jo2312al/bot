@@ -107,7 +107,7 @@ const RACK_EMERGENCY_USER =
 const RACK_EMERGENCY_PASSWORD =
   process.env.RACK_EMERGENCY_PASSWORD || "";
 const DASHBOARD_ASSET_VERSION =
-  "dashboard-checkin-edit-ledger-20260710";
+  "dashboard-header-logo-actions-20260710";
 const DASHBOARD_SCRIPT_FILES = [
   "dashboard-core.js",
   "dashboard-search.js",
@@ -3430,22 +3430,21 @@ function pageHtml() {
 </head>
 <body>
   <header class="mobile-topbar">
-    <div class="brand-mark">VM</div>
-    <div>
-      <h1>Villa Margaritas</h1>
-      <div class="muted">Heritage Boutique Hotel</div>
+    <div class="header-brand">
+      <img class="header-logo" src="/media/logo-villa-margaritas.png?v=${DASHBOARD_ASSET_VERSION}" alt="Hotel Villa Margaritas">
+      <div>
+        <h1>Villa Margaritas</h1>
+        <div class="muted">Heritage Boutique Hotel</div>
+      </div>
     </div>
-    <button class="theme-toggle" onclick="toggleDashboardTheme()" title="Modo nocturno"><span class="material-symbols-outlined">dark_mode</span></button>
+    <div class="header-actions">
+      <button class="theme-toggle" onclick="toggleDashboardTheme()" title="Modo nocturno"><span class="material-symbols-outlined">dark_mode</span><span>Modo</span></button>
+      <button onclick="openGlobalSearch()" data-global-search-trigger><span class="material-symbols-outlined">search</span><span>Buscar</span></button>
+      <button class="primary" onclick="loadDashboard()" data-dashboard-refresh><span class="material-symbols-outlined">refresh</span><span>Actualizar</span></button>
+    </div>
   </header>
   <main>
     <nav class="view-tabs">
-      <div class="sidebar-brand">
-        <div class="brand-mark">VM</div>
-        <div>
-          <strong>Villa Margaritas</strong>
-          <span>Heritage Boutique Hotel</span>
-        </div>
-      </div>
       <button class="nav-new-reservation" onclick="showView('reservations')"><span class="material-symbols-outlined">add</span><span>Nueva Reserva</span></button>
       <button id="tab-today" onclick="showView('today')"><span class="material-symbols-outlined">today</span><span>Hoy</span></button>
       <button id="tab-main" class="active" onclick="showView('main')"><span class="material-symbols-outlined">dashboard</span><span>Principal</span></button>
@@ -3464,11 +3463,6 @@ function pageHtml() {
         <div class="eyebrow">Dashboard operativo</div>
         <h2 id="pageTitle">Vista Principal</h2>
         <p id="pageSubtitle">Resumen de operaciones y estado actual del hotel.</p>
-      </div>
-      <div class="hero-actions">
-        <button onclick="toggleDashboardTheme()" title="Modo nocturno"><span class="material-symbols-outlined">dark_mode</span><span>Modo</span></button>
-        <button onclick="openGlobalSearch()" data-global-search-trigger><span class="material-symbols-outlined">search</span><span>Buscar</span></button>
-        <button class="primary" onclick="loadDashboard()" data-dashboard-refresh><span class="material-symbols-outlined">refresh</span><span>Actualizar</span></button>
       </div>
     </section>
 
