@@ -102,7 +102,7 @@ const RACK_EMERGENCY_USER =
 const RACK_EMERGENCY_PASSWORD =
   process.env.RACK_EMERGENCY_PASSWORD || "";
 const DASHBOARD_ASSET_VERSION =
-  "dashboard-rack-print-20260710";
+  "dashboard-checkin-print-20260710";
 const DASHBOARD_SCRIPT_FILES = [
   "dashboard-core.js",
   "dashboard-search.js",
@@ -113,6 +113,7 @@ const DASHBOARD_SCRIPT_FILES = [
   "dashboard-rack.js",
   "dashboard-preassign.js",
   "dashboard-reservations.js",
+  "dashboard-checkin.js",
   "dashboard-calendar.js",
   "dashboard-day-reservations.js",
   "dashboard-files-utils.js"
@@ -3220,6 +3221,7 @@ function pageHtml() {
       <button id="tab-main" class="active" onclick="showView('main')"><span class="material-symbols-outlined">dashboard</span><span>Principal</span></button>
       <button id="tab-calendar" onclick="showView('calendar')"><span class="material-symbols-outlined">calendar_month</span><span>Calendario</span></button>
       <button id="tab-preassign" onclick="showView('preassign')"><span class="material-symbols-outlined">assignment_ind</span><span>Preasignar</span></button>
+      <button id="tab-checkin" onclick="showView('checkin')"><span class="material-symbols-outlined">how_to_reg</span><span>Check-in</span></button>
       <button id="tab-reservations" onclick="showView('reservations')"><span class="material-symbols-outlined">book_online</span><span>Reservas</span></button>
       <button id="tab-quotes" onclick="showView('quotes')"><span class="material-symbols-outlined">request_quote</span><span>Cotizaciones</span></button>
       <button id="tab-events" onclick="showView('events')"><span class="material-symbols-outlined">event</span><span>Eventos</span></button>
@@ -3414,6 +3416,55 @@ function pageHtml() {
           <div class="muted">Habitaciones guardadas por Autoasignar en esa fecha.</div>
           <div id="preassignAutoAssignedList" class="preassign-side-list"></div>
         </aside>
+      </div>
+    </section>
+    </div>
+
+    <div id="view-checkin" class="view-panel hidden">
+    <section class="panel">
+      <div class="toolbar">
+        <div>
+          <strong>Check-in</strong><button class="help-button" onclick="openHelp('checkin')" title="Ayuda">?</button>
+          <div class="muted">Selecciona una llegada, registra habitacion e imprime la comprobacion de reservacion.</div>
+        </div>
+        <button class="primary" onclick="printCheckinSlip()">Imprimir comprobacion</button>
+      </div>
+      <div class="checkin-layout">
+        <aside class="checkin-list-panel">
+          <div class="checkin-list-head">
+            <strong>Llegadas para check-in</strong>
+            <button onclick="renderCheckinBoard()">Actualizar</button>
+          </div>
+          <div id="checkinReservationList" class="checkin-reservation-list"></div>
+        </aside>
+        <div class="checkin-form-panel">
+          <div id="checkinSelectedSummary" class="muted">Selecciona una reserva para llenar el comprobante.</div>
+          <div class="reservation-edit-grid checkin-form-grid">
+            <label class="wide">Huesped<input id="checkinGuestName" placeholder="Nombre del huesped"></label>
+            <label>Habitacion<input id="checkinRoom" list="reservationArrivalRoomOptions" inputmode="numeric" placeholder="120"></label>
+            <label>Reservacion<input id="checkinReservationCode" placeholder="Folio o numero"></label>
+            <label>Num. huesped<input id="checkinGuestNumber" placeholder="103083"></label>
+            <label>Tipo habitacion<input id="checkinRoomType" placeholder="DOBL"></label>
+            <label>Habitaciones<input id="checkinRoomsCount" type="number" min="1" value="1"></label>
+            <label>Personas<input id="checkinPeopleCount" type="number" min="1" value="1"></label>
+            <label>Entrada<input id="checkinStart" type="date"></label>
+            <label>Salida<input id="checkinEnd" type="date"></label>
+            <label>Hora entrada<input id="checkinTime" placeholder="13:10"></label>
+            <label>Tarifa<input id="checkinRate" placeholder="$800.00"></label>
+            <label>Deposito<input id="checkinDeposit" placeholder="0.00"></label>
+            <label>Forma de pago<input id="checkinPaymentMethod" placeholder="TARJETA DE CREDITO"></label>
+            <label>Compania<input id="checkinCompany" placeholder="SIN COMPANIA"></label>
+            <label>Ciudad<input id="checkinCity" placeholder="MEXICO"></label>
+            <label>Agencia<input id="checkinAgency" placeholder=""></label>
+            <label class="wide">Observaciones<textarea id="checkinNotes" rows="3" placeholder="Observaciones generales del registro"></textarea></label>
+          </div>
+          <div id="checkinStatus" class="muted" style="margin-top:10px"></div>
+          <div class="confirm-actions">
+            <button onclick="clearCheckinForm()">Limpiar</button>
+            <button onclick="registerCheckin()">Registrar check-in</button>
+            <button class="primary" onclick="printCheckinSlip()">Imprimir comprobacion</button>
+          </div>
+        </div>
       </div>
     </section>
     </div>

@@ -202,6 +202,10 @@ const helpTopics = {
     title: 'Preasignacion',
     body: 'Usalo antes de un dia lleno. Elige la fecha, da clic en una habitacion y asigna una reserva que llega, una continuacion o un huesped sin reservacion.\\n\\nReglas: King maximo 2 personas; Doble y suites maximo 4 personas. La impresion deja una hoja clara para recepcion.'
   },
+  checkin: {
+    title: 'Check-in',
+    body: 'Selecciona una llegada del dia, confirma habitacion y completa datos del comprobante.\\n\\nRegistrar check-in guarda la llegada y puede marcar la habitacion ocupada en el rack.\\n\\nImprimir comprobacion abre un formato tipo recepcion con reservacion, huesped, habitacion, tarifa, deposito, cargos y observaciones.'
+  },
   reservations: {
     title: 'Agregar reservas',
     body: 'Captura manual: llena huesped, telefono, entrada, noches, habitaciones, personas, tipo, hora, tarifa y nota.\\n\\nLa salida se calcula automaticamente con entrada + noches. Importar CSV: pega o sube un archivo con reservas; el sistema las convierte al calendario.\\n\\nDespues de agregar, puedes decidir si mandar la reserva al grupo. Si tiene nota, tambien se incluye.'
@@ -386,6 +390,7 @@ async function loadDashboard() {
     renderCalendar();
     renderGroupReservationDetail(closeStart.value || data.today);
     renderPreassignmentBoard();
+    renderCheckinBoard();
   } catch (error) {
     setDashboardRefreshState(false, 'No se pudo actualizar: ' + (error.message || 'error desconocido'));
   } finally {
@@ -514,7 +519,7 @@ function renderBlockMiniItem(block) {
 }
 
 function showView(name) {
-  ['today', 'main', 'calendar', 'preassign', 'reservations', 'quotes', 'events', 'rack', 'reports'].forEach(view => {
+  ['today', 'main', 'calendar', 'preassign', 'checkin', 'reservations', 'quotes', 'events', 'rack', 'reports'].forEach(view => {
     const panel = document.getElementById('view-' + view);
     const tab = document.getElementById('tab-' + view);
 
@@ -532,6 +537,7 @@ function showView(name) {
     main: ['Vista Principal', 'Resumen de operaciones y estado actual del hotel.'],
     calendar: ['Calendario de reservas', 'Ocupacion diaria, cierres de fechas y desglose operativo por dia.'],
     preassign: ['Preasignacion de habitaciones', 'Prepara llegadas, continuaciones y huespedes sin reservacion antes de recibirlos.'],
+    checkin: ['Check-in', 'Registro de entrada e impresion de comprobacion de reservacion.'],
     reservations: ['Reservas', 'Captura manual, importacion CSV, notas internas y cancelacion de folios.'],
     quotes: ['Cotizaciones', 'Documentos visuales o formales para grupos, salones, menus y hospedaje.'],
     events: ['Eventos', 'Calendario de salones, pagos, comprobantes y seguimiento de eventos.'],
@@ -553,5 +559,8 @@ function showView(name) {
   }
   if (name === 'preassign') {
     renderPreassignmentBoard();
+  }
+  if (name === 'checkin') {
+    renderCheckinBoard();
   }
 }

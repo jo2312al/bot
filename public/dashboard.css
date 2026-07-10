@@ -999,6 +999,52 @@ label {
   background: #ffdad6;
   border-color: #e7bdb1;
 }
+.checkin-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: 14px;
+}
+.checkin-list-panel,
+.checkin-form-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff8f6;
+  padding: 14px;
+}
+.checkin-list-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.checkin-reservation-list {
+  display: grid;
+  gap: 8px;
+  max-height: 580px;
+  overflow: auto;
+  padding-right: 4px;
+}
+.checkin-reservation-item {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  background: #fff;
+  color: var(--text);
+}
+.checkin-reservation-item span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.checkin-reservation-item.selected {
+  border-color: var(--accent);
+  box-shadow: inset 4px 0 0 var(--accent);
+  background: #fff1ec;
+}
+.checkin-form-grid {
+  margin-top: 12px;
+}
 .rack-type-legend {
   display: flex;
   flex-wrap: wrap;
@@ -1925,6 +1971,7 @@ body.app-modal-open {
   .reservation-edit-grid,
   .preassign-toolbar,
   .preassign-layout,
+  .checkin-layout,
   .preassign-app-modal-grid,
   .preassign-form-row {
     grid-template-columns: 1fr;
