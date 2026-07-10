@@ -2596,20 +2596,28 @@ function getAuditReports({ date } = {}) {
         'nights', COUNT(DISTINCT stay.stay_date), 'roomType', COALESCE(room_type.name, ''),
         'pax', COALESCE(reservation.adults_count, 0) + COALESCE(reservation.children_count, 0),
         'rate', COALESCE(reservation.rate_text, ''),
-        'balance', COALESCE(SUM(movement.charge_amount - movement.payment_amount), 0),
-        'paymentMethod', COALESCE(MAX(NULLIF(movement.payment_method, '')), '')
+        'balance', COALESCE(movement_total.balance, 0),
+        'paymentMethod', COALESCE(movement_total.payment_method, '')
       )
       FROM checkins checkin
       LEFT JOIN reservations reservation ON reservation.id = checkin.reservation_id
       LEFT JOIN reservation_dates stay ON stay.reservation_id = reservation.id
       LEFT JOIN rooms room ON room.id = checkin.room_id
       LEFT JOIN room_types room_type ON room_type.id = reservation.room_type_id
-      LEFT JOIN account_movements movement ON movement.checkin_id = checkin.id AND DATE(movement.occurred_at) <= ${mysql.quote(auditDate)}
+      LEFT JOIN (
+        SELECT
+          checkin_id,
+          SUM(charge_amount - payment_amount) AS balance,
+          MAX(NULLIF(payment_method, '')) AS payment_method
+        FROM account_movements
+        WHERE DATE(occurred_at) <= ${mysql.quote(auditDate)}
+        GROUP BY checkin_id
+      ) movement_total ON movement_total.checkin_id = checkin.id
       WHERE DATE(checkin.checked_in_at) <= ${mysql.quote(auditDate)}
         AND (checkin.checked_out_at IS NULL OR DATE(checkin.checked_out_at) >= ${mysql.quote(auditDate)})
         AND checkin.room_id IS NOT NULL
         AND NULLIF(checkin.room_number_snapshot, '') IS NOT NULL
-      GROUP BY checkin.id, checkin.room_number_snapshot, checkin.guest_name_snapshot, reservation.start_date, room_type.name, reservation.adults_count, reservation.children_count, reservation.rate_text
+      GROUP BY checkin.id, checkin.room_number_snapshot, checkin.guest_name_snapshot, reservation.start_date, room_type.name, reservation.adults_count, reservation.children_count, reservation.rate_text, movement_total.balance, movement_total.payment_method
       ORDER BY CAST(checkin.room_number_snapshot AS UNSIGNED), checkin.room_number_snapshot;
     `),
     movements: mysql.queryJson(`
