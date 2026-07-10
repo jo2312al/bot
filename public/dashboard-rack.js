@@ -122,6 +122,7 @@ function openRackRoom(room) {
 }
 
 let activeRackGuestRoom = '';
+let activeRackGuestCheckin = null;
 
 async function openRackGuestDetails(room) {
   ensureRackGuestModal();
@@ -146,6 +147,7 @@ async function openRackGuestDetails(room) {
 }
 
 function renderRackGuestDetails(checkin) {
+  activeRackGuestCheckin = checkin;
   const balance = Number(checkin.balance || 0);
   const movements = Array.isArray(checkin.movements) ? checkin.movements : [];
   document.getElementById('rackGuestModalSubtitle').textContent = 'Check-in desde ' + formatRackMovementDate(checkin.checkedInAt);
@@ -171,7 +173,7 @@ function ensureRackGuestModal() {
             '<label>Cargo<input id="rackMovementCharge" type="number" min="0" step="0.01" value="0"></label>' +
             '<label>Pago<input id="rackMovementPayment" type="number" min="0" step="0.01" value="0"></label>' +
           '</div><div class="confirm-actions"><button class="primary" onclick="saveRackMovement()">Guardar movimiento</button></div></div>' +
-          '<div class="confirm-actions rack-guest-actions"><button class="danger" onclick="checkoutRackGuest()">Hacer check-out (pasar a VS)</button></div>' +
+          '<div class="confirm-actions rack-guest-actions"><button onclick="printRackGuestReservation()">Imprimir reserva</button><button class="danger" onclick="checkoutRackGuest()">Hacer check-out (pasar a VS)</button></div>' +
         '</div></div></div>'
   );
 }
@@ -185,7 +187,34 @@ function closeRackGuestModal() {
   const backdrop = document.getElementById('rackGuestModalBackdrop');
   if (backdrop) backdrop.classList.add('hidden');
   activeRackGuestRoom = '';
+  activeRackGuestCheckin = null;
   document.body.classList.remove('app-modal-open');
+}
+
+function printRackGuestReservation() {
+  const checkin = activeRackGuestCheckin;
+  if (!checkin) {
+    alert('No hay una reserva vinculada para imprimir.');
+    return;
+  }
+
+  const movements = Array.isArray(checkin.movements) ? checkin.movements : [];
+  const rows = movements.length
+    ? movements.map(item => '<tr><td>' + escapeHtml(formatRackMovementDate(item.occurredAt)) + '</td><td>' + escapeHtml(item.concept || '-') + '</td><td>' + formatMoney(item.charge) + '</td><td>' + formatMoney(item.payment) + '</td></tr>').join('')
+    : '<tr><td colspan="4">Sin movimientos registrados</td></tr>';
+  const html =
+    '<!doctype html><html><head><meta charset="utf-8"><title>Reserva ' + escapeHtml(checkin.room || '') + '</title>' +
+    '<style>@page{size:letter;margin:12mm}body{font-family:Arial,sans-serif;color:#111;font-size:13px}.actions{text-align:right;margin-bottom:10px}.sheet{border:1px solid #222;padding:22px}.head{display:flex;justify-content:space-between;border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:18px}.head h1{font-size:19px;margin:0}.meta{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:18px 0}.box{border:1px solid #777;padding:12px}.box span,.box strong{display:block}.box span{font-size:11px;color:#555;text-transform:uppercase}table{width:100%;border-collapse:collapse;margin-top:18px}th,td{border-bottom:1px solid #aaa;padding:7px;text-align:left}th{text-transform:uppercase;font-size:11px}@media print{.actions{display:none}}</style>' +
+    '</head><body><div class="actions"><button onclick="window.print()">Imprimir / guardar PDF</button></div><section class="sheet">' +
+    '<div class="head"><div><h1>Hotel Villa Margaritas</h1><div>Comprobación de reservación</div></div><div>Generado: ' + escapeHtml(formatRackMovementDate(new Date().toISOString())) + '</div></div>' +
+    '<div class="meta"><div class="box"><span>Huésped</span><strong>' + escapeHtml(checkin.guestName || '-') + '</strong></div><div class="box"><span>Habitación</span><strong>' + escapeHtml(checkin.room || '-') + '</strong></div><div class="box"><span>Check-in</span><strong>' + escapeHtml(formatRackMovementDate(checkin.checkedInAt)) + '</strong></div><div class="box"><span>Saldo actual</span><strong>' + formatMoney(checkin.balance) + '</strong></div></div>' +
+    '<h3>Movimientos</h3><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Cargo</th><th>Pago</th></tr></thead><tbody>' + rows + '</tbody></table></section></body></html>';
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) return alert('Permite ventanas emergentes para imprimir.');
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => printWindow.print(), 250);
 }
 
 async function saveRackMovement() {

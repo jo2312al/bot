@@ -107,7 +107,7 @@ const RACK_EMERGENCY_USER =
 const RACK_EMERGENCY_PASSWORD =
   process.env.RACK_EMERGENCY_PASSWORD || "";
 const DASHBOARD_ASSET_VERSION =
-  "dashboard-rack-guest-modal-fix-20260710";
+  "dashboard-rack-print-reservation-20260710";
 const DASHBOARD_SCRIPT_FILES = [
   "dashboard-core.js",
   "dashboard-search.js",
@@ -4118,7 +4118,7 @@ function pageHtml() {
           </div>
           <div class="confirm-actions"><button class="primary" onclick="saveRackMovement()">Guardar movimiento</button></div>
         </div>
-        <div class="confirm-actions rack-guest-actions"><button class="danger" onclick="checkoutRackGuest()">Hacer check-out (pasar a VS)</button></div>
+        <div class="confirm-actions rack-guest-actions"><button onclick="printRackGuestReservation()">Imprimir reserva</button><button class="danger" onclick="checkoutRackGuest()">Hacer check-out (pasar a VS)</button></div>
       </div>
     </div>
   </div>
@@ -4144,7 +4144,7 @@ function pageHtml() {
           </div>
           <div class="confirm-actions"><button class="primary" onclick="saveRackMovement()">Guardar movimiento</button></div>
         </div>
-        <div class="confirm-actions rack-guest-actions"><button class="danger" onclick="checkoutRackGuest()">Hacer check-out (pasar a VS)</button></div>
+        <div class="confirm-actions rack-guest-actions"><button onclick="printRackGuestReservation()">Imprimir reserva</button><button class="danger" onclick="checkoutRackGuest()">Hacer check-out (pasar a VS)</button></div>
       </div>
     </div>
   </div>
