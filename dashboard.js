@@ -3444,7 +3444,7 @@ function pageHtml() {
             <label>Habitacion<input id="checkinRoom" list="reservationArrivalRoomOptions" inputmode="numeric" placeholder="120"></label>
             <label>Reservacion<input id="checkinReservationCode" placeholder="Folio o numero"></label>
             <label>Num. huesped<input id="checkinGuestNumber" placeholder="103083"></label>
-            <label>Tipo habitacion<input id="checkinRoomType" placeholder="DOBL"></label>
+            <label>Tipo habitacion<select id="checkinRoomType"><option value="DOBL">DOBL</option><option value="KING">KING</option></select></label>
             <label>Habitaciones<input id="checkinRoomsCount" type="number" min="1" value="1"></label>
             <label>Personas<input id="checkinPeopleCount" type="number" min="1" value="1"></label>
             <label>Entrada<input id="checkinStart" type="date"></label>
