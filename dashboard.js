@@ -2545,7 +2545,9 @@ function getAuditReports({ date } = {}) {
   if (!mysql.ensureSchema()) {
     const displayDate = isoToDisplayDate(auditDate);
     const stays = readCalendarReservations().filter(reservation =>
-      Array.isArray(reservation.dates) && reservation.dates.includes(displayDate)
+      reservation.roomNumber &&
+      Array.isArray(reservation.dates) &&
+      reservation.dates.includes(displayDate)
     ).map(reservation => ({
       room: reservation.roomNumber || "",
       guestName: reservation.nombre || "",
@@ -2564,7 +2566,7 @@ function getAuditReports({ date } = {}) {
     date: auditDate,
     rents: mysql.queryJson(`
       SELECT JSON_OBJECT(
-        'room', COALESCE(room.room_number, ''), 'guestName', guest.name,
+        'room', checkin.room_number_snapshot, 'guestName', checkin.guest_name_snapshot,
         'startDate', DATE_FORMAT(reservation.start_date, '%d/%m/%Y'),
         'endDate', DATE_FORMAT(MAX(stay.stay_date), '%d/%m/%Y'),
         'roomType', COALESCE(room_type.name, ''),
@@ -2572,16 +2574,19 @@ function getAuditReports({ date } = {}) {
         'rate', reservation.rate_text,
         'extras', COALESCE(SUM(CASE WHEN DATE(movement.occurred_at) = ${mysql.quote(auditDate)} THEN movement.charge_amount ELSE 0 END), 0)
       )
-      FROM reservations reservation
-      JOIN guests guest ON guest.id = reservation.guest_id
+      FROM checkins checkin
+      LEFT JOIN reservations reservation ON reservation.id = checkin.reservation_id
       JOIN reservation_dates stay ON stay.reservation_id = reservation.id AND stay.stay_date = ${mysql.quote(auditDate)}
-      LEFT JOIN rooms room ON room.id = reservation.assigned_room_id
+      LEFT JOIN rooms room ON room.id = checkin.room_id
       LEFT JOIN room_types room_type ON room_type.id = reservation.room_type_id
-      LEFT JOIN checkins checkin ON checkin.reservation_id = reservation.id
       LEFT JOIN account_movements movement ON movement.checkin_id = checkin.id
-      WHERE reservation.status != 'cancelada'
-      GROUP BY reservation.id, room.room_number, guest.name, reservation.start_date, room_type.name, reservation.adults_count, reservation.children_count, reservation.rate_text
-      ORDER BY room.room_number, guest.name;
+      WHERE DATE(checkin.checked_in_at) <= ${mysql.quote(auditDate)}
+        AND (checkin.checked_out_at IS NULL OR DATE(checkin.checked_out_at) >= ${mysql.quote(auditDate)})
+        AND checkin.room_id IS NOT NULL
+        AND NULLIF(checkin.room_number_snapshot, '') IS NOT NULL
+        AND COALESCE(reservation.status, '') != 'cancelada'
+      GROUP BY checkin.id, checkin.room_number_snapshot, checkin.guest_name_snapshot, reservation.start_date, room_type.name, reservation.adults_count, reservation.children_count, reservation.rate_text
+      ORDER BY CAST(checkin.room_number_snapshot AS UNSIGNED), checkin.room_number_snapshot, checkin.guest_name_snapshot;
     `),
     balances: mysql.queryJson(`
       SELECT JSON_OBJECT(
@@ -2601,9 +2606,11 @@ function getAuditReports({ date } = {}) {
       LEFT JOIN room_types room_type ON room_type.id = reservation.room_type_id
       LEFT JOIN account_movements movement ON movement.checkin_id = checkin.id AND DATE(movement.occurred_at) <= ${mysql.quote(auditDate)}
       WHERE DATE(checkin.checked_in_at) <= ${mysql.quote(auditDate)}
-        AND (checkin.checked_out_at IS NULL OR DATE(checkin.checked_out_at) > ${mysql.quote(auditDate)})
+        AND (checkin.checked_out_at IS NULL OR DATE(checkin.checked_out_at) >= ${mysql.quote(auditDate)})
+        AND checkin.room_id IS NOT NULL
+        AND NULLIF(checkin.room_number_snapshot, '') IS NOT NULL
       GROUP BY checkin.id, checkin.room_number_snapshot, checkin.guest_name_snapshot, reservation.start_date, room_type.name, reservation.adults_count, reservation.children_count, reservation.rate_text
-      ORDER BY checkin.room_number_snapshot;
+      ORDER BY CAST(checkin.room_number_snapshot AS UNSIGNED), checkin.room_number_snapshot;
     `),
     movements: mysql.queryJson(`
       SELECT JSON_OBJECT(
@@ -2614,9 +2621,12 @@ function getAuditReports({ date } = {}) {
         'paymentMethod', movement.payment_method
       )
       FROM account_movements movement
+      JOIN checkins checkin ON checkin.id = movement.checkin_id
       JOIN guests guest ON guest.id = movement.guest_id
       WHERE DATE(movement.occurred_at) = ${mysql.quote(auditDate)}
-      ORDER BY movement.room_number_snapshot, movement.occurred_at;
+        AND checkin.room_id IS NOT NULL
+        AND NULLIF(movement.room_number_snapshot, '') IS NOT NULL
+      ORDER BY CAST(movement.room_number_snapshot AS UNSIGNED), movement.room_number_snapshot, movement.occurred_at;
     `)
   };
 }
