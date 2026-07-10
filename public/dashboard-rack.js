@@ -111,6 +111,49 @@ function renderRackRoomGrid(status) {
     '</div>';
 }
 
+function printRack() {
+  const status =
+    dashboardData?.rackStatus;
+  const rooms =
+    Array.isArray(status?.rooms)
+      ? status.rooms.slice().sort((left, right) =>
+        String(left.room || '').localeCompare(String(right.room || ''))
+      )
+      : [];
+
+  if (!rooms.length) {
+    alert('No hay rack cargado para imprimir.');
+    return;
+  }
+
+  const counts =
+    status?.counts || {};
+  const title =
+    'Rack ' + (status?.reportDate || '') + ' ' + (status?.reportTime || '');
+  const rows =
+    rooms.map(room =>
+      '<tr><td><strong>' + escapeHtml(room.room || '') + '</strong></td><td>' + escapeHtml(room.type || '-') + '</td><td>' + escapeHtml(room.status || '-') + '</td><td>' + escapeHtml(room.statusLabel || '-') + '</td></tr>'
+    ).join('');
+  const html =
+    '<!doctype html><html><head><meta charset="utf-8"><title>' + escapeHtml(title) + '</title>' +
+    '<style>body{font-family:Arial,sans-serif;color:#1f2933;margin:24px}h1{font-size:22px;margin:0 0 4px}.muted{color:#64748b}.actions{text-align:right;margin-bottom:12px}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}.box{border:1px solid #cbd5e1;padding:8px}.box strong{display:block;font-size:18px}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #cbd5e1;padding:6px;text-align:left;font-size:11px}th{background:#f1f5f9}tr{break-inside:avoid}@media print{.actions{display:none}body{margin:8mm}}</style>' +
+    '</head><body><div class="actions"><button onclick="window.print()">Imprimir / guardar PDF</button></div>' +
+    '<h1>Rack de habitaciones</h1><div class="muted">Hotel Villa Margaritas / ' + escapeHtml(status?.reportDate || '-') + ' ' + escapeHtml(status?.reportTime || '') + ' / Impreso: ' + escapeHtml(new Date().toLocaleString()) + '</div>' +
+    '<div class="summary"><div class="box"><span>Total</span><strong>' + escapeHtml(counts.total || rooms.length) + '</strong></div><div class="box"><span>Ocupadas</span><strong>' + escapeHtml(counts.occupied?.total || 0) + '</strong></div><div class="box"><span>VL limpias</span><strong>' + escapeHtml(counts.availableClean?.total || 0) + '</strong></div><div class="box"><span>VS sucias</span><strong>' + escapeHtml(counts.availableDirty?.total || 0) + '</strong></div></div>' +
+    '<table><thead><tr><th>Habitacion</th><th>Tipo</th><th>Estado</th><th>Descripcion</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+    '<script>window.onload=function(){window.print();}<\/script></body></html>';
+  const printWindow =
+    window.open('', '_blank');
+
+  if (!printWindow) {
+    alert('Permite ventanas emergentes para imprimir.');
+    return;
+  }
+
+  printWindow.document.write(html);
+  printWindow.document.close();
+}
+
 function renderRackFloorMap(rooms) {
   const byFloor = rooms.reduce((acc, room) => {
     const floor = String(room.room || '').slice(0, 1) || '-';
@@ -188,4 +231,3 @@ function getAvailableRoomColorCounts(rooms) {
     suite: 0
   });
 }
-

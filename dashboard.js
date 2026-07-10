@@ -102,7 +102,7 @@ const RACK_EMERGENCY_USER =
 const RACK_EMERGENCY_PASSWORD =
   process.env.RACK_EMERGENCY_PASSWORD || "";
 const DASHBOARD_ASSET_VERSION =
-  "dashboard-resend-arrivals-20260709";
+  "dashboard-rack-print-20260710";
 const DASHBOARD_SCRIPT_FILES = [
   "dashboard-core.js",
   "dashboard-search.js",
@@ -3717,6 +3717,7 @@ function pageHtml() {
           <strong>Lector de rack</strong><button class="help-button" onclick="openHelp('rack')" title="Ayuda">?</button>
           <div class="muted">Importa el CSV del sistema para leer ocupadas, disponibles y bloqueadas. La foto queda como respaldo.</div>
         </div>
+        <button class="primary" onclick="printRack()">Imprimir rack</button>
       </div>
       <div class="rack-controls">
         <label class="file-dropzone" data-file-zone="rackCsv" tabindex="0">
