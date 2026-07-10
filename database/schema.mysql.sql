@@ -121,6 +121,55 @@ CREATE TABLE IF NOT EXISTS reservation_notes (
     ON UPDATE CASCADE ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS checkins (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  reservation_id BIGINT UNSIGNED NULL,
+  guest_id BIGINT UNSIGNED NOT NULL,
+  room_id BIGINT UNSIGNED NOT NULL,
+  guest_name_snapshot VARCHAR(180) NOT NULL DEFAULT '',
+  room_number_snapshot VARCHAR(12) NOT NULL DEFAULT '',
+  checked_in_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  checked_out_at DATETIME NULL,
+  status ENUM('activo', 'cerrado', 'cancelado') NOT NULL DEFAULT 'activo',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY ux_checkins_reservation (reservation_id),
+  KEY ix_checkins_room_status (room_id, status),
+  KEY ix_checkins_guest_status (guest_id, status),
+  CONSTRAINT fk_checkins_reservation FOREIGN KEY (reservation_id) REFERENCES reservations(id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT fk_checkins_guest FOREIGN KEY (guest_id) REFERENCES guests(id)
+    ON UPDATE CASCADE ON DELETE RESTRICT,
+  CONSTRAINT fk_checkins_room FOREIGN KEY (room_id) REFERENCES rooms(id)
+    ON UPDATE CASCADE ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS account_movements (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  checkin_id BIGINT UNSIGNED NULL,
+  guest_id BIGINT UNSIGNED NOT NULL,
+  room_id BIGINT UNSIGNED NULL,
+  room_number_snapshot VARCHAR(12) NOT NULL DEFAULT '',
+  movement_type ENUM('cargo', 'pago', 'ajuste', 'reembolso') NOT NULL,
+  payment_method VARCHAR(80) NOT NULL DEFAULT '',
+  reference_code VARCHAR(180) NOT NULL DEFAULT '',
+  concept VARCHAR(255) NOT NULL DEFAULT '',
+  charge_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  payment_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  occurred_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY ix_account_movements_checkin_time (checkin_id, occurred_at),
+  KEY ix_account_movements_guest_time (guest_id, occurred_at),
+  CONSTRAINT fk_account_movements_checkin FOREIGN KEY (checkin_id) REFERENCES checkins(id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT fk_account_movements_guest FOREIGN KEY (guest_id) REFERENCES guests(id)
+    ON UPDATE CASCADE ON DELETE RESTRICT,
+  CONSTRAINT fk_account_movements_room FOREIGN KEY (room_id) REFERENCES rooms(id)
+    ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS closed_dates (
   closed_date DATE NOT NULL,
   reason VARCHAR(160) NOT NULL DEFAULT '',

@@ -102,7 +102,7 @@ function renderRackRoomGrid(status) {
     status.rooms.map(room => {
       const category = getRackRoomCategory(room.status);
       const typeClass = getRackRoomTypeClass(room, category);
-      return '<button class="rack-room ' + category + ' ' + typeClass + '" onclick="setRackRoomOccupied(\'' + escapeHtml(room.room) + '\')">' +
+      return '<button class="rack-room ' + category + ' ' + typeClass + '" onclick="openRackRoom(\'' + escapeHtml(room.room) + '\')">' +
         '<strong>' + escapeHtml(room.room) + '</strong>' +
         '<span>' + escapeHtml(room.type || '-') + '</span>' +
         '<span>' + escapeHtml(room.status || '-') + '</span>' +
@@ -110,6 +110,79 @@ function renderRackRoomGrid(status) {
       '</button>';
     }).join('') +
     '</div>';
+}
+
+function openRackRoom(room) {
+  const rackRoom = dashboardData?.rackStatus?.rooms?.find(item => item.room === room);
+  if (rackRoom && getRackRoomCategory(rackRoom.status) === 'occupied') {
+    openRackGuestDetails(room);
+    return;
+  }
+  setRackRoomOccupied(room);
+}
+
+let activeRackGuestRoom = '';
+
+async function openRackGuestDetails(room) {
+  activeRackGuestRoom = room;
+  rackGuestModalTitle.textContent = 'Habitación ' + room;
+  rackGuestModalSubtitle.textContent = 'Cargando información del check-in...';
+  rackGuestSummary.innerHTML = '';
+  rackGuestModalBackdrop.classList.remove('hidden');
+  document.body.classList.add('app-modal-open');
+
+  const response = await fetch('/api/checkins/room?room=' + encodeURIComponent(room));
+  const data = await response.json();
+  if (!data.ok || !data.checkin) {
+    rackGuestModalSubtitle.textContent = data.error || 'No hay check-in guardado para esta habitación.';
+    rackGuestSummary.innerHTML = '<div class="muted">Registra el check-in para asociar huésped y movimientos.</div>';
+    return;
+  }
+
+  renderRackGuestDetails(data.checkin);
+}
+
+function renderRackGuestDetails(checkin) {
+  const balance = Number(checkin.balance || 0);
+  const movements = Array.isArray(checkin.movements) ? checkin.movements : [];
+  rackGuestModalSubtitle.textContent = 'Check-in desde ' + formatRackMovementDate(checkin.checkedInAt);
+  rackGuestSummary.innerHTML =
+    '<div class="rack-guest-kpis"><div><span>Huésped</span><strong>' + escapeHtml(checkin.guestName || '-') + '</strong></div><div><span>Saldo</span><strong>' + formatMoney(balance) + '</strong></div></div>' +
+    '<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Cargo</th><th>Pago</th></tr></thead><tbody>' +
+    (movements.length ? movements.map(item => '<tr><td>' + escapeHtml(formatRackMovementDate(item.occurredAt)) + '</td><td>' + escapeHtml(item.concept || '-') + '</td><td>' + formatMoney(item.charge) + '</td><td>' + formatMoney(item.payment) + '</td></tr>').join('') : '<tr><td colspan="4" class="muted">Sin movimientos.</td></tr>') +
+    '</tbody></table></div>';
+}
+
+function formatRackMovementDate(value) {
+  if (!value) return '-';
+  return new Intl.DateTimeFormat('es-MX', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Mexico_City' }).format(new Date(value));
+}
+
+function closeRackGuestModal() {
+  rackGuestModalBackdrop.classList.add('hidden');
+  activeRackGuestRoom = '';
+  document.body.classList.remove('app-modal-open');
+}
+
+async function saveRackMovement() {
+  const response = await fetch('/api/checkins/movement', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ room: activeRackGuestRoom, concept: rackMovementConcept.value.trim(), paymentMethod: rackMovementMethod.value, reference: rackMovementReference.value.trim(), charge: rackMovementCharge.value, payment: rackMovementPayment.value })
+  });
+  const data = await response.json();
+  if (!data.ok) return alert(data.error || 'No se pudo guardar el movimiento.');
+  rackMovementConcept.value = ''; rackMovementReference.value = ''; rackMovementCharge.value = '0'; rackMovementPayment.value = '0';
+  renderRackGuestDetails(data.checkin);
+}
+
+async function checkoutRackGuest() {
+  if (!activeRackGuestRoom || !confirm('¿Confirmas el check-out? La habitación pasará a VS.')) return;
+  const response = await fetch('/api/checkins/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ room: activeRackGuestRoom }) });
+  const data = await response.json();
+  if (!data.ok) return alert(data.error || 'No se pudo hacer el check-out.');
+  closeRackGuestModal();
+  await loadDashboard();
+  showView('rack');
 }
 
 function printRack() {
@@ -228,7 +301,7 @@ function renderRackFloorMap(rooms) {
               const className = category === 'available'
                 ? (room.status === 'VS' ? 'dirty' : 'clean')
                 : category;
-              return '<button class="floor-room ' + className + '" onclick="setRackRoomOccupied(\'' + escapeHtml(room.room) + '\')">' +
+              return '<button class="floor-room ' + className + '" onclick="openRackRoom(\'' + escapeHtml(room.room) + '\')">' +
                 '<strong>' + escapeHtml(room.room || '-') + '</strong>' +
                 '<span>' + escapeHtml(room.type || '-') + '</span>' +
                 '<span>' + escapeHtml(room.status || '-') + '</span>' +

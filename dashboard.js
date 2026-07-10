@@ -60,6 +60,9 @@ const {
   createRoomPreassignmentService
 } = require("./services/roomPreassignmentService");
 const {
+  createCheckinLedgerService
+} = require("./services/checkinLedgerService");
+const {
   applyReservationPricing
 } = require("./services/reservationPricingService");
 const {
@@ -88,6 +91,8 @@ const {
 } = require("./services/dashboardExtrasService");
 const mysql =
   require("./services/mysqlCliService");
+const checkinLedger =
+  createCheckinLedgerService(mysql);
 const {
   readRoomBlocks,
   saveRoomBlock
@@ -102,7 +107,7 @@ const RACK_EMERGENCY_USER =
 const RACK_EMERGENCY_PASSWORD =
   process.env.RACK_EMERGENCY_PASSWORD || "";
 const DASHBOARD_ASSET_VERSION =
-  "dashboard-checkin-rack-guest-20260710";
+  "dashboard-checkin-ledger-20260710";
 const DASHBOARD_SCRIPT_FILES = [
   "dashboard-core.js",
   "dashboard-search.js",
@@ -4091,6 +4096,58 @@ function pageHtml() {
       </div>
     </div>
   </div>
+  <div id="rackGuestModalBackdrop" class="app-modal-backdrop hidden" onclick="closeRackGuestModal()">
+    <div class="app-modal reservation-edit-app-modal" role="dialog" aria-modal="true" aria-labelledby="rackGuestModalTitle" onclick="event.stopPropagation()">
+      <div class="app-modal-head">
+        <div>
+          <strong id="rackGuestModalTitle">Habitación ocupada</strong>
+          <div id="rackGuestModalSubtitle" class="muted"></div>
+        </div>
+        <button onclick="closeRackGuestModal()">Cerrar</button>
+      </div>
+      <div class="app-modal-body">
+        <div id="rackGuestSummary" class="rack-guest-summary"></div>
+        <div class="rack-movement-form">
+          <strong>Agregar movimiento</strong>
+          <div class="reservation-edit-grid">
+            <label>Concepto<input id="rackMovementConcept" placeholder="Hospedaje, consumo, abono..."></label>
+            <label>Forma de pago<select id="rackMovementMethod"><option value="">Sin especificar</option><option>Efectivo</option><option>Tarjeta de crédito</option><option>Tarjeta de débito</option><option>Transferencia</option></select></label>
+            <label>Referencia<input id="rackMovementReference" placeholder="Folio o autorización"></label>
+            <label>Cargo<input id="rackMovementCharge" type="number" min="0" step="0.01" value="0"></label>
+            <label>Pago<input id="rackMovementPayment" type="number" min="0" step="0.01" value="0"></label>
+          </div>
+          <div class="confirm-actions"><button class="primary" onclick="saveRackMovement()">Guardar movimiento</button></div>
+        </div>
+        <div class="confirm-actions rack-guest-actions"><button class="danger" onclick="checkoutRackGuest()">Hacer check-out (pasar a VS)</button></div>
+      </div>
+    </div>
+  </div>
+  <div id="rackGuestModalBackdrop" class="app-modal-backdrop hidden" onclick="closeRackGuestModal()">
+    <div class="app-modal reservation-edit-app-modal" role="dialog" aria-modal="true" aria-labelledby="rackGuestModalTitle" onclick="event.stopPropagation()">
+      <div class="app-modal-head">
+        <div>
+          <strong id="rackGuestModalTitle">Habitación ocupada</strong>
+          <div id="rackGuestModalSubtitle" class="muted"></div>
+        </div>
+        <button onclick="closeRackGuestModal()">Cerrar</button>
+      </div>
+      <div class="app-modal-body">
+        <div id="rackGuestSummary" class="rack-guest-summary"></div>
+        <div class="rack-movement-form">
+          <strong>Agregar movimiento</strong>
+          <div class="reservation-edit-grid">
+            <label>Concepto<input id="rackMovementConcept" placeholder="Hospedaje, consumo, abono..."></label>
+            <label>Forma de pago<select id="rackMovementMethod"><option value="">Sin especificar</option><option>Efectivo</option><option>Tarjeta de crédito</option><option>Tarjeta de débito</option><option>Transferencia</option></select></label>
+            <label>Referencia<input id="rackMovementReference" placeholder="Folio o autorización"></label>
+            <label>Cargo<input id="rackMovementCharge" type="number" min="0" step="0.01" value="0"></label>
+            <label>Pago<input id="rackMovementPayment" type="number" min="0" step="0.01" value="0"></label>
+          </div>
+          <div class="confirm-actions"><button class="primary" onclick="saveRackMovement()">Guardar movimiento</button></div>
+        </div>
+        <div class="confirm-actions rack-guest-actions"><button class="danger" onclick="checkoutRackGuest()">Hacer check-out (pasar a VS)</button></div>
+      </div>
+    </div>
+  </div>
   <div id="quoteMenuModalBackdrop" class="app-modal-backdrop hidden" onclick="closeQuoteMenuModal()">
     <div class="app-modal quote-catalog-app-modal" role="dialog" aria-modal="true" aria-labelledby="quoteMenuModalTitle" onclick="event.stopPropagation()">
       <div class="app-modal-head">
@@ -4937,6 +4994,9 @@ const server =
               current.arrivalAt || new Date().toISOString(),
             ...(room ? { roomNumber: room } : {})
           });
+        if (room && mysql.ensureSchema()) {
+          checkinLedger.recordCheckin({ sourceKey, room });
+        }
         sendJson(res, 200, {
           ok: true,
           reservation,
@@ -4950,6 +5010,52 @@ const server =
         });
       }
 
+      return;
+    }
+
+    if (
+      req.method === "GET"
+      &&
+      url.pathname === "/api/checkins/room"
+    ) {
+      try {
+        sendJson(res, 200, {
+          ok: true,
+          checkin: checkinLedger.getCheckinByRoom(url.searchParams.get("room"))
+        });
+      } catch (error) {
+        sendJson(res, 400, { ok: false, error: error.message || "No se pudo consultar el check-in" });
+      }
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/checkins/movement"
+    ) {
+      try {
+        const body = await readBody(req);
+        sendJson(res, 200, { ok: true, checkin: checkinLedger.addMovement(body) });
+      } catch (error) {
+        sendJson(res, 400, { ok: false, error: error.message || "No se pudo guardar el movimiento" });
+      }
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/checkins/checkout"
+    ) {
+      try {
+        const body = await readBody(req);
+        const checkin = checkinLedger.checkout(body.room);
+        const rackStatus = updateRackRoomStatus({ room: body.room, status: "VS", guestName: "" });
+        sendJson(res, 200, { ok: true, checkin, rackStatus });
+      } catch (error) {
+        sendJson(res, 400, { ok: false, error: error.message || "No se pudo hacer el check-out" });
+      }
       return;
     }
 
