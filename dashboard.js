@@ -102,7 +102,7 @@ const RACK_EMERGENCY_USER =
 const RACK_EMERGENCY_PASSWORD =
   process.env.RACK_EMERGENCY_PASSWORD || "";
 const DASHBOARD_ASSET_VERSION =
-  "dashboard-checkin-walkin-20260710";
+  "dashboard-dark-responsive-20260710";
 const DASHBOARD_SCRIPT_FILES = [
   "dashboard-core.js",
   "dashboard-search.js",
@@ -3197,6 +3197,15 @@ function pageHtml() {
   <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=Literata:wght@600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("dashboardTheme") === "dark") {
+          document.documentElement.classList.add("dark-mode");
+        }
+      } catch {}
+    })();
+  </script>
   <link href="/public/dashboard.css?v=${DASHBOARD_ASSET_VERSION}" rel="stylesheet">
 </head>
 <body>
@@ -3206,6 +3215,7 @@ function pageHtml() {
       <h1>Villa Margaritas</h1>
       <div class="muted">Heritage Boutique Hotel</div>
     </div>
+    <button class="theme-toggle" onclick="toggleDashboardTheme()" title="Modo nocturno"><span class="material-symbols-outlined">dark_mode</span></button>
   </header>
   <main>
     <nav class="view-tabs">
@@ -3236,6 +3246,7 @@ function pageHtml() {
         <p id="pageSubtitle">Resumen de operaciones y estado actual del hotel.</p>
       </div>
       <div class="hero-actions">
+        <button onclick="toggleDashboardTheme()" title="Modo nocturno"><span class="material-symbols-outlined">dark_mode</span><span>Modo</span></button>
         <button onclick="openGlobalSearch()" data-global-search-trigger><span class="material-symbols-outlined">search</span><span>Buscar</span></button>
         <button class="primary" onclick="loadDashboard()" data-dashboard-refresh><span class="material-symbols-outlined">refresh</span><span>Actualizar</span></button>
       </div>

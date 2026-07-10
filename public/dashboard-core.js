@@ -36,6 +36,30 @@ const hotelRateOptions = Array.isArray(dashboardBootstrap.hotelRateOptions)
   : [];
 const hotelAutoRateValues = new Set(['', '$600', '600', '$650', '650', '$700', '700', '$800', '800', '$900', '900', '$1,000', '$1000', '1,000', '1000']);
 
+function toggleDashboardTheme() {
+  const root = document.documentElement;
+  const isDark = root.classList.toggle('dark-mode');
+
+  try {
+    localStorage.setItem('dashboardTheme', isDark ? 'dark' : 'light');
+  } catch {}
+
+  updateDashboardThemeControls(isDark);
+}
+
+function updateDashboardThemeControls(isDark) {
+  document.querySelectorAll('[onclick="toggleDashboardTheme()"]').forEach(button => {
+    const icon = button.querySelector('.material-symbols-outlined');
+    if (icon) icon.textContent = isDark ? 'light_mode' : 'dark_mode';
+    button.title = isDark ? 'Usar modo claro' : 'Usar modo nocturno';
+    button.setAttribute('aria-label', button.title);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  updateDashboardThemeControls(document.documentElement.classList.contains('dark-mode'));
+});
+
 function renderHotelRateOptions(selectedValue) {
   const selected = String(selectedValue || '').trim();
   const options = hotelRateOptions.map(option =>

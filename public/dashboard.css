@@ -30,6 +30,38 @@
   --room-suite: #fed65b;
   --shadow-warm: rgba(93, 64, 55, 0.08);
 }
+:root.dark-mode {
+  color-scheme: dark;
+  --bg: #181412;
+  --panel: #241e1b;
+  --panel-low: #201a18;
+  --panel-high: #332822;
+  --panel-highest: #583c32;
+  --sidebar: #211a17;
+  --field: #302723;
+  --text: #f3e9e2;
+  --muted: #cbbdb5;
+  --line: #4d4039;
+  --accent: #ffe2d6;
+  --accent-soft: #d7b4a4;
+  --accent-contrast: #261b17;
+  --gold: #ffd970;
+  --gold-ink: #302500;
+  --danger: #ffb4ab;
+  --danger-soft: #5d2525;
+  --success: #b9d4a9;
+  --success-soft: #283b2a;
+  --info: #ffe08a;
+  --info-soft: #574600;
+  --room-occupied: #705c4c;
+  --room-clean: #50655c;
+  --room-dirty: #704c4c;
+  --room-blocked: #555555;
+  --room-king: #70483c;
+  --room-double: #50655c;
+  --room-suite: #816d25;
+  --shadow-warm: rgba(0, 0, 0, .28);
+}
 * { box-sizing: border-box; }
 body {
   margin: 0;
@@ -39,6 +71,16 @@ body {
   font-size: 16px;
   line-height: 1.5;
   min-height: 100vh;
+}
+body,
+.panel,
+.mobile-topbar,
+.view-tabs,
+button,
+input,
+select,
+textarea {
+  transition: background-color .18s ease, border-color .18s ease, color .18s ease;
 }
 .mobile-topbar {
   background: rgba(255, 248, 246, .96);
@@ -2072,3 +2114,122 @@ body.app-modal-open {
     padding: 9px 6px;
   }
 }
+
+/* Pantallas compactas: evita cortes horizontales y deja los controles al alcance. */
+@media (max-width: 640px) {
+  .mobile-topbar {
+    min-height: 58px;
+    padding: 8px 14px;
+    gap: 9px;
+  }
+  .mobile-topbar .brand-mark {
+    width: 36px;
+    height: 36px;
+    font-size: 13px;
+  }
+  .mobile-topbar h1 {
+    font-size: 17px;
+    margin: 0;
+  }
+  .mobile-topbar .muted {
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 190px;
+  }
+  .theme-toggle {
+    width: 42px !important;
+    min-width: 42px !important;
+    height: 42px;
+    padding: 0;
+    margin-left: auto;
+  }
+  main {
+    padding: 76px 14px 30px;
+  }
+  .view-tabs {
+    top: 58px;
+    margin: 0 -14px 14px;
+    padding: 7px 14px;
+    scrollbar-width: thin;
+  }
+  .view-tabs button {
+    min-height: 38px;
+    padding: 7px 10px;
+    gap: 6px;
+    font-size: 13px;
+  }
+  .view-tabs button .material-symbols-outlined {
+    font-size: 18px;
+  }
+  .page-hero h2 {
+    font-size: 26px;
+  }
+  .page-hero p {
+    font-size: 14px;
+  }
+  .hero-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+  .hero-actions button,
+  .hero-actions button.primary {
+    width: 100%;
+    justify-content: center;
+    padding: 9px 6px;
+    font-size: 12px;
+  }
+  .hero-actions button span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .panel {
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .metric {
+    font-size: 32px;
+  }
+  .table-wrap {
+    margin: 0 -4px;
+    width: calc(100% + 8px);
+  }
+  .table-wrap table {
+    min-width: 620px;
+  }
+  .app-modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .app-modal {
+    width: 100%;
+    max-height: 88vh;
+    border-radius: 14px 14px 0 0;
+  }
+  .app-modal-head,
+  .app-modal-body {
+    padding: 13px 14px;
+  }
+  .app-modal-kpis,
+  .preassign-kpis {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Colores que originalmente eran fijos y necesitan acompañar el tema. */
+:root.dark-mode .mobile-topbar { background: rgba(33, 26, 23, .96); }
+:root.dark-mode .app-modal,
+:root.dark-mode .app-modal-head,
+:root.dark-mode .preassign-room,
+:root.dark-mode .preassign-candidate,
+:root.dark-mode .file-dropzone,
+:root.dark-mode .quote-item { background: var(--panel-low); }
+:root.dark-mode .preassign-room.available { background: var(--panel); }
+:root.dark-mode .help-button { background: var(--panel-high); border-color: var(--line); color: var(--text); }
+:root.dark-mode .bar { background: #5b4b43; }
+:root.dark-mode .pill.cancelada { color: #ffb4ab; }
+:root.dark-mode .file-dropzone:hover,
+:root.dark-mode .file-dropzone:focus-within,
+:root.dark-mode .file-dropzone.active { background: var(--panel-high); }
