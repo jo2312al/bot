@@ -1653,13 +1653,15 @@ label {
   font-size: 10px;
 }
 .rack-guest-summary { margin-bottom: 18px; }
-.rack-guest-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.rack-guest-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
 .rack-guest-kpis div { padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-high); }
 .rack-guest-kpis span, .rack-guest-kpis strong { display: block; }
 .rack-guest-kpis span { color: var(--muted); font-size: 12px; }
+.rack-guest-kpis .rack-guest-notes { grid-column: 1 / -1; overflow-wrap: anywhere; }
 .rack-movement-form { border-top: 1px solid var(--line); padding-top: 16px; }
 .rack-movement-form > strong { display: block; margin-bottom: 12px; }
 .rack-guest-actions { margin-top: 12px; }
+@media (max-width: 640px) { .rack-guest-kpis { grid-template-columns: 1fr; } }
 .floor-room.occupied { background: var(--room-occupied); border-color: rgba(68, 42, 34, .2); }
 .floor-room.clean { background: var(--room-clean); border-color: rgba(68, 42, 34, .12); }
 .floor-room.dirty { background: var(--room-dirty); border-color: rgba(68, 42, 34, .2); }

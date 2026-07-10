@@ -152,10 +152,27 @@ function renderRackGuestDetails(checkin) {
   const movements = Array.isArray(checkin.movements) ? checkin.movements : [];
   document.getElementById('rackGuestModalSubtitle').textContent = 'Check-in desde ' + formatRackMovementDate(checkin.checkedInAt);
   document.getElementById('rackGuestSummary').innerHTML =
-    '<div class="rack-guest-kpis"><div><span>Huésped</span><strong>' + escapeHtml(checkin.guestName || '-') + '</strong></div><div><span>Saldo</span><strong>' + formatMoney(balance) + '</strong></div></div>' +
+    '<div class="rack-guest-kpis">' +
+      '<div><span>Huésped</span><strong>' + escapeHtml(checkin.guestName || '-') + '</strong></div>' +
+      '<div><span>Folio</span><strong>' + escapeHtml(checkin.folio || '-') + '</strong></div>' +
+      '<div><span>Tarifa</span><strong>' + escapeHtml(checkin.rate || '-') + '</strong></div>' +
+      '<div><span>Entrada</span><strong>' + escapeHtml(formatRackEntryDate(checkin.startDate, checkin.checkedInAt)) + '</strong></div>' +
+      '<div><span>Pax</span><strong>' + escapeHtml(checkin.pax || '-') + '</strong></div>' +
+      '<div><span>Saldo</span><strong>' + formatMoney(balance) + '</strong></div>' +
+      '<div class="rack-guest-notes"><span>Observaciones</span><strong>' + escapeHtml(checkin.notes || 'Sin observaciones') + '</strong></div>' +
+    '</div>' +
     '<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Cargo</th><th>Pago</th></tr></thead><tbody>' +
     (movements.length ? movements.map(item => '<tr><td>' + escapeHtml(formatRackMovementDate(item.occurredAt)) + '</td><td>' + escapeHtml(item.concept || '-') + '</td><td>' + formatMoney(item.charge) + '</td><td>' + formatMoney(item.payment) + '</td></tr>').join('') : '<tr><td colspan="4" class="muted">Sin movimientos.</td></tr>') +
     '</tbody></table></div>';
+}
+
+function formatRackEntryDate(value, fallback) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) {
+    return String(value).split('-').reverse().join('/');
+  }
+  const raw = value || fallback;
+  if (!raw) return '-';
+  return new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium', timeZone: 'America/Mexico_City' }).format(new Date(raw));
 }
 
 function ensureRackGuestModal() {

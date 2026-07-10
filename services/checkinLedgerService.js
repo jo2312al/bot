@@ -43,6 +43,11 @@ function createCheckinLedgerService(mysql) {
         'room', checkin.room_number_snapshot,
         'checkedInAt', DATE_FORMAT(checkin.checked_in_at, '%Y-%m-%dT%H:%i:%s'),
         'reservationId', checkin.reservation_id,
+        'folio', COALESCE(reservation.folio, ''),
+        'rate', COALESCE(reservation.rate_text, ''),
+        'startDate', DATE_FORMAT(reservation.start_date, '%Y-%m-%d'),
+        'pax', COALESCE(reservation.adults_count, 0) + COALESCE(reservation.children_count, 0),
+        'notes', COALESCE(reservation_note.note, ''),
         'balance', (
           SELECT COALESCE(SUM(movement.charge_amount - movement.payment_amount), 0)
           FROM account_movements movement WHERE movement.checkin_id = checkin.id
@@ -61,6 +66,8 @@ function createCheckinLedgerService(mysql) {
         )
       )
       FROM checkins checkin
+      LEFT JOIN reservations reservation ON reservation.id = checkin.reservation_id
+      LEFT JOIN reservation_notes reservation_note ON reservation_note.reservation_id = reservation.id
       WHERE checkin.room_number_snapshot = ${mysql.quote(roomNumber)}
         AND checkin.status = 'activo'
       ORDER BY checkin.checked_in_at DESC LIMIT 1;
