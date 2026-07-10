@@ -300,7 +300,7 @@ function rackEmergencyPageHtml() {
         '<h1>Rack de habitaciones</h1><div class="muted">Hotel Villa Margaritas / ' + escapeHtml(rackStatus?.reportDate || "-") + ' ' + escapeHtml(rackStatus?.reportTime || "") + ' / Impreso: ' + escapeHtml(new Date().toLocaleString()) + '</div>' +
         '<div class="summary"><div class="box"><span>Total</span><strong>' + escapeHtml(counts.total || rooms.length) + '</strong></div><div class="box"><span>Ocupadas</span><strong>' + escapeHtml(counts.occupied?.total || 0) + '</strong></div><div class="box"><span>VL limpias</span><strong>' + escapeHtml(counts.availableClean?.total || 0) + '</strong></div><div class="box"><span>VS sucias</span><strong>' + escapeHtml(counts.availableDirty?.total || 0) + '</strong></div></div>' +
         '<table><thead><tr><th>Habitacion</th><th>Tipo</th><th>Estado</th><th>Descripcion</th></tr></thead><tbody>' + rows + '</tbody></table>' +
-        '<script>window.onload=function(){window.print();}<\/script></body></html>';
+        '</body></html>';
       const printWindow = window.open("", "_blank");
 
       if (!printWindow) {
@@ -310,6 +310,8 @@ function rackEmergencyPageHtml() {
 
       printWindow.document.write(html);
       printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => printWindow.print(), 250);
     }
 
     function selectRoom(room, status) {
