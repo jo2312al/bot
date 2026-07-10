@@ -40,6 +40,10 @@ jobs:
         if: env.HAS_EC2_KEY == 'true'
         run: npm run check
 
+      - name: Run QA smoke tests
+        if: env.HAS_EC2_KEY == 'true'
+        run: npm run qa
+
       - name: Setup SSH
         if: env.HAS_EC2_KEY == 'true'
         run: |

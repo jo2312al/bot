@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "check": "node scripts/check-js.js",
+    "qa": "npm run check && node scripts/qa-smoke.js",
     "dashboard": "node dashboard.js",
     "mysql:migrate": "node scripts/migrate-to-mysql.js",
     "analyze:users": "node scripts/analyze-user-logs.js"
