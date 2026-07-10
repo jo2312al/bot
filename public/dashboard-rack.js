@@ -124,18 +124,19 @@ function openRackRoom(room) {
 let activeRackGuestRoom = '';
 
 async function openRackGuestDetails(room) {
+  ensureRackGuestModal();
   activeRackGuestRoom = room;
-  rackGuestModalTitle.textContent = 'Habitación ' + room;
-  rackGuestModalSubtitle.textContent = 'Cargando información del check-in...';
-  rackGuestSummary.innerHTML = '';
-  rackGuestModalBackdrop.classList.remove('hidden');
+  document.getElementById('rackGuestModalTitle').textContent = 'Habitación ' + room;
+  document.getElementById('rackGuestModalSubtitle').textContent = 'Cargando información del check-in...';
+  document.getElementById('rackGuestSummary').innerHTML = '';
+  document.getElementById('rackGuestModalBackdrop').classList.remove('hidden');
   document.body.classList.add('app-modal-open');
 
   const response = await fetch('/api/checkins/room?room=' + encodeURIComponent(room));
   const data = await response.json();
   if (!data.ok || !data.checkin) {
-    rackGuestModalSubtitle.textContent = data.error || 'No hay check-in guardado para esta habitación.';
-    rackGuestSummary.innerHTML = '<div class="muted">Registra el check-in para asociar huésped y movimientos.</div>';
+    document.getElementById('rackGuestModalSubtitle').textContent = data.error || 'No hay check-in guardado para esta habitación.';
+    document.getElementById('rackGuestSummary').innerHTML = '<div class="muted">Registra el check-in para asociar huésped y movimientos.</div>';
     return;
   }
 
@@ -145,12 +146,32 @@ async function openRackGuestDetails(room) {
 function renderRackGuestDetails(checkin) {
   const balance = Number(checkin.balance || 0);
   const movements = Array.isArray(checkin.movements) ? checkin.movements : [];
-  rackGuestModalSubtitle.textContent = 'Check-in desde ' + formatRackMovementDate(checkin.checkedInAt);
-  rackGuestSummary.innerHTML =
+  document.getElementById('rackGuestModalSubtitle').textContent = 'Check-in desde ' + formatRackMovementDate(checkin.checkedInAt);
+  document.getElementById('rackGuestSummary').innerHTML =
     '<div class="rack-guest-kpis"><div><span>Huésped</span><strong>' + escapeHtml(checkin.guestName || '-') + '</strong></div><div><span>Saldo</span><strong>' + formatMoney(balance) + '</strong></div></div>' +
     '<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Cargo</th><th>Pago</th></tr></thead><tbody>' +
     (movements.length ? movements.map(item => '<tr><td>' + escapeHtml(formatRackMovementDate(item.occurredAt)) + '</td><td>' + escapeHtml(item.concept || '-') + '</td><td>' + formatMoney(item.charge) + '</td><td>' + formatMoney(item.payment) + '</td></tr>').join('') : '<tr><td colspan="4" class="muted">Sin movimientos.</td></tr>') +
     '</tbody></table></div>';
+}
+
+function ensureRackGuestModal() {
+  if (document.getElementById('rackGuestModalBackdrop')) return;
+
+  document.body.insertAdjacentHTML('beforeend',
+    '<div id="rackGuestModalBackdrop" class="app-modal-backdrop hidden" onclick="closeRackGuestModal()">' +
+      '<div class="app-modal reservation-edit-app-modal" role="dialog" aria-modal="true" onclick="event.stopPropagation()">' +
+        '<div class="app-modal-head"><div><strong id="rackGuestModalTitle">Habitación ocupada</strong><div id="rackGuestModalSubtitle" class="muted"></div></div><button onclick="closeRackGuestModal()">Cerrar</button></div>' +
+        '<div class="app-modal-body"><div id="rackGuestSummary" class="rack-guest-summary"></div>' +
+          '<div class="rack-movement-form"><strong>Agregar movimiento</strong><div class="reservation-edit-grid">' +
+            '<label>Concepto<input id="rackMovementConcept" placeholder="Hospedaje, consumo, abono..."></label>' +
+            '<label>Forma de pago<select id="rackMovementMethod"><option value="">Sin especificar</option><option>Efectivo</option><option>Tarjeta de crédito</option><option>Tarjeta de débito</option><option>Transferencia</option></select></label>' +
+            '<label>Referencia<input id="rackMovementReference" placeholder="Folio o autorización"></label>' +
+            '<label>Cargo<input id="rackMovementCharge" type="number" min="0" step="0.01" value="0"></label>' +
+            '<label>Pago<input id="rackMovementPayment" type="number" min="0" step="0.01" value="0"></label>' +
+          '</div><div class="confirm-actions"><button class="primary" onclick="saveRackMovement()">Guardar movimiento</button></div></div>' +
+          '<div class="confirm-actions rack-guest-actions"><button class="danger" onclick="checkoutRackGuest()">Hacer check-out (pasar a VS)</button></div>' +
+        '</div></div></div>'
+  );
 }
 
 function formatRackMovementDate(value) {
@@ -159,7 +180,8 @@ function formatRackMovementDate(value) {
 }
 
 function closeRackGuestModal() {
-  rackGuestModalBackdrop.classList.add('hidden');
+  const backdrop = document.getElementById('rackGuestModalBackdrop');
+  if (backdrop) backdrop.classList.add('hidden');
   activeRackGuestRoom = '';
   document.body.classList.remove('app-modal-open');
 }
@@ -167,11 +189,11 @@ function closeRackGuestModal() {
 async function saveRackMovement() {
   const response = await fetch('/api/checkins/movement', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ room: activeRackGuestRoom, concept: rackMovementConcept.value.trim(), paymentMethod: rackMovementMethod.value, reference: rackMovementReference.value.trim(), charge: rackMovementCharge.value, payment: rackMovementPayment.value })
+    body: JSON.stringify({ room: activeRackGuestRoom, concept: document.getElementById('rackMovementConcept').value.trim(), paymentMethod: document.getElementById('rackMovementMethod').value, reference: document.getElementById('rackMovementReference').value.trim(), charge: document.getElementById('rackMovementCharge').value, payment: document.getElementById('rackMovementPayment').value })
   });
   const data = await response.json();
   if (!data.ok) return alert(data.error || 'No se pudo guardar el movimiento.');
-  rackMovementConcept.value = ''; rackMovementReference.value = ''; rackMovementCharge.value = '0'; rackMovementPayment.value = '0';
+  document.getElementById('rackMovementConcept').value = ''; document.getElementById('rackMovementReference').value = ''; document.getElementById('rackMovementCharge').value = '0'; document.getElementById('rackMovementPayment').value = '0';
   renderRackGuestDetails(data.checkin);
 }
 
