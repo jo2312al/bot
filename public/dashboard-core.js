@@ -204,7 +204,7 @@ const helpTopics = {
   },
   checkin: {
     title: 'Check-in',
-    body: 'Selecciona una llegada del dia, confirma habitacion y completa datos del comprobante.\\n\\nRegistrar check-in guarda la llegada y puede marcar la habitacion ocupada en el rack.\\n\\nImprimir comprobacion abre un formato tipo recepcion con reservacion, huesped, habitacion, tarifa, deposito, cargos y observaciones.'
+    body: 'Selecciona una llegada del dia o llena el formulario para un huesped sin reservacion.\\n\\nGuardar check-in registra la llegada y puede marcar la habitacion ocupada en el rack. Si no habia reserva, crea una reserva manual para que quede guardada.\\n\\nImprimir comprobacion abre un formato tipo recepcion con reservacion, huesped, habitacion, tarifa, deposito, cargos y observaciones.'
   },
   reservations: {
     title: 'Agregar reservas',

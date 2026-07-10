@@ -211,7 +211,6 @@ function clearCheckinForm() {
     checkinTime,
     checkinRate,
     checkinDeposit,
-    checkinPaymentMethod,
     checkinCompany,
     checkinCity,
     checkinAgency,
@@ -221,8 +220,18 @@ function clearCheckinForm() {
   });
   checkinRoomsCount.value = '1';
   checkinPeopleCount.value = '1';
+  checkinRoomType.value = 'DOBL';
+  checkinPaymentMethod.value = 'TARJETA DE CREDITO';
+  checkinCompany.value = 'SIN COMPANIA';
+  checkinCity.value = 'MEXICO';
+  checkinStart.value = dashboardData?.today || dateToIso(new Date());
+  checkinEnd.value = getCheckinDefaultCheckoutIso(checkinStart.value);
+  checkinTime.value = new Date().toLocaleTimeString('es-MX', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
   checkinSelectedSummary.textContent =
-    'Selecciona una reserva para llenar el comprobante.';
+    'Sin reserva seleccionada. Puedes guardar un check-in nuevo.';
   checkinStatus.textContent = '';
   renderCheckinBoard();
 }
@@ -232,7 +241,7 @@ async function registerCheckin() {
     findCheckinReservation(selectedCheckinReservationKey);
 
   if (!reservation?.sourceKey) {
-    alert('Selecciona una reserva del listado para registrar check-in.');
+    await registerWalkInCheckin();
     return;
   }
 
@@ -259,6 +268,109 @@ async function registerCheckin() {
   selectedCheckinReservationKey =
     getCheckinReservationKey(data.reservation || reservation);
   fillCheckinForm(data.reservation || reservation);
+}
+
+async function registerWalkInCheckin() {
+  if (!checkinGuestName.value.trim()) {
+    alert('Escribe el nombre del huesped.');
+    return;
+  }
+
+  if (!checkinStart.value) {
+    alert('Selecciona la fecha de entrada.');
+    return;
+  }
+
+  checkinStatus.textContent =
+    'Guardando check-in sin reservacion...';
+
+  const reservationResponse = await fetch('/api/reservations/manual', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      nombre: checkinGuestName.value.trim(),
+      telefono: '',
+      fecha: checkinStart.value,
+      noches: getCheckinNights(),
+      habitaciones: Number(checkinRoomsCount.value || 1),
+      adultos: Number(checkinPeopleCount.value || 1),
+      ninos: 0,
+      tipo: getManualRoomTypeFromCheckin(),
+      hora: checkinTime.value.trim(),
+      tarifa: checkinRate.value.trim(),
+      note: checkinNotes.value.trim()
+    })
+  });
+  const reservationData = await reservationResponse.json();
+
+  if (!reservationData.ok) {
+    checkinStatus.textContent =
+      reservationData.error || 'No se pudo guardar el check-in sin reservacion.';
+    return;
+  }
+
+  const created =
+    reservationData.reservation;
+  const arrivalResponse = await fetch('/api/reservations/arrival', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      sourceKey: created.sourceKey,
+      room: checkinRoom.value
+    })
+  });
+  const arrivalData = await arrivalResponse.json();
+
+  if (!arrivalData.ok) {
+    checkinStatus.textContent =
+      arrivalData.error || 'Reserva guardada, pero no se pudo registrar la llegada.';
+    return;
+  }
+
+  checkinStatus.textContent =
+    'Check-in sin reservacion guardado. Ya puedes imprimir la comprobacion.';
+  await loadDashboard();
+  selectedCheckinReservationKey =
+    getCheckinReservationKey(arrivalData.reservation || created);
+  fillCheckinForm(arrivalData.reservation || created);
+}
+
+function getCheckinNights() {
+  const start =
+    isoToDate(checkinStart.value);
+  const end =
+    isoToDate(checkinEnd.value);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return 1;
+  }
+
+  return Math.max(
+    Math.round((end.getTime() - start.getTime()) / 86400000),
+    1
+  );
+}
+
+function getCheckinDefaultCheckoutIso(startIso) {
+  const start =
+    isoToDate(startIso);
+
+  if (Number.isNaN(start.getTime())) {
+    return '';
+  }
+
+  start.setDate(start.getDate() + 1);
+  return dateToIso(start);
+}
+
+function getManualRoomTypeFromCheckin() {
+  return checkinRoomType.value === 'KING'
+    ? 'King'
+    : 'Doble';
 }
 
 function printCheckinSlip() {

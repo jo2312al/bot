@@ -102,7 +102,7 @@ const RACK_EMERGENCY_USER =
 const RACK_EMERGENCY_PASSWORD =
   process.env.RACK_EMERGENCY_PASSWORD || "";
 const DASHBOARD_ASSET_VERSION =
-  "dashboard-checkin-print-20260710";
+  "dashboard-checkin-walkin-20260710";
 const DASHBOARD_SCRIPT_FILES = [
   "dashboard-core.js",
   "dashboard-search.js",
@@ -3425,7 +3425,7 @@ function pageHtml() {
       <div class="toolbar">
         <div>
           <strong>Check-in</strong><button class="help-button" onclick="openHelp('checkin')" title="Ayuda">?</button>
-          <div class="muted">Selecciona una llegada, registra habitacion e imprime la comprobacion de reservacion.</div>
+          <div class="muted">Selecciona una llegada o captura un huesped sin reservacion, registra habitacion e imprime la comprobacion.</div>
         </div>
         <button class="primary" onclick="printCheckinSlip()">Imprimir comprobacion</button>
       </div>
@@ -3452,7 +3452,7 @@ function pageHtml() {
             <label>Hora entrada<input id="checkinTime" placeholder="13:10"></label>
             <label>Tarifa<input id="checkinRate" placeholder="$800.00"></label>
             <label>Deposito<input id="checkinDeposit" placeholder="0.00"></label>
-            <label>Forma de pago<input id="checkinPaymentMethod" placeholder="TARJETA DE CREDITO"></label>
+            <label>Forma de pago<select id="checkinPaymentMethod"><option value="TARJETA DE CREDITO">Tarjeta credito</option><option value="TARJETA DE DEBITO">Tarjeta debito</option><option value="EFECTIVO">Efectivo</option><option value="TRANSFERENCIA">Transferencia</option><option value="CUENTAS X COBRAR">Cuentas x cobrar</option></select></label>
             <label>Compania<input id="checkinCompany" placeholder="SIN COMPANIA"></label>
             <label>Ciudad<input id="checkinCity" placeholder="MEXICO"></label>
             <label>Agencia<input id="checkinAgency" placeholder=""></label>
@@ -3461,7 +3461,7 @@ function pageHtml() {
           <div id="checkinStatus" class="muted" style="margin-top:10px"></div>
           <div class="confirm-actions">
             <button onclick="clearCheckinForm()">Limpiar</button>
-            <button onclick="registerCheckin()">Registrar check-in</button>
+            <button onclick="registerCheckin()">Guardar check-in</button>
             <button class="primary" onclick="printCheckinSlip()">Imprimir comprobacion</button>
           </div>
         </div>
