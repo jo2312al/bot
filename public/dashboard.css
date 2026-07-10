@@ -1089,6 +1089,16 @@ label {
 .checkin-form-grid {
   margin-top: 16px;
   gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+}
+.checkin-form-grid input,
+.checkin-form-grid select,
+.checkin-form-grid textarea {
+  width: 100%;
+  min-width: 0;
+}
+.checkin-form-grid input[type="date"] {
+  min-width: 230px;
 }
 .rack-type-legend {
   display: flex;
@@ -2020,6 +2030,9 @@ body.app-modal-open {
   .preassign-app-modal-grid,
   .preassign-form-row {
     grid-template-columns: 1fr;
+  }
+  .checkin-form-grid input[type="date"] {
+    min-width: 0;
   }
   .preassign-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -126,6 +126,8 @@ function printRack() {
     return;
   }
 
+  const printedAt = getRackPrintMexicoDateTime();
+
   const title =
     'Rack ' + (status?.reportDate || '') + ' ' + (status?.reportTime || '');
   const rows =
@@ -141,7 +143,7 @@ function printRack() {
     '<!doctype html><html><head><meta charset="utf-8"><title>' + escapeHtml(title) + '</title>' +
     '<style>@page{size:letter landscape;margin:10mm}body{font-family:Arial,sans-serif;color:#000;margin:22px 34px;font-size:15px}.actions{text-align:right;margin-bottom:8px}.rack-print-head{position:relative;text-align:center;margin-bottom:14px}.rack-print-head h1{font-size:15px;letter-spacing:.5px;margin:0;text-transform:uppercase}.rack-print-head div{font-size:15px}.rack-print-date{position:absolute;right:0;top:0;text-align:right;font-weight:700;line-height:1.35}.rack-print-date span{display:block;font-size:14px;font-weight:400}.rack-print-grid{display:grid;grid-template-columns:repeat(5,1fr);column-gap:34px;row-gap:22px}.rack-print-room{white-space:nowrap;display:flex;gap:9px;align-items:baseline}.room-number{min-width:34px;text-align:right}.room-status{display:inline-block;min-width:34px;text-align:center;border-bottom:2px solid #000;line-height:1}.room-blank{margin-left:auto}.rack-print-legend{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:26px;font-size:15px;line-height:1.55}.rack-print-legend div{break-inside:avoid}.summary{display:none}@media print{.actions{display:none}body{margin:0}}</style>' +
     '</head><body><div class="actions"><button onclick="window.print()">Imprimir / guardar PDF</button></div>' +
-    '<div class="rack-print-head"><h1>Hotel Villa Margaritas</h1><div>Reporte ama de llaves todo el hotel</div><div class="rack-print-date"><span>' + escapeHtml(status?.reportDate || '-') + '</span>T.M.<br>' + escapeHtml(status?.reportTime || '') + '</div></div>' +
+    '<div class="rack-print-head"><h1>Hotel Villa Margaritas</h1><div>Reporte ama de llaves todo el hotel</div><div class="rack-print-date"><span>' + escapeHtml(printedAt.date) + '</span>Hora: ' + escapeHtml(printedAt.time) + '<br><small>Tiempo de Mexico</small></div></div>' +
     '<div class="rack-print-grid">' + rows + '</div>' +
     renderRackPrintLegend() +
     '</body></html>';
@@ -157,6 +159,28 @@ function printRack() {
   printWindow.document.close();
   printWindow.focus();
   setTimeout(() => printWindow.print(), 250);
+}
+
+function getRackPrintMexicoDateTime() {
+  const now = new Date();
+  const zone = 'America/Mexico_City';
+
+  return {
+    date: new Intl.DateTimeFormat('es-MX', {
+      timeZone: zone,
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    }).format(now),
+    time: new Intl.DateTimeFormat('es-MX', {
+      timeZone: zone,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).format(now)
+  };
 }
 
 function getRackPrintTypeLabel(type) {
