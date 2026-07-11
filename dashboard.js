@@ -2619,14 +2619,15 @@ function getAuditReports({ date } = {}) {
         AND NULLIF(checkin.room_number_snapshot, '') IS NOT NULL
         AND EXISTS (
           SELECT 1
-          FROM rack_snapshots rack
-          JOIN rack_snapshot_rooms rack_room ON rack_room.rack_snapshot_id = rack.id
+          FROM rack_snapshot_rooms rack_room
           WHERE rack_room.room_id = checkin.room_id
             AND rack_room.room_status IN ('OC', 'OS', 'OL', 'OR', 'OSE', 'ND')
-            AND rack.report_date = (
-              SELECT MAX(latest_rack.report_date)
+            AND rack_room.rack_snapshot_id = (
+              SELECT latest_rack.id
               FROM rack_snapshots latest_rack
               WHERE latest_rack.report_date <= ${mysql.quote(auditDate)}
+              ORDER BY latest_rack.report_date DESC, latest_rack.uploaded_at DESC, latest_rack.id DESC
+              LIMIT 1
             )
         )
       GROUP BY checkin.id, checkin.room_number_snapshot, checkin.guest_name_snapshot, reservation.start_date, room_type.name, reservation.adults_count, reservation.children_count, reservation.rate_text, movement_total.balance, movement_total.payment_method
