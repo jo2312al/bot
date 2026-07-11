@@ -2545,6 +2545,201 @@ function normalizeAuditDate(value) {
     : getMexicoTodayIso();
 }
 
+const AUDIT_CHECKIN_START_DATE =
+  "2026-07-10";
+
+const AUDIT_RACK_OCCUPIED_STATUSES =
+  new Set([
+    "OC",
+    "OS",
+    "OL",
+    "OR",
+    "OSE",
+    "ND"
+  ]);
+
+function normalizeAuditGuestKey(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .trim();
+}
+
+function isAuditRackOccupiedRoom(room = {}) {
+  const status =
+    String(room.status || "").trim().toUpperCase();
+  const guestName =
+    String(room.guestName || "").trim();
+
+  return AUDIT_RACK_OCCUPIED_STATUSES.has(status)
+    || (status === "VS" && Boolean(guestName));
+}
+
+function findAuditRentMatch({ rackRoom, rows, usedIndexes }) {
+  const room =
+    String(rackRoom?.room || "").trim();
+  const guestKey =
+    normalizeAuditGuestKey(rackRoom?.guestName || "");
+
+  if (!room) {
+    return null;
+  }
+
+  if (guestKey) {
+    const nameIndex =
+      rows.findIndex((row, index) =>
+        !usedIndexes.has(index)
+        &&
+        String(row.room || "") === room
+        &&
+        normalizeAuditGuestKey(row.guestName || "") === guestKey
+      );
+
+    if (nameIndex >= 0) {
+      usedIndexes.add(nameIndex);
+      return rows[nameIndex];
+    }
+  }
+
+  const roomIndex =
+    rows.findIndex((row, index) =>
+      !usedIndexes.has(index)
+      &&
+      String(row.room || "") === room
+    );
+
+  if (roomIndex >= 0) {
+    usedIndexes.add(roomIndex);
+    return rows[roomIndex];
+  }
+
+  return null;
+}
+
+function getMysqlAuditRentSheet(auditDate) {
+  const rackRooms =
+    (readLatestRackStatus()?.rooms || [])
+      .filter(isAuditRackOccupiedRoom);
+
+  const reservationRows =
+    mysql.queryJson(`
+      SELECT JSON_OBJECT(
+        'room', room.room_number, 'guestName', guest.name,
+        'startDate', DATE_FORMAT(GREATEST(COALESCE(reservation.start_date, ${mysql.quote(auditDate)}), ${mysql.quote(AUDIT_CHECKIN_START_DATE)}), '%d/%m/%Y'),
+        'endDate', DATE_FORMAT(MAX(stay.stay_date), '%d/%m/%Y'),
+        'roomType', COALESCE(room_type.name, ''),
+        'pax', COALESCE(reservation.adults_count, 0) + COALESCE(reservation.children_count, 0),
+        'rate', COALESCE(reservation.rate_text, ''),
+        'extras', COALESCE(movement_reservation.extras, 0)
+      )
+      FROM reservations reservation
+      JOIN guests guest ON guest.id = reservation.guest_id
+      JOIN reservation_dates stay ON stay.reservation_id = reservation.id AND stay.stay_date = ${mysql.quote(auditDate)}
+      JOIN rooms room ON room.id = reservation.assigned_room_id
+      LEFT JOIN room_types room_type ON room_type.id = reservation.room_type_id
+      LEFT JOIN (
+        SELECT
+          checkin.reservation_id,
+          SUM(movement.charge_amount) AS extras
+        FROM account_movements movement
+        JOIN checkins checkin ON checkin.id = movement.checkin_id
+        WHERE DATE(movement.occurred_at) = ${mysql.quote(auditDate)}
+        GROUP BY checkin.reservation_id
+      ) movement_reservation ON movement_reservation.reservation_id = reservation.id
+      WHERE reservation.assigned_room_id IS NOT NULL
+        AND COALESCE(reservation.status, '') != 'cancelada'
+      GROUP BY reservation.id, room.room_number, guest.name, reservation.start_date, room_type.name, reservation.adults_count, reservation.children_count, reservation.rate_text, movement_reservation.extras
+      ORDER BY CAST(room.room_number AS UNSIGNED), room.room_number, guest.name;
+    `);
+
+  const checkinRows =
+    mysql.queryJson(`
+      SELECT JSON_OBJECT(
+        'room', checkin.room_number_snapshot, 'guestName', checkin.guest_name_snapshot,
+        'startDate', DATE_FORMAT(DATE(checkin.checked_in_at), '%d/%m/%Y'),
+        'endDate', DATE_FORMAT(COALESCE(DATE(checkin.checked_out_at), ${mysql.quote(auditDate)}), '%d/%m/%Y'),
+        'roomType', COALESCE(room_type.name, ''),
+        'pax', COALESCE(reservation.adults_count, 0) + COALESCE(reservation.children_count, 0),
+        'rate', COALESCE(reservation.rate_text, ''),
+        'extras', COALESCE(movement_checkin.extras, 0)
+      )
+      FROM checkins checkin
+      LEFT JOIN reservations reservation ON reservation.id = checkin.reservation_id
+      LEFT JOIN room_types room_type ON room_type.id = reservation.room_type_id
+      LEFT JOIN (
+        SELECT
+          checkin_id,
+          SUM(charge_amount) AS extras
+        FROM account_movements
+        WHERE DATE(occurred_at) = ${mysql.quote(auditDate)}
+        GROUP BY checkin_id
+      ) movement_checkin ON movement_checkin.checkin_id = checkin.id
+      WHERE DATE(checkin.checked_in_at) <= ${mysql.quote(auditDate)}
+        AND (checkin.checked_out_at IS NULL OR DATE(checkin.checked_out_at) >= ${mysql.quote(auditDate)})
+        AND checkin.room_id IS NOT NULL
+        AND NULLIF(checkin.room_number_snapshot, '') IS NOT NULL
+      ORDER BY CAST(checkin.room_number_snapshot AS UNSIGNED), checkin.room_number_snapshot, checkin.checked_in_at DESC;
+    `);
+
+  const lookupRows =
+    [
+      ...reservationRows,
+      ...checkinRows
+    ];
+  const usedIndexes =
+    new Set();
+
+  if (!rackRooms.length) {
+    return lookupRows
+      .sort((left, right) =>
+        Number(left.room) - Number(right.room)
+        ||
+        String(left.room).localeCompare(String(right.room))
+        ||
+        String(left.guestName).localeCompare(String(right.guestName))
+      );
+  }
+
+  return rackRooms
+    .map(rackRoom => {
+      const match =
+        findAuditRentMatch({
+          rackRoom,
+          rows:
+            lookupRows,
+          usedIndexes
+        }) || {};
+
+      return {
+        room:
+          rackRoom.room || match.room || "",
+        guestName:
+          rackRoom.guestName || match.guestName || "",
+        startDate:
+          match.startDate || isoToDisplayDate(auditDate),
+        endDate:
+          match.endDate || isoToDisplayDate(auditDate),
+        roomType:
+          match.roomType || rackRoom.type || "",
+        pax:
+          Number(match.pax || 0),
+        rate:
+          match.rate || "",
+        extras:
+          Number(match.extras || 0)
+      };
+    })
+    .sort((left, right) =>
+      Number(left.room) - Number(right.room)
+      ||
+      String(left.room).localeCompare(String(right.room))
+      ||
+      String(left.guestName).localeCompare(String(right.guestName))
+    );
+}
+
 function addIsoDays(isoDate, days) {
   const date =
     new Date(`${isoDate}T00:00:00Z`);
@@ -2769,86 +2964,7 @@ function getAuditReports({ date } = {}) {
   return {
     mode: "mysql",
     date: auditDate,
-    rents: mysql.queryJson(`
-      SELECT JSON_OBJECT(
-        'room', audit_row.room, 'guestName', audit_row.guest_name,
-        'startDate', DATE_FORMAT(audit_row.start_date, '%d/%m/%Y'),
-        'endDate', DATE_FORMAT(audit_row.end_date, '%d/%m/%Y'),
-        'roomType', COALESCE(audit_row.room_type, ''),
-        'pax', COALESCE(audit_row.pax, 0),
-        'rate', COALESCE(audit_row.rate_text, ''),
-        'extras', COALESCE(audit_row.extras, 0)
-      )
-      FROM (
-        SELECT
-          room.room_number AS room,
-          guest.name AS guest_name,
-          GREATEST(COALESCE(reservation.start_date, ${mysql.quote(auditDate)}), '2026-07-10') AS start_date,
-          MAX(stay.stay_date) AS end_date,
-          room_type.name AS room_type,
-          COALESCE(reservation.adults_count, 0) + COALESCE(reservation.children_count, 0) AS pax,
-          reservation.rate_text AS rate_text,
-          COALESCE(movement_reservation.extras, 0) AS extras
-        FROM reservations reservation
-        JOIN guests guest ON guest.id = reservation.guest_id
-        JOIN reservation_dates stay ON stay.reservation_id = reservation.id AND stay.stay_date = ${mysql.quote(auditDate)}
-        JOIN rooms room ON room.id = reservation.assigned_room_id
-        LEFT JOIN room_types room_type ON room_type.id = reservation.room_type_id
-        LEFT JOIN (
-          SELECT
-            checkin.reservation_id,
-            SUM(movement.charge_amount) AS extras
-          FROM account_movements movement
-          JOIN checkins checkin ON checkin.id = movement.checkin_id
-          WHERE DATE(movement.occurred_at) = ${mysql.quote(auditDate)}
-          GROUP BY checkin.reservation_id
-        ) movement_reservation ON movement_reservation.reservation_id = reservation.id
-        WHERE reservation.assigned_room_id IS NOT NULL
-          AND COALESCE(reservation.status, '') != 'cancelada'
-        GROUP BY reservation.id, room.room_number, guest.name, reservation.start_date, room_type.name, reservation.adults_count, reservation.children_count, reservation.rate_text, movement_reservation.extras
-
-        UNION ALL
-
-        SELECT
-          checkin.room_number_snapshot AS room,
-          checkin.guest_name_snapshot AS guest_name,
-          DATE(checkin.checked_in_at) AS start_date,
-          COALESCE(DATE(checkin.checked_out_at), ${mysql.quote(auditDate)}) AS end_date,
-          room_type.name AS room_type,
-          COALESCE(reservation.adults_count, 0) + COALESCE(reservation.children_count, 0) AS pax,
-          reservation.rate_text AS rate_text,
-          COALESCE(movement_checkin.extras, 0) AS extras
-        FROM checkins checkin
-        LEFT JOIN reservations reservation ON reservation.id = checkin.reservation_id
-        LEFT JOIN room_types room_type ON room_type.id = reservation.room_type_id
-        LEFT JOIN (
-          SELECT
-            checkin_id,
-            SUM(charge_amount) AS extras
-          FROM account_movements
-          WHERE DATE(occurred_at) = ${mysql.quote(auditDate)}
-          GROUP BY checkin_id
-        ) movement_checkin ON movement_checkin.checkin_id = checkin.id
-        WHERE DATE(checkin.checked_in_at) = ${mysql.quote(auditDate)}
-          AND checkin.room_id IS NOT NULL
-          AND NULLIF(checkin.room_number_snapshot, '') IS NOT NULL
-          AND NOT EXISTS (
-            SELECT 1
-            FROM reservation_dates represented_stay
-            WHERE represented_stay.reservation_id = checkin.reservation_id
-              AND represented_stay.stay_date = ${mysql.quote(auditDate)}
-          )
-          AND NOT EXISTS (
-            SELECT 1
-            FROM reservations room_reservation
-            JOIN reservation_dates room_stay ON room_stay.reservation_id = room_reservation.id
-            WHERE room_reservation.assigned_room_id = checkin.room_id
-              AND room_stay.stay_date = ${mysql.quote(auditDate)}
-              AND COALESCE(room_reservation.status, '') != 'cancelada'
-          )
-      ) audit_row
-      ORDER BY CAST(audit_row.room AS UNSIGNED), audit_row.room, audit_row.guest_name;
-    `),
+    rents: getMysqlAuditRentSheet(auditDate),
     balances: mysql.queryJson(`
       SELECT JSON_OBJECT(
         'room', checkin.room_number_snapshot, 'guestName', checkin.guest_name_snapshot,
