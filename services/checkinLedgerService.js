@@ -9,14 +9,16 @@ function createCheckinLedgerService(mysql) {
     requireDatabase();
     const key = String(sourceKey || '').trim();
     const roomNumber = String(room || '').replace(/\D/g, '');
+    const now =
+      mysql.mexicoNowSql();
 
     if (!key || !roomNumber) throw new Error('Reserva y habitación son requeridas.');
 
     mysql.runSql(`
       INSERT INTO checkins (
-        reservation_id, guest_id, room_id, guest_name_snapshot, room_number_snapshot
+        reservation_id, guest_id, room_id, guest_name_snapshot, room_number_snapshot, checked_in_at
       )
-      SELECT reservation.id, reservation.guest_id, room.id, guest.name, room.room_number
+      SELECT reservation.id, reservation.guest_id, room.id, guest.name, room.room_number, ${mysql.quote(now)}
       FROM reservations reservation
       JOIN guests guest ON guest.id = reservation.guest_id
       JOIN rooms room ON room.room_number = ${mysql.quote(roomNumber)}
@@ -83,9 +85,9 @@ function createCheckinLedgerService(mysql) {
 
     mysql.runSql(`
       INSERT INTO checkins (
-        reservation_id, guest_id, room_id, guest_name_snapshot, room_number_snapshot
+        reservation_id, guest_id, room_id, guest_name_snapshot, room_number_snapshot, checked_in_at
       )
-      SELECT reservation.id, reservation.guest_id, room.id, guest.name, room.room_number
+      SELECT reservation.id, reservation.guest_id, room.id, guest.name, room.room_number, ${mysql.quote(mysql.mexicoNowSql())}
       FROM reservations reservation
       JOIN guests guest ON guest.id = reservation.guest_id
       JOIN rooms room ON room.id = reservation.assigned_room_id
@@ -115,12 +117,12 @@ function createCheckinLedgerService(mysql) {
     mysql.runSql(`
       INSERT INTO account_movements (
         checkin_id, guest_id, room_id, room_number_snapshot, movement_type,
-        payment_method, reference_code, concept, charge_amount, payment_amount
+        payment_method, reference_code, concept, charge_amount, payment_amount, occurred_at
       )
       SELECT checkin.id, checkin.guest_id, checkin.room_id, checkin.room_number_snapshot,
         ${mysql.quote(payment ? 'pago' : 'cargo')},
         ${mysql.quote(input.paymentMethod || '')}, ${mysql.quote(input.reference || '')},
-        ${mysql.quote(input.concept || '')}, ${charge}, ${payment}
+        ${mysql.quote(input.concept || '')}, ${charge}, ${payment}, ${mysql.quote(mysql.mexicoNowSql())}
       FROM checkins checkin WHERE checkin.id = ${Number(checkin.id)};
     `);
 
@@ -221,7 +223,7 @@ function createCheckinLedgerService(mysql) {
 
     mysql.runSql(`
       UPDATE checkins
-      SET status = 'cerrado', checked_out_at = NOW()
+      SET status = 'cerrado', checked_out_at = ${mysql.quote(mysql.mexicoNowSql())}
       WHERE id = ${Number(checkin.id)};
     `);
 

@@ -401,8 +401,8 @@ async function closeDailyOperations() {
     'Dia cerrado: ' + (isoToDisplay(result.date) || result.date || date) +
     ' / siguiente dia: ' + (isoToDisplay(result.nextDate) || result.nextDate || '');
   await loadDashboard();
-  if (result.nextDate) {
-    reportAuditDate.value = result.nextDate;
+  if (result.date) {
+    reportAuditDate.value = result.date;
   }
 }
 
@@ -421,12 +421,12 @@ async function printAuditReport(type) {
     ? ['Hab.', 'Nombre', 'Fha. Ent.', 'Fha. Sal.', 'T. H.', 'Pax', 'Tarifa', 'Extras']
     : (type === 'balances'
       ? ['Hab.', 'Nombre', 'Fha. Ent.', 'Fha. Sal.', 'Noc.', 'T. H.', 'Pax', 'Tarifa', 'Saldo', 'Forma pago']
-      : ['Hab.', 'Hora', 'Referencia', 'Huésped', 'Concepto', 'Cargos', 'Créditos', 'Forma pago']);
+      : ['Hab.', 'Fecha', 'Hora', 'Referencia', 'Huésped', 'Concepto', 'Cargos', 'Créditos', 'Forma pago']);
   const cells = row => type === 'rents'
     ? [row.room, row.guestName, row.startDate, row.endDate, row.roomType, row.pax, row.rate, formatAuditMoney(row.extras)]
     : (type === 'balances'
       ? [row.room, row.guestName, row.startDate, row.endDate, row.nights, row.roomType, row.pax, row.rate, formatAuditMoney(row.balance), row.paymentMethod]
-      : [row.room, row.time, row.reference, row.guestName, row.concept, formatAuditMoney(row.charge), formatAuditMoney(row.payment), row.paymentMethod]);
+      : [row.room, row.date, row.time, row.reference, row.guestName, row.concept, formatAuditMoney(row.charge), formatAuditMoney(row.payment), row.paymentMethod]);
   const totalCharge = rows.reduce((sum, row) => sum + Number(row.charge || row.extras || 0), 0);
   const totalPayment = rows.reduce((sum, row) => sum + Number(row.payment || 0), 0);
   const displayDate = isoToDisplay(date) || date;
@@ -505,8 +505,8 @@ function renderAuditMovementTable(title, rows, headers) {
   return '<h3 class="section-title">' + escapeHtml(title) + '</h3>' +
     '<table><thead><tr>' + headers.map(header => '<th>' + escapeHtml(header) + '</th>').join('') + '</tr></thead><tbody>' +
     (rows.length ? rows.map(row => '<tr>' +
-      [row.room, row.time, row.reference, row.guestName, row.concept, formatAuditMoney(row.charge), formatAuditMoney(row.payment), row.paymentMethod]
-        .map((cell, index) => '<td class="' + (index >= 5 ? 'num' : '') + '">' + escapeHtml(cell === undefined || cell === null ? '' : cell) + '</td>').join('') +
+      [row.room, row.date, row.time, row.reference, row.guestName, row.concept, formatAuditMoney(row.charge), formatAuditMoney(row.payment), row.paymentMethod]
+        .map((cell, index) => '<td class="' + (index >= 6 ? 'num' : '') + '">' + escapeHtml(cell === undefined || cell === null ? '' : cell) + '</td>').join('') +
       '</tr>').join('') : '<tr><td colspan="' + headers.length + '">Sin movimientos.</td></tr>') +
     '<tr class="total"><td colspan="' + Math.max(headers.length - 2, 1) + '">Total ' + escapeHtml(title.toLowerCase()) + ' (' + rows.length + ' registros)</td><td class="num">' + formatAuditMoney(chargeTotal) + '</td><td class="num">' + formatAuditMoney(paymentTotal) + '</td></tr>' +
     '</tbody></table>';

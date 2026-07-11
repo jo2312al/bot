@@ -218,6 +218,39 @@ function timestampToSql(value) {
   return date.toISOString().slice(0, 19).replace("T", " ");
 }
 
+function mexicoNowSql() {
+  const parts =
+    new Intl.DateTimeFormat(
+      "en-CA",
+      {
+        timeZone:
+          "America/Mexico_City",
+        year:
+          "numeric",
+        month:
+          "2-digit",
+        day:
+          "2-digit",
+        hour:
+          "2-digit",
+        minute:
+          "2-digit",
+        second:
+          "2-digit",
+        hour12:
+          false
+      }
+    )
+      .formatToParts(new Date())
+      .reduce((acc, part) => {
+        acc[part.type] =
+          part.value;
+        return acc;
+      }, {});
+
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
+}
+
 function sqlToIso(value) {
   const text =
     String(value || "").trim();
@@ -428,6 +461,7 @@ module.exports = {
   queryJson,
   quote,
   runSql,
+  mexicoNowSql,
   sqlToDisplayDate,
   sqlToIso,
   stableKey,

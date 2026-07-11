@@ -1260,11 +1260,11 @@ function auditReportFallbackScript() {
         ? ["Hab.", "Nombre", "Fha. Ent.", "Fha. Sal.", "T. H.", "Pax", "Tarifa", "Extras"]
         : (isBalances
           ? ["Hab.", "Nombre", "Fha. Ent.", "Fha. Sal.", "Noc.", "T. H.", "Pax", "Tarifa", "Saldo", "Forma pago"]
-          : ["Hab.", "Hora", "Referencia", "Hu\\u00e9sped", "Concepto", "Cargos", "Cr\\u00e9ditos", "Forma pago"]);
+          : ["Hab.", "Fecha", "Hora", "Referencia", "Hu\\u00e9sped", "Concepto", "Cargos", "Cr\\u00e9ditos", "Forma pago"]);
       var cells = function (row) {
         if (isRents) return [row.room, row.guestName, row.startDate, row.endDate, row.roomType, row.pax, row.rate, auditMoney(row.extras)];
         if (isBalances) return [row.room, row.guestName, row.startDate, row.endDate, row.nights, row.roomType, row.pax, row.rate, auditMoney(row.balance), row.paymentMethod];
-        return [row.room, row.time, row.reference, row.guestName, row.concept, auditMoney(row.charge), auditMoney(row.payment), row.paymentMethod];
+        return [row.room, row.date, row.time, row.reference, row.guestName, row.concept, auditMoney(row.charge), auditMoney(row.payment), row.paymentMethod];
       };
       var totalCharge = rows.reduce(function (sum, row) {
         return sum + Number(row.charge || row.extras || 0);
@@ -1278,7 +1278,7 @@ function auditReportFallbackScript() {
       var bodyRows = rows.length
         ? rows.map(function (row) {
           return "<tr>" + cells(row).map(function (cell, index) {
-            var numeric = (isRents || isBalances) ? index >= 6 : index >= 5;
+            var numeric = (isRents || isBalances) ? index >= 6 : index >= 6;
             return "<td class=\\"" + (numeric ? "num" : "") + "\\">" + auditEscape(cell) + "</td>";
           }).join("") + "</tr>";
         }).join("")
@@ -2619,6 +2619,8 @@ function findAuditRentMatch({ rackRoom, rows, usedIndexes }) {
 }
 
 function getMysqlAuditRentSheet(auditDate) {
+  const auditWindow =
+    getAuditDayWindow(auditDate);
   const rackRooms =
     (readLatestRackStatus()?.rooms || [])
       .filter(isAuditRackOccupiedRoom);
@@ -2645,7 +2647,8 @@ function getMysqlAuditRentSheet(auditDate) {
           SUM(movement.charge_amount) AS extras
         FROM account_movements movement
         JOIN checkins checkin ON checkin.id = movement.checkin_id
-        WHERE DATE(movement.occurred_at) = ${mysql.quote(auditDate)}
+        WHERE movement.occurred_at >= ${mysql.quote(auditWindow.start)}
+          AND movement.occurred_at < ${mysql.quote(auditWindow.end)}
         GROUP BY checkin.reservation_id
       ) movement_reservation ON movement_reservation.reservation_id = reservation.id
       WHERE reservation.assigned_room_id IS NOT NULL
@@ -2673,11 +2676,12 @@ function getMysqlAuditRentSheet(auditDate) {
           checkin_id,
           SUM(charge_amount) AS extras
         FROM account_movements
-        WHERE DATE(occurred_at) = ${mysql.quote(auditDate)}
+        WHERE occurred_at >= ${mysql.quote(auditWindow.start)}
+          AND occurred_at < ${mysql.quote(auditWindow.end)}
         GROUP BY checkin_id
       ) movement_checkin ON movement_checkin.checkin_id = checkin.id
-      WHERE DATE(checkin.checked_in_at) <= ${mysql.quote(auditDate)}
-        AND (checkin.checked_out_at IS NULL OR DATE(checkin.checked_out_at) >= ${mysql.quote(auditDate)})
+      WHERE checkin.checked_in_at < ${mysql.quote(auditWindow.end)}
+        AND (checkin.checked_out_at IS NULL OR checkin.checked_out_at >= ${mysql.quote(auditWindow.start)})
         AND checkin.room_id IS NOT NULL
         AND NULLIF(checkin.room_number_snapshot, '') IS NOT NULL
       ORDER BY CAST(checkin.room_number_snapshot AS UNSIGNED), checkin.room_number_snapshot, checkin.checked_in_at DESC;
@@ -2774,14 +2778,59 @@ function getOperationalDate(today = getMexicoTodayIso()) {
   }
 
   const rows = mysql.queryJson(`
-    SELECT JSON_OBJECT('closed', COUNT(*) > 0)
+    SELECT JSON_OBJECT(
+      'date', DATE_FORMAT(closed_date, '%Y-%m-%d')
+    )
     FROM daily_closures
-    WHERE closed_date = ${mysql.quote(today)};
+    WHERE closed_date >= ${mysql.quote(AUDIT_CHECKIN_START_DATE)}
+      AND closed_date <= ${mysql.quote(today)}
+    ORDER BY closed_date;
   `);
 
-  return rows[0]?.closed
-    ? addIsoDays(today, 1)
-    : today;
+  const closed =
+    new Set(rows.map(row => row.date));
+  let cursor =
+    AUDIT_CHECKIN_START_DATE;
+
+  while (
+    cursor <= today
+    &&
+    closed.has(cursor)
+  ) {
+    cursor =
+      addIsoDays(cursor, 1);
+  }
+
+  return cursor;
+}
+
+function getAuditDayWindow(auditDate) {
+  const start =
+    `${auditDate} 00:00:00`;
+
+  if (!mysql.ensureSchema()) {
+    return {
+      start,
+      end:
+        `${addIsoDays(auditDate, 1)} 00:00:00`
+    };
+  }
+
+  const rows =
+    mysql.queryJson(`
+      SELECT JSON_OBJECT(
+        'closedAt', IFNULL(DATE_FORMAT(closed_at, '%Y-%m-%d %H:%i:%s'), '')
+      )
+      FROM daily_closures
+      WHERE closed_date = ${mysql.quote(auditDate)}
+      LIMIT 1;
+    `);
+
+  return {
+    start,
+    end:
+      rows[0]?.closedAt || mysql.mexicoNowSql()
+  };
 }
 
 function closeOperationalDay(input = {}) {
@@ -2795,15 +2844,17 @@ function closeOperationalDay(input = {}) {
   mysql.runSql(`
     INSERT INTO daily_closures (
       closed_date,
+      closed_at,
       closed_by,
       notes
     ) VALUES (
       ${mysql.quote(date)},
+      ${mysql.quote(mysql.mexicoNowSql())},
       ${mysql.quote(input.closedBy || "dashboard")},
       ${mysql.quote(String(input.notes || "").trim())}
     )
     ON DUPLICATE KEY UPDATE
-      closed_at = CURRENT_TIMESTAMP,
+      closed_at = ${mysql.quote(mysql.mexicoNowSql())},
       closed_by = VALUES(closed_by),
       notes = VALUES(notes);
   `);
@@ -2941,6 +2992,8 @@ function loadDailyRoomRates(input = {}) {
 
 function getAuditReports({ date } = {}) {
   const auditDate = normalizeAuditDate(date);
+  const auditWindow =
+    getAuditDayWindow(auditDate);
 
   if (!mysql.ensureSchema()) {
     const displayDate = isoToDisplayDate(auditDate);
@@ -2987,11 +3040,11 @@ function getAuditReports({ date } = {}) {
           SUM(charge_amount - payment_amount) AS balance,
           MAX(NULLIF(payment_method, '')) AS payment_method
         FROM account_movements
-        WHERE DATE(occurred_at) <= ${mysql.quote(auditDate)}
+        WHERE occurred_at < ${mysql.quote(auditWindow.end)}
         GROUP BY checkin_id
       ) movement_total ON movement_total.checkin_id = checkin.id
-      WHERE DATE(checkin.checked_in_at) <= ${mysql.quote(auditDate)}
-        AND (checkin.checked_out_at IS NULL OR DATE(checkin.checked_out_at) >= ${mysql.quote(auditDate)})
+      WHERE checkin.checked_in_at < ${mysql.quote(auditWindow.end)}
+        AND (checkin.checked_out_at IS NULL OR checkin.checked_out_at >= ${mysql.quote(auditWindow.start)})
         AND checkin.room_id IS NOT NULL
         AND NULLIF(checkin.room_number_snapshot, '') IS NOT NULL
         AND NOT EXISTS (
@@ -2999,8 +3052,8 @@ function getAuditReports({ date } = {}) {
           FROM checkins newer_checkin
           WHERE newer_checkin.room_id = checkin.room_id
             AND newer_checkin.id != checkin.id
-            AND DATE(newer_checkin.checked_in_at) <= ${mysql.quote(auditDate)}
-            AND (newer_checkin.checked_out_at IS NULL OR DATE(newer_checkin.checked_out_at) >= ${mysql.quote(auditDate)})
+            AND newer_checkin.checked_in_at < ${mysql.quote(auditWindow.end)}
+            AND (newer_checkin.checked_out_at IS NULL OR newer_checkin.checked_out_at >= ${mysql.quote(auditWindow.start)})
             AND (
               newer_checkin.checked_in_at > checkin.checked_in_at
               OR (newer_checkin.checked_in_at = checkin.checked_in_at AND newer_checkin.id > checkin.id)
@@ -3012,6 +3065,7 @@ function getAuditReports({ date } = {}) {
     movements: mysql.queryJson(`
       SELECT JSON_OBJECT(
         'room', movement.room_number_snapshot, 'guestName', guest.name,
+        'date', DATE_FORMAT(movement.occurred_at, '%d/%m/%Y'),
         'time', DATE_FORMAT(movement.occurred_at, '%H:%i:%s'),
         'reference', movement.reference_code, 'concept', movement.concept,
         'charge', movement.charge_amount, 'payment', movement.payment_amount,
@@ -3021,9 +3075,24 @@ function getAuditReports({ date } = {}) {
       FROM account_movements movement
       JOIN checkins checkin ON checkin.id = movement.checkin_id
       JOIN guests guest ON guest.id = movement.guest_id
-      WHERE DATE(movement.occurred_at) = ${mysql.quote(auditDate)}
+      WHERE movement.occurred_at >= ${mysql.quote(auditWindow.start)}
+        AND movement.occurred_at < ${mysql.quote(auditWindow.end)}
         AND checkin.room_id IS NOT NULL
         AND NULLIF(movement.room_number_snapshot, '') IS NOT NULL
+        AND checkin.checked_in_at < ${mysql.quote(auditWindow.end)}
+        AND (checkin.checked_out_at IS NULL OR checkin.checked_out_at >= ${mysql.quote(auditWindow.start)})
+        AND NOT EXISTS (
+          SELECT 1
+          FROM checkins newer_checkin
+          WHERE newer_checkin.room_id = checkin.room_id
+            AND newer_checkin.id != checkin.id
+            AND newer_checkin.checked_in_at < ${mysql.quote(auditWindow.end)}
+            AND (newer_checkin.checked_out_at IS NULL OR newer_checkin.checked_out_at >= ${mysql.quote(auditWindow.start)})
+            AND (
+              newer_checkin.checked_in_at > checkin.checked_in_at
+              OR (newer_checkin.checked_in_at = checkin.checked_in_at AND newer_checkin.id > checkin.id)
+            )
+        )
       ORDER BY CAST(movement.room_number_snapshot AS UNSIGNED), movement.room_number_snapshot, movement.occurred_at;
     `)
   };
