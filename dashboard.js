@@ -2797,6 +2797,18 @@ function getAuditReports({ date } = {}) {
         AND checkin.room_id IS NOT NULL
         AND NULLIF(checkin.room_number_snapshot, '') IS NOT NULL
         AND COALESCE(reservation.status, '') != 'cancelada'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM checkins newer_checkin
+          WHERE newer_checkin.room_id = checkin.room_id
+            AND newer_checkin.id != checkin.id
+            AND DATE(newer_checkin.checked_in_at) <= ${mysql.quote(auditDate)}
+            AND (newer_checkin.checked_out_at IS NULL OR DATE(newer_checkin.checked_out_at) >= ${mysql.quote(auditDate)})
+            AND (
+              newer_checkin.checked_in_at > checkin.checked_in_at
+              OR (newer_checkin.checked_in_at = checkin.checked_in_at AND newer_checkin.id > checkin.id)
+            )
+        )
       GROUP BY checkin.id, checkin.room_number_snapshot, checkin.guest_name_snapshot, reservation.start_date, checkin.checked_in_at, checkin.checked_out_at, room_type.name, reservation.adults_count, reservation.children_count, reservation.rate_text, movement_day.extras
       ORDER BY CAST(checkin.room_number_snapshot AS UNSIGNED), checkin.room_number_snapshot, checkin.guest_name_snapshot;
     `),
@@ -2829,6 +2841,18 @@ function getAuditReports({ date } = {}) {
         AND (checkin.checked_out_at IS NULL OR DATE(checkin.checked_out_at) >= ${mysql.quote(auditDate)})
         AND checkin.room_id IS NOT NULL
         AND NULLIF(checkin.room_number_snapshot, '') IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM checkins newer_checkin
+          WHERE newer_checkin.room_id = checkin.room_id
+            AND newer_checkin.id != checkin.id
+            AND DATE(newer_checkin.checked_in_at) <= ${mysql.quote(auditDate)}
+            AND (newer_checkin.checked_out_at IS NULL OR DATE(newer_checkin.checked_out_at) >= ${mysql.quote(auditDate)})
+            AND (
+              newer_checkin.checked_in_at > checkin.checked_in_at
+              OR (newer_checkin.checked_in_at = checkin.checked_in_at AND newer_checkin.id > checkin.id)
+            )
+        )
       GROUP BY checkin.id, checkin.room_number_snapshot, checkin.guest_name_snapshot, reservation.start_date, checkin.checked_in_at, checkin.checked_out_at, room_type.name, reservation.adults_count, reservation.children_count, reservation.rate_text, movement_total.balance, movement_total.payment_method
       ORDER BY CAST(checkin.room_number_snapshot AS UNSIGNED), checkin.room_number_snapshot;
     `),
