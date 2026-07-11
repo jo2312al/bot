@@ -1260,7 +1260,7 @@ function auditReportFallbackScript() {
         ? ["Hab.", "Nombre", "Fha. Ent.", "Fha. Sal.", "T. H.", "Pax", "Tarifa", "Extras"]
         : (isBalances
           ? ["Hab.", "Nombre", "Fha. Ent.", "Fha. Sal.", "Noc.", "T. H.", "Pax", "Tarifa", "Saldo", "Forma pago"]
-          : ["Hab.", "Fecha", "Hora", "Referencia", "Hu\\u00e9sped", "Concepto", "Cargos", "Cr\\u00e9ditos", "Forma pago"]);
+          : ["Hab.", "Fecha", "Hora", "Referencia", "Hu\\u00e9sped", "Concepto", "Movimientos", "Cr\\u00e9ditos", "Forma pago"]);
       var cells = function (row) {
         if (isRents) return [row.room, row.guestName, row.startDate, row.endDate, row.roomType, row.pax, row.rate, auditMoney(row.extras)];
         if (isBalances) return [row.room, row.guestName, row.startDate, row.endDate, row.nights, row.roomType, row.pax, row.rate, auditMoney(row.balance), row.paymentMethod];

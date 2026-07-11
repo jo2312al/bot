@@ -421,7 +421,7 @@ async function printAuditReport(type) {
     ? ['Hab.', 'Nombre', 'Fha. Ent.', 'Fha. Sal.', 'T. H.', 'Pax', 'Tarifa', 'Extras']
     : (type === 'balances'
       ? ['Hab.', 'Nombre', 'Fha. Ent.', 'Fha. Sal.', 'Noc.', 'T. H.', 'Pax', 'Tarifa', 'Saldo', 'Forma pago']
-      : ['Hab.', 'Fecha', 'Hora', 'Referencia', 'Huésped', 'Concepto', 'Cargos', 'Créditos', 'Forma pago']);
+      : ['Hab.', 'Fecha', 'Hora', 'Referencia', 'Huésped', 'Concepto', 'Movimientos', 'Créditos', 'Forma pago']);
   const cells = row => type === 'rents'
     ? [row.room, row.guestName, row.startDate, row.endDate, row.roomType, row.pax, row.rate, formatAuditMoney(row.extras)]
     : (type === 'balances'
@@ -455,7 +455,7 @@ function renderAuditMovementSections(rows, headers) {
   const chargeTotal = rows.reduce((sum, row) => sum + Number(row.charge || 0), 0);
   const creditTotal = rows.reduce((sum, row) => sum + Number(row.payment || 0), 0);
   return groups.map(group => renderAuditMovementTable(group.title, group.rows, headers)).join('') +
-    '<table><tbody><tr class="total"><td>Total cargos</td><td class="num">' + formatAuditMoney(chargeTotal) + '</td><td>Total creditos</td><td class="num">' + formatAuditMoney(creditTotal) + '</td><td>Saldo neto</td><td class="num">' + formatAuditMoney(chargeTotal - creditTotal) + '</td></tr></tbody></table>';
+    '<table><tbody><tr class="total"><td>Total movimientos</td><td class="num">' + formatAuditMoney(chargeTotal) + '</td><td>Total creditos</td><td class="num">' + formatAuditMoney(creditTotal) + '</td><td>Saldo neto</td><td class="num">' + formatAuditMoney(chargeTotal - creditTotal) + '</td></tr></tbody></table>';
 }
 
 function groupAuditMovementsByMethod(rows) {
@@ -471,31 +471,25 @@ function groupAuditMovementsByMethod(rows) {
 }
 
 function getAuditMovementGroupTitle(row) {
-  const charge = Number(row.charge || 0);
-  const payment = Number(row.payment || 0);
   const method = String(row.paymentMethod || '').trim().toLowerCase();
   const concept = String(row.concept || '').trim().toLowerCase();
 
-  if (payment > 0) {
-    if (method.includes('efect')) return 'Efectivo';
-    if (method.includes('transfer')) return 'Transferencia';
-    if (method.includes('traspas') || concept.includes('traspas')) return 'Traspaso';
-    if (method.includes('debito') || method.includes('débito')) return 'Tarjeta de debito';
-    if (method.includes('credito') || method.includes('crédito')) return 'Tarjeta de credito';
-    if (method.includes('tarjeta')) return 'Tarjeta';
-    return method ? method.toUpperCase() : 'Pagos sin forma';
-  }
-
-  return charge > 0 ? 'Cargos' : 'Otros movimientos';
+  if (method.includes('efect')) return 'Efectivo';
+  if (method.includes('transfer')) return 'Transferencia';
+  if (method.includes('traspas') || concept.includes('traspas')) return 'Traspaso';
+  if (method.includes('debito') || method.includes('débito')) return 'Tarjeta de debito';
+  if (method.includes('credito') || method.includes('crédito')) return 'Tarjeta de credito';
+  if (method.includes('tarjeta')) return 'Tarjeta';
+  return method ? method.toUpperCase() : 'Movimientos en general';
 }
 
 function getAuditMovementGroupRank(title) {
   const normalized = String(title || '').toLowerCase();
-  if (normalized === 'cargos') return 1;
-  if (normalized.includes('efect')) return 2;
-  if (normalized.includes('tarjeta')) return 3;
-  if (normalized.includes('transfer')) return 4;
-  if (normalized.includes('traspas')) return 5;
+  if (normalized.includes('efect')) return 1;
+  if (normalized.includes('tarjeta')) return 2;
+  if (normalized.includes('transfer')) return 3;
+  if (normalized.includes('traspas')) return 4;
+  if (normalized.includes('general')) return 8;
   return 9;
 }
 
