@@ -2829,7 +2829,7 @@ function getAuditDayWindow(auditDate) {
   return {
     start,
     end:
-      rows[0]?.closedAt || mysql.mexicoNowSql()
+      rows[0]?.closedAt || `${addIsoDays(auditDate, 1)} 23:59:59`
   };
 }
 
@@ -3081,18 +3081,6 @@ function getAuditReports({ date } = {}) {
         AND NULLIF(movement.room_number_snapshot, '') IS NOT NULL
         AND checkin.checked_in_at < ${mysql.quote(auditWindow.end)}
         AND (checkin.checked_out_at IS NULL OR checkin.checked_out_at >= ${mysql.quote(auditWindow.start)})
-        AND NOT EXISTS (
-          SELECT 1
-          FROM checkins newer_checkin
-          WHERE newer_checkin.room_id = checkin.room_id
-            AND newer_checkin.id != checkin.id
-            AND newer_checkin.checked_in_at < ${mysql.quote(auditWindow.end)}
-            AND (newer_checkin.checked_out_at IS NULL OR newer_checkin.checked_out_at >= ${mysql.quote(auditWindow.start)})
-            AND (
-              newer_checkin.checked_in_at > checkin.checked_in_at
-              OR (newer_checkin.checked_in_at = checkin.checked_in_at AND newer_checkin.id > checkin.id)
-            )
-        )
       ORDER BY CAST(movement.room_number_snapshot AS UNSIGNED), movement.room_number_snapshot, movement.occurred_at;
     `)
   };
