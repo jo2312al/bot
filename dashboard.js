@@ -2771,46 +2771,83 @@ function getAuditReports({ date } = {}) {
     date: auditDate,
     rents: mysql.queryJson(`
       SELECT JSON_OBJECT(
-        'room', checkin.room_number_snapshot, 'guestName', checkin.guest_name_snapshot,
-        'startDate', DATE_FORMAT(COALESCE(reservation.start_date, DATE(checkin.checked_in_at)), '%d/%m/%Y'),
-        'endDate', DATE_FORMAT(COALESCE(MAX(stay.stay_date), DATE(checkin.checked_out_at), ${mysql.quote(auditDate)}), '%d/%m/%Y'),
-        'roomType', COALESCE(room_type.name, ''),
-        'pax', COALESCE(reservation.adults_count, 0) + COALESCE(reservation.children_count, 0),
-        'rate', COALESCE(reservation.rate_text, ''),
-        'extras', COALESCE(movement_day.extras, 0)
+        'room', audit_row.room, 'guestName', audit_row.guest_name,
+        'startDate', DATE_FORMAT(audit_row.start_date, '%d/%m/%Y'),
+        'endDate', DATE_FORMAT(audit_row.end_date, '%d/%m/%Y'),
+        'roomType', COALESCE(audit_row.room_type, ''),
+        'pax', COALESCE(audit_row.pax, 0),
+        'rate', COALESCE(audit_row.rate_text, ''),
+        'extras', COALESCE(audit_row.extras, 0)
       )
-      FROM checkins checkin
-      LEFT JOIN reservations reservation ON reservation.id = checkin.reservation_id
-      LEFT JOIN reservation_dates stay ON stay.reservation_id = reservation.id
-      LEFT JOIN rooms room ON room.id = checkin.room_id
-      LEFT JOIN room_types room_type ON room_type.id = reservation.room_type_id
-      LEFT JOIN (
+      FROM (
         SELECT
-          checkin_id,
-          SUM(charge_amount) AS extras
-        FROM account_movements
-        WHERE DATE(occurred_at) = ${mysql.quote(auditDate)}
-        GROUP BY checkin_id
-      ) movement_day ON movement_day.checkin_id = checkin.id
-      WHERE DATE(checkin.checked_in_at) <= ${mysql.quote(auditDate)}
-        AND (checkin.checked_out_at IS NULL OR DATE(checkin.checked_out_at) >= ${mysql.quote(auditDate)})
-        AND checkin.room_id IS NOT NULL
-        AND NULLIF(checkin.room_number_snapshot, '') IS NOT NULL
-        AND COALESCE(reservation.status, '') != 'cancelada'
-        AND NOT EXISTS (
-          SELECT 1
-          FROM checkins newer_checkin
-          WHERE newer_checkin.room_id = checkin.room_id
-            AND newer_checkin.id != checkin.id
-            AND DATE(newer_checkin.checked_in_at) <= ${mysql.quote(auditDate)}
-            AND (newer_checkin.checked_out_at IS NULL OR DATE(newer_checkin.checked_out_at) >= ${mysql.quote(auditDate)})
-            AND (
-              newer_checkin.checked_in_at > checkin.checked_in_at
-              OR (newer_checkin.checked_in_at = checkin.checked_in_at AND newer_checkin.id > checkin.id)
-            )
-        )
-      GROUP BY checkin.id, checkin.room_number_snapshot, checkin.guest_name_snapshot, reservation.start_date, checkin.checked_in_at, checkin.checked_out_at, room_type.name, reservation.adults_count, reservation.children_count, reservation.rate_text, movement_day.extras
-      ORDER BY CAST(checkin.room_number_snapshot AS UNSIGNED), checkin.room_number_snapshot, checkin.guest_name_snapshot;
+          room.room_number AS room,
+          guest.name AS guest_name,
+          GREATEST(COALESCE(reservation.start_date, ${mysql.quote(auditDate)}), '2026-07-10') AS start_date,
+          MAX(stay.stay_date) AS end_date,
+          room_type.name AS room_type,
+          COALESCE(reservation.adults_count, 0) + COALESCE(reservation.children_count, 0) AS pax,
+          reservation.rate_text AS rate_text,
+          COALESCE(movement_reservation.extras, 0) AS extras
+        FROM reservations reservation
+        JOIN guests guest ON guest.id = reservation.guest_id
+        JOIN reservation_dates stay ON stay.reservation_id = reservation.id AND stay.stay_date = ${mysql.quote(auditDate)}
+        JOIN rooms room ON room.id = reservation.assigned_room_id
+        LEFT JOIN room_types room_type ON room_type.id = reservation.room_type_id
+        LEFT JOIN (
+          SELECT
+            checkin.reservation_id,
+            SUM(movement.charge_amount) AS extras
+          FROM account_movements movement
+          JOIN checkins checkin ON checkin.id = movement.checkin_id
+          WHERE DATE(movement.occurred_at) = ${mysql.quote(auditDate)}
+          GROUP BY checkin.reservation_id
+        ) movement_reservation ON movement_reservation.reservation_id = reservation.id
+        WHERE reservation.assigned_room_id IS NOT NULL
+          AND COALESCE(reservation.status, '') != 'cancelada'
+        GROUP BY reservation.id, room.room_number, guest.name, reservation.start_date, room_type.name, reservation.adults_count, reservation.children_count, reservation.rate_text, movement_reservation.extras
+
+        UNION ALL
+
+        SELECT
+          checkin.room_number_snapshot AS room,
+          checkin.guest_name_snapshot AS guest_name,
+          DATE(checkin.checked_in_at) AS start_date,
+          COALESCE(DATE(checkin.checked_out_at), ${mysql.quote(auditDate)}) AS end_date,
+          room_type.name AS room_type,
+          COALESCE(reservation.adults_count, 0) + COALESCE(reservation.children_count, 0) AS pax,
+          reservation.rate_text AS rate_text,
+          COALESCE(movement_checkin.extras, 0) AS extras
+        FROM checkins checkin
+        LEFT JOIN reservations reservation ON reservation.id = checkin.reservation_id
+        LEFT JOIN room_types room_type ON room_type.id = reservation.room_type_id
+        LEFT JOIN (
+          SELECT
+            checkin_id,
+            SUM(charge_amount) AS extras
+          FROM account_movements
+          WHERE DATE(occurred_at) = ${mysql.quote(auditDate)}
+          GROUP BY checkin_id
+        ) movement_checkin ON movement_checkin.checkin_id = checkin.id
+        WHERE DATE(checkin.checked_in_at) = ${mysql.quote(auditDate)}
+          AND checkin.room_id IS NOT NULL
+          AND NULLIF(checkin.room_number_snapshot, '') IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1
+            FROM reservation_dates represented_stay
+            WHERE represented_stay.reservation_id = checkin.reservation_id
+              AND represented_stay.stay_date = ${mysql.quote(auditDate)}
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM reservations room_reservation
+            JOIN reservation_dates room_stay ON room_stay.reservation_id = room_reservation.id
+            WHERE room_reservation.assigned_room_id = checkin.room_id
+              AND room_stay.stay_date = ${mysql.quote(auditDate)}
+              AND COALESCE(room_reservation.status, '') != 'cancelada'
+          )
+      ) audit_row
+      ORDER BY CAST(audit_row.room AS UNSIGNED), audit_row.room, audit_row.guest_name;
     `),
     balances: mysql.queryJson(`
       SELECT JSON_OBJECT(
