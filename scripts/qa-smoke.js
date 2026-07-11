@@ -107,6 +107,8 @@ async function runChecks() {
   assertIncludes(home.body, "header-logo", "Home dashboard");
   assertIncludes(home.body, "header-actions", "Home dashboard");
   assertIncludes(home.body, "/media/logo-villa-margaritas.png", "Home dashboard");
+  assertIncludes(home.body, "Cargar tarifas", "Home dashboard");
+  assertIncludes(home.body, "Cierre del dia", "Home dashboard");
   assertNotIncludes(home.body, "sidebar-brand", "Home dashboard");
 
   const css =

@@ -382,6 +382,9 @@ async function loadDashboard() {
     if (!reportMonth.value) {
       reportMonth.value = String(data.today || '').slice(0, 7);
     }
+    if (typeof reportAuditDate !== 'undefined' && !reportAuditDate.value) {
+      reportAuditDate.value = data.operationalDate || data.today;
+    }
     if (!roomEventDate.value) {
       roomEventDate.value = data.today;
     }

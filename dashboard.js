@@ -107,7 +107,7 @@ const RACK_EMERGENCY_USER =
 const RACK_EMERGENCY_PASSWORD =
   process.env.RACK_EMERGENCY_PASSWORD || "";
 const DASHBOARD_ASSET_VERSION =
-  "dashboard-header-logo-actions-20260710";
+  "dashboard-day-close-rates-20260711";
 const DASHBOARD_SCRIPT_FILES = [
   "dashboard-core.js",
   "dashboard-search.js",
@@ -1240,7 +1240,7 @@ function auditReportFallbackScript() {
 
     window.printAuditReport = async function (type) {
       var input = document.getElementById("reportAuditDate");
-      var today = window.dashboardData && window.dashboardData.today;
+      var today = window.dashboardData && (window.dashboardData.operationalDate || window.dashboardData.today);
       var date = (input && input.value) || today || new Date().toISOString().slice(0, 10);
       var response = await fetch("/api/reports/audit?date=" + encodeURIComponent(date));
       var data = await response.json();
@@ -2374,6 +2374,8 @@ function getSummary() {
 
   const today =
     getMexicoTodayIso();
+  const operationalDate =
+    getOperationalDate(today);
 
   const todayDisplay =
     isoToDisplayDate(today);
@@ -2393,6 +2395,10 @@ function getSummary() {
       getRoomLimits(),
     today:
       today,
+    operationalDate:
+      operationalDate,
+    dailyClosures:
+      getDailyClosures(),
     closedDates:
       readClosedDates(),
     totals: {
@@ -2537,6 +2543,214 @@ function normalizeAuditDate(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))
     ? String(value)
     : getMexicoTodayIso();
+}
+
+function addIsoDays(isoDate, days) {
+  const date =
+    new Date(`${isoDate}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) {
+    return isoDate;
+  }
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function getDailyClosures() {
+  if (!mysql.ensureSchema()) {
+    return [];
+  }
+
+  return mysql.queryJson(`
+    SELECT JSON_OBJECT(
+      'date', DATE_FORMAT(closed_date, '%Y-%m-%d'),
+      'closedAt', DATE_FORMAT(closed_at, '%Y-%m-%dT%H:%i:%s'),
+      'closedBy', closed_by,
+      'notes', notes
+    )
+    FROM daily_closures
+    ORDER BY closed_date DESC
+    LIMIT 30;
+  `);
+}
+
+function getOperationalDate(today = getMexicoTodayIso()) {
+  if (!mysql.ensureSchema()) {
+    return today;
+  }
+
+  const rows = mysql.queryJson(`
+    SELECT JSON_OBJECT('closed', COUNT(*) > 0)
+    FROM daily_closures
+    WHERE closed_date = ${mysql.quote(today)};
+  `);
+
+  return rows[0]?.closed
+    ? addIsoDays(today, 1)
+    : today;
+}
+
+function closeOperationalDay(input = {}) {
+  if (!mysql.ensureSchema()) {
+    throw new Error("Activa MySQL para cerrar el dia operativo.");
+  }
+
+  const date =
+    normalizeAuditDate(input.date || getOperationalDate());
+
+  mysql.runSql(`
+    INSERT INTO daily_closures (
+      closed_date,
+      closed_by,
+      notes
+    ) VALUES (
+      ${mysql.quote(date)},
+      ${mysql.quote(input.closedBy || "dashboard")},
+      ${mysql.quote(String(input.notes || "").trim())}
+    )
+    ON DUPLICATE KEY UPDATE
+      closed_at = CURRENT_TIMESTAMP,
+      closed_by = VALUES(closed_by),
+      notes = VALUES(notes);
+  `);
+
+  return {
+    date,
+    nextDate:
+      addIsoDays(date, 1),
+    closures:
+      getDailyClosures()
+  };
+}
+
+function parseMoneyValue(value) {
+  const amount =
+    Number(String(value || "").replace(/[^\d.-]/g, ""));
+  return Number.isFinite(amount)
+    ? amount
+    : 0;
+}
+
+function loadDailyRoomRates(input = {}) {
+  if (!mysql.ensureSchema()) {
+    throw new Error("Activa MySQL para cargar tarifas al saldo.");
+  }
+
+  const date =
+    normalizeAuditDate(input.date || getOperationalDate());
+
+  const rows = mysql.queryJson(`
+    SELECT JSON_OBJECT(
+      'checkinId', checkin.id,
+      'guestId', checkin.guest_id,
+      'roomId', checkin.room_id,
+      'room', checkin.room_number_snapshot,
+      'guestName', checkin.guest_name_snapshot,
+      'rate', COALESCE(reservation.rate_text, '')
+    )
+    FROM checkins checkin
+    LEFT JOIN reservations reservation ON reservation.id = checkin.reservation_id
+    JOIN rack_snapshot_rooms rack_room ON rack_room.room_id = checkin.room_id
+    WHERE DATE(checkin.checked_in_at) <= ${mysql.quote(date)}
+      AND (checkin.checked_out_at IS NULL OR DATE(checkin.checked_out_at) >= ${mysql.quote(date)})
+      AND checkin.room_id IS NOT NULL
+      AND NULLIF(checkin.room_number_snapshot, '') IS NOT NULL
+      AND rack_room.room_status IN ('OC', 'OS', 'OL', 'OR', 'OSE', 'ND')
+      AND rack_room.rack_snapshot_id = (
+        SELECT latest_rack.id
+        FROM rack_snapshots latest_rack
+        WHERE latest_rack.report_date <= ${mysql.quote(date)}
+        ORDER BY latest_rack.report_date DESC, latest_rack.uploaded_at DESC, latest_rack.id DESC
+        LIMIT 1
+      )
+    ORDER BY CAST(checkin.room_number_snapshot AS UNSIGNED), checkin.room_number_snapshot;
+  `);
+
+  const applied =
+    [];
+  const skipped =
+    [];
+
+  rows.forEach(row => {
+    const amount =
+      parseMoneyValue(row.rate);
+    const reference =
+      `TARIFA:${date}:${row.room}`;
+
+    if (!amount) {
+      skipped.push({
+        room:
+          row.room,
+        guestName:
+          row.guestName,
+        reason:
+          "Sin tarifa valida"
+      });
+      return;
+    }
+
+    const exists = mysql.queryJson(`
+      SELECT JSON_OBJECT('exists', COUNT(*) > 0)
+      FROM account_movements
+      WHERE checkin_id = ${Number(row.checkinId)}
+        AND reference_code = ${mysql.quote(reference)};
+    `);
+
+    if (exists[0]?.exists) {
+      skipped.push({
+        room:
+          row.room,
+        guestName:
+          row.guestName,
+        reason:
+          "Tarifa ya cargada"
+      });
+      return;
+    }
+
+    mysql.runSql(`
+      INSERT INTO account_movements (
+        checkin_id,
+        guest_id,
+        room_id,
+        room_number_snapshot,
+        movement_type,
+        payment_method,
+        reference_code,
+        concept,
+        charge_amount,
+        payment_amount,
+        occurred_at
+      ) VALUES (
+        ${Number(row.checkinId)},
+        ${Number(row.guestId)},
+        ${Number(row.roomId)},
+        ${mysql.quote(row.room)},
+        'cargo',
+        '',
+        ${mysql.quote(reference)},
+        ${mysql.quote(`Tarifa habitacion ${date}`)},
+        ${amount.toFixed(2)},
+        0,
+        ${mysql.quote(`${date} 23:59:00`)}
+      );
+    `);
+
+    applied.push({
+      room:
+        row.room,
+      guestName:
+        row.guestName,
+      amount
+    });
+  });
+
+  return {
+    date,
+    applied,
+    skipped,
+    total:
+      applied.reduce((sum, row) => sum + Number(row.amount || 0), 0)
+  };
 }
 
 function getAuditReports({ date } = {}) {
@@ -4086,11 +4300,14 @@ function pageHtml() {
         <button onclick="printAuditReport('rents')">Imprimir sábana</button>
         <button onclick="printAuditReport('balances')">Imprimir saldos</button>
         <button onclick="printAuditReport('movements')">Imprimir cargos y créditos</button>
+        <button onclick="loadDailyRoomRates()">Cargar tarifas</button>
+        <button class="danger" onclick="closeDailyOperations()">Cierre del dia</button>
         <button onclick="downloadReportCsv('all')">CSV completo</button>
         <button onclick="downloadReportCsv('occupancy')">CSV ocupacion</button>
         <button onclick="downloadReportCsv('rotation')">CSV rotacion</button>
         <button onclick="downloadReportCsv('events')">CSV eventos</button>
         <div id="reportMode" class="muted"></div>
+        <div id="dailyCloseStatus" class="muted"></div>
       </div>
       <div id="reportKpis" class="report-kpis"></div>
       <div class="report-grid">
@@ -4629,6 +4846,56 @@ const server =
         });
       }
 
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/day-rate-charges"
+    ) {
+      try {
+        const body =
+          await readBody(req);
+        sendJson(res, 200, {
+          ok:
+            true,
+          result:
+            loadDailyRoomRates(body)
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok:
+            false,
+          error:
+            error.message || "No se pudieron cargar tarifas"
+        });
+      }
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/day-close"
+    ) {
+      try {
+        const body =
+          await readBody(req);
+        sendJson(res, 200, {
+          ok:
+            true,
+          result:
+            closeOperationalDay(body)
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok:
+            false,
+          error:
+            error.message || "No se pudo cerrar el dia"
+        });
+      }
       return;
     }
 

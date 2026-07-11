@@ -27,6 +27,13 @@ function renderReports(report) {
   reportMode.textContent = report.mode === 'mysql'
     ? 'Datos desde MySQL normalizado.'
     : 'Modo parcial: activa MySQL para historial exacto por habitacion y mantenimiento.';
+  if (typeof dailyCloseStatus !== 'undefined' && dailyCloseStatus) {
+    const operational = dashboardData?.operationalDate || dashboardData?.today || '';
+    const closedToday = (dashboardData?.dailyClosures || []).some(row => row.date === dashboardData?.today);
+    dailyCloseStatus.textContent = operational
+      ? 'Dia operativo: ' + (isoToDisplay(operational) || operational) + (closedToday ? ' / Hoy ya esta cerrado.' : '')
+      : '';
+  }
   reportKpis.innerHTML =
     renderReportKpi('Dias con ocupacion', daily.length, 'Fechas con movimiento', 'calendar_month') +
     renderReportKpi('Room nights mes', totalOccupied, 'Noches ocupadas acumuladas', 'bed') +
@@ -341,8 +348,66 @@ function downloadReportCsv(type) {
   window.location.href = '/api/reports/export-csv?month=' + encodeURIComponent(month) + '&type=' + encodeURIComponent(type || 'all');
 }
 
+function getReportAuditIsoDate() {
+  return reportAuditDate.value || dashboardData?.operationalDate || dashboardData?.today || new Date().toISOString().slice(0, 10);
+}
+
+async function loadDailyRoomRates() {
+  const date = getReportAuditIsoDate();
+  if (!confirm('Cargar tarifas de habitaciones ocupadas al saldo del dia ' + (isoToDisplay(date) || date) + '?')) {
+    return;
+  }
+
+  dailyCloseStatus.textContent = 'Cargando tarifas...';
+  const response = await fetch('/api/day-rate-charges', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date })
+  });
+  const data = await response.json();
+  if (!data.ok) {
+    dailyCloseStatus.textContent = data.error || 'No se pudieron cargar tarifas.';
+    return;
+  }
+
+  const result = data.result || {};
+  dailyCloseStatus.textContent =
+    'Tarifas cargadas: ' + (result.applied?.length || 0) +
+    ' / omitidas: ' + (result.skipped?.length || 0) +
+    ' / total: ' + formatAuditMoney(result.total || 0);
+  await loadReports();
+}
+
+async function closeDailyOperations() {
+  const date = getReportAuditIsoDate();
+  if (!confirm('Cerrar el dia operativo ' + (isoToDisplay(date) || date) + '? Despues la fecha operativa avanzara al siguiente dia.')) {
+    return;
+  }
+
+  dailyCloseStatus.textContent = 'Cerrando dia...';
+  const response = await fetch('/api/day-close', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date })
+  });
+  const data = await response.json();
+  if (!data.ok) {
+    dailyCloseStatus.textContent = data.error || 'No se pudo cerrar el dia.';
+    return;
+  }
+
+  const result = data.result || {};
+  dailyCloseStatus.textContent =
+    'Dia cerrado: ' + (isoToDisplay(result.date) || result.date || date) +
+    ' / siguiente dia: ' + (isoToDisplay(result.nextDate) || result.nextDate || '');
+  await loadDashboard();
+  if (result.nextDate) {
+    reportAuditDate.value = result.nextDate;
+  }
+}
+
 async function printAuditReport(type) {
-  const date = reportAuditDate.value || dashboardData?.today || new Date().toISOString().slice(0, 10);
+  const date = getReportAuditIsoDate();
   const response = await fetch('/api/reports/audit?date=' + encodeURIComponent(date));
   const data = await response.json();
   if (!data.ok) return alert(data.error || 'No se pudo generar el reporte.');

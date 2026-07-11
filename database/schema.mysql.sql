@@ -170,6 +170,14 @@ CREATE TABLE IF NOT EXISTS account_movements (
     ON UPDATE CASCADE ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS daily_closures (
+  closed_date DATE NOT NULL,
+  closed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  closed_by VARCHAR(120) NOT NULL DEFAULT 'dashboard',
+  notes TEXT NOT NULL,
+  PRIMARY KEY (closed_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS closed_dates (
   closed_date DATE NOT NULL,
   reason VARCHAR(160) NOT NULL DEFAULT '',
