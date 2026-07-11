@@ -2649,19 +2649,10 @@ function loadDailyRoomRates(input = {}) {
     )
     FROM checkins checkin
     LEFT JOIN reservations reservation ON reservation.id = checkin.reservation_id
-    JOIN rack_snapshot_rooms rack_room ON rack_room.room_id = checkin.room_id
     WHERE DATE(checkin.checked_in_at) <= ${mysql.quote(date)}
       AND (checkin.checked_out_at IS NULL OR DATE(checkin.checked_out_at) >= ${mysql.quote(date)})
       AND checkin.room_id IS NOT NULL
       AND NULLIF(checkin.room_number_snapshot, '') IS NOT NULL
-      AND rack_room.room_status IN ('OC', 'OS', 'OL', 'OR', 'OSE', 'ND')
-      AND rack_room.rack_snapshot_id = (
-        SELECT latest_rack.id
-        FROM rack_snapshots latest_rack
-        WHERE latest_rack.report_date <= ${mysql.quote(date)}
-        ORDER BY latest_rack.report_date DESC, latest_rack.uploaded_at DESC, latest_rack.id DESC
-        LIMIT 1
-      )
     ORDER BY CAST(checkin.room_number_snapshot AS UNSIGNED), checkin.room_number_snapshot;
   `);
 
@@ -2781,33 +2772,40 @@ function getAuditReports({ date } = {}) {
     rents: mysql.queryJson(`
       SELECT JSON_OBJECT(
         'room', checkin.room_number_snapshot, 'guestName', checkin.guest_name_snapshot,
-        'startDate', DATE_FORMAT(reservation.start_date, '%d/%m/%Y'),
-        'endDate', DATE_FORMAT(MAX(stay.stay_date), '%d/%m/%Y'),
+        'startDate', DATE_FORMAT(COALESCE(reservation.start_date, DATE(checkin.checked_in_at)), '%d/%m/%Y'),
+        'endDate', DATE_FORMAT(COALESCE(MAX(stay.stay_date), DATE(checkin.checked_out_at), ${mysql.quote(auditDate)}), '%d/%m/%Y'),
         'roomType', COALESCE(room_type.name, ''),
-        'pax', reservation.adults_count + reservation.children_count,
-        'rate', reservation.rate_text,
-        'extras', COALESCE(SUM(CASE WHEN DATE(movement.occurred_at) = ${mysql.quote(auditDate)} THEN movement.charge_amount ELSE 0 END), 0)
+        'pax', COALESCE(reservation.adults_count, 0) + COALESCE(reservation.children_count, 0),
+        'rate', COALESCE(reservation.rate_text, ''),
+        'extras', COALESCE(movement_day.extras, 0)
       )
       FROM checkins checkin
       LEFT JOIN reservations reservation ON reservation.id = checkin.reservation_id
-      JOIN reservation_dates stay ON stay.reservation_id = reservation.id AND stay.stay_date = ${mysql.quote(auditDate)}
+      LEFT JOIN reservation_dates stay ON stay.reservation_id = reservation.id
       LEFT JOIN rooms room ON room.id = checkin.room_id
       LEFT JOIN room_types room_type ON room_type.id = reservation.room_type_id
-      LEFT JOIN account_movements movement ON movement.checkin_id = checkin.id
+      LEFT JOIN (
+        SELECT
+          checkin_id,
+          SUM(charge_amount) AS extras
+        FROM account_movements
+        WHERE DATE(occurred_at) = ${mysql.quote(auditDate)}
+        GROUP BY checkin_id
+      ) movement_day ON movement_day.checkin_id = checkin.id
       WHERE DATE(checkin.checked_in_at) <= ${mysql.quote(auditDate)}
         AND (checkin.checked_out_at IS NULL OR DATE(checkin.checked_out_at) >= ${mysql.quote(auditDate)})
         AND checkin.room_id IS NOT NULL
         AND NULLIF(checkin.room_number_snapshot, '') IS NOT NULL
         AND COALESCE(reservation.status, '') != 'cancelada'
-      GROUP BY checkin.id, checkin.room_number_snapshot, checkin.guest_name_snapshot, reservation.start_date, room_type.name, reservation.adults_count, reservation.children_count, reservation.rate_text
+      GROUP BY checkin.id, checkin.room_number_snapshot, checkin.guest_name_snapshot, reservation.start_date, checkin.checked_in_at, checkin.checked_out_at, room_type.name, reservation.adults_count, reservation.children_count, reservation.rate_text, movement_day.extras
       ORDER BY CAST(checkin.room_number_snapshot AS UNSIGNED), checkin.room_number_snapshot, checkin.guest_name_snapshot;
     `),
     balances: mysql.queryJson(`
       SELECT JSON_OBJECT(
         'room', checkin.room_number_snapshot, 'guestName', checkin.guest_name_snapshot,
-        'startDate', DATE_FORMAT(reservation.start_date, '%d/%m/%Y'),
-        'endDate', DATE_FORMAT(MAX(stay.stay_date), '%d/%m/%Y'),
-        'nights', COUNT(DISTINCT stay.stay_date), 'roomType', COALESCE(room_type.name, ''),
+        'startDate', DATE_FORMAT(COALESCE(reservation.start_date, DATE(checkin.checked_in_at)), '%d/%m/%Y'),
+        'endDate', DATE_FORMAT(COALESCE(MAX(stay.stay_date), DATE(checkin.checked_out_at), ${mysql.quote(auditDate)}), '%d/%m/%Y'),
+        'nights', GREATEST(DATEDIFF(${mysql.quote(auditDate)}, COALESCE(reservation.start_date, DATE(checkin.checked_in_at))) + 1, 1), 'roomType', COALESCE(room_type.name, ''),
         'pax', COALESCE(reservation.adults_count, 0) + COALESCE(reservation.children_count, 0),
         'rate', COALESCE(reservation.rate_text, ''),
         'balance', COALESCE(movement_total.balance, 0),
@@ -2831,20 +2829,7 @@ function getAuditReports({ date } = {}) {
         AND (checkin.checked_out_at IS NULL OR DATE(checkin.checked_out_at) >= ${mysql.quote(auditDate)})
         AND checkin.room_id IS NOT NULL
         AND NULLIF(checkin.room_number_snapshot, '') IS NOT NULL
-        AND EXISTS (
-          SELECT 1
-          FROM rack_snapshot_rooms rack_room
-          WHERE rack_room.room_id = checkin.room_id
-            AND rack_room.room_status IN ('OC', 'OS', 'OL', 'OR', 'OSE', 'ND')
-            AND rack_room.rack_snapshot_id = (
-              SELECT latest_rack.id
-              FROM rack_snapshots latest_rack
-              WHERE latest_rack.report_date <= ${mysql.quote(auditDate)}
-              ORDER BY latest_rack.report_date DESC, latest_rack.uploaded_at DESC, latest_rack.id DESC
-              LIMIT 1
-            )
-        )
-      GROUP BY checkin.id, checkin.room_number_snapshot, checkin.guest_name_snapshot, reservation.start_date, room_type.name, reservation.adults_count, reservation.children_count, reservation.rate_text, movement_total.balance, movement_total.payment_method
+      GROUP BY checkin.id, checkin.room_number_snapshot, checkin.guest_name_snapshot, reservation.start_date, checkin.checked_in_at, checkin.checked_out_at, room_type.name, reservation.adults_count, reservation.children_count, reservation.rate_text, movement_total.balance, movement_total.payment_method
       ORDER BY CAST(checkin.room_number_snapshot AS UNSIGNED), checkin.room_number_snapshot;
     `),
     movements: mysql.queryJson(`
@@ -2853,7 +2838,8 @@ function getAuditReports({ date } = {}) {
         'time', DATE_FORMAT(movement.occurred_at, '%H:%i:%s'),
         'reference', movement.reference_code, 'concept', movement.concept,
         'charge', movement.charge_amount, 'payment', movement.payment_amount,
-        'paymentMethod', movement.payment_method
+        'paymentMethod', movement.payment_method,
+        'movementType', movement.movement_type
       )
       FROM account_movements movement
       JOIN checkins checkin ON checkin.id = movement.checkin_id

@@ -451,24 +451,64 @@ async function printAuditReport(type) {
 }
 
 function renderAuditMovementSections(rows, headers) {
-  const charges = rows.filter(row => Number(row.charge || 0) > 0);
-  const credits = rows.filter(row => Number(row.payment || 0) > 0);
-  const chargeTotal = charges.reduce((sum, row) => sum + Number(row.charge || 0), 0);
-  const creditTotal = credits.reduce((sum, row) => sum + Number(row.payment || 0), 0);
-  return renderAuditMovementTable('Cargos', charges, headers, 'charge') +
-    renderAuditMovementTable('Creditos / pagos', credits, headers, 'payment') +
+  const groups = groupAuditMovementsByMethod(rows);
+  const chargeTotal = rows.reduce((sum, row) => sum + Number(row.charge || 0), 0);
+  const creditTotal = rows.reduce((sum, row) => sum + Number(row.payment || 0), 0);
+  return groups.map(group => renderAuditMovementTable(group.title, group.rows, headers)).join('') +
     '<table><tbody><tr class="total"><td>Total cargos</td><td class="num">' + formatAuditMoney(chargeTotal) + '</td><td>Total creditos</td><td class="num">' + formatAuditMoney(creditTotal) + '</td><td>Saldo neto</td><td class="num">' + formatAuditMoney(chargeTotal - creditTotal) + '</td></tr></tbody></table>';
 }
 
-function renderAuditMovementTable(title, rows, headers, amountField) {
-  const total = rows.reduce((sum, row) => sum + Number(row[amountField] || 0), 0);
+function groupAuditMovementsByMethod(rows) {
+  const buckets = new Map();
+  rows.forEach(row => {
+    const title = getAuditMovementGroupTitle(row);
+    if (!buckets.has(title)) buckets.set(title, []);
+    buckets.get(title).push(row);
+  });
+  return Array.from(buckets.entries())
+    .map(([title, groupRows]) => ({ title, rows: groupRows }))
+    .sort((left, right) => getAuditMovementGroupRank(left.title) - getAuditMovementGroupRank(right.title) || left.title.localeCompare(right.title));
+}
+
+function getAuditMovementGroupTitle(row) {
+  const charge = Number(row.charge || 0);
+  const payment = Number(row.payment || 0);
+  const method = String(row.paymentMethod || '').trim().toLowerCase();
+  const concept = String(row.concept || '').trim().toLowerCase();
+
+  if (payment > 0) {
+    if (method.includes('efect')) return 'Efectivo';
+    if (method.includes('transfer')) return 'Transferencia';
+    if (method.includes('traspas') || concept.includes('traspas')) return 'Traspaso';
+    if (method.includes('debito') || method.includes('débito')) return 'Tarjeta de debito';
+    if (method.includes('credito') || method.includes('crédito')) return 'Tarjeta de credito';
+    if (method.includes('tarjeta')) return 'Tarjeta';
+    return method ? method.toUpperCase() : 'Pagos sin forma';
+  }
+
+  return charge > 0 ? 'Cargos' : 'Otros movimientos';
+}
+
+function getAuditMovementGroupRank(title) {
+  const normalized = String(title || '').toLowerCase();
+  if (normalized === 'cargos') return 1;
+  if (normalized.includes('efect')) return 2;
+  if (normalized.includes('tarjeta')) return 3;
+  if (normalized.includes('transfer')) return 4;
+  if (normalized.includes('traspas')) return 5;
+  return 9;
+}
+
+function renderAuditMovementTable(title, rows, headers) {
+  const chargeTotal = rows.reduce((sum, row) => sum + Number(row.charge || 0), 0);
+  const paymentTotal = rows.reduce((sum, row) => sum + Number(row.payment || 0), 0);
   return '<h3 class="section-title">' + escapeHtml(title) + '</h3>' +
     '<table><thead><tr>' + headers.map(header => '<th>' + escapeHtml(header) + '</th>').join('') + '</tr></thead><tbody>' +
     (rows.length ? rows.map(row => '<tr>' +
       [row.room, row.time, row.reference, row.guestName, row.concept, formatAuditMoney(row.charge), formatAuditMoney(row.payment), row.paymentMethod]
         .map((cell, index) => '<td class="' + (index >= 5 ? 'num' : '') + '">' + escapeHtml(cell === undefined || cell === null ? '' : cell) + '</td>').join('') +
       '</tr>').join('') : '<tr><td colspan="' + headers.length + '">Sin movimientos.</td></tr>') +
-    '<tr class="total"><td colspan="' + Math.max(headers.length - 2, 1) + '">Total ' + escapeHtml(title.toLowerCase()) + ' (' + rows.length + ' registros)</td><td class="num">' + (amountField === 'charge' ? formatAuditMoney(total) : '') + '</td><td class="num">' + (amountField === 'payment' ? formatAuditMoney(total) : '') + '</td></tr>' +
+    '<tr class="total"><td colspan="' + Math.max(headers.length - 2, 1) + '">Total ' + escapeHtml(title.toLowerCase()) + ' (' + rows.length + ' registros)</td><td class="num">' + formatAuditMoney(chargeTotal) + '</td><td class="num">' + formatAuditMoney(paymentTotal) + '</td></tr>' +
     '</tbody></table>';
 }
 

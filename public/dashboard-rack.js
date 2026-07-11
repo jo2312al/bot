@@ -326,8 +326,8 @@ async function saveRackCheckinEdit() {
 
 async function checkoutRackGuest() {
   const balance = Number(activeRackGuestCheckin?.balance || 0);
-  if (balance > 0.009) {
-    alert('No se puede hacer check-out: la habitacion tiene cargos pendientes por ' + formatMoney(balance) + '.');
+  if (Math.abs(balance) > 0.009) {
+    alert('No se puede hacer check-out: la habitacion debe quedar en 0. Saldo actual ' + formatMoney(balance) + '.');
     return;
   }
   if (!activeRackGuestRoom || !confirm('¿Confirmas el check-out? La habitación pasará a VS.')) return;

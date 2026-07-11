@@ -215,8 +215,8 @@ function createCheckinLedgerService(mysql) {
     const checkin = getCheckinByRoom(room);
     if (!checkin) return null;
     const balance = Number(checkin.balance || 0);
-    if (balance > 0.009) {
-      throw new Error('No se puede hacer check-out: la habitacion tiene cargos pendientes por ' + balance.toFixed(2) + '.');
+    if (Math.abs(balance) > 0.009) {
+      throw new Error('No se puede hacer check-out: la habitacion debe quedar en 0. Saldo actual ' + balance.toFixed(2) + '.');
     }
 
     mysql.runSql(`
