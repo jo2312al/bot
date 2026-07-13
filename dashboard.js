@@ -107,7 +107,7 @@ const RACK_EMERGENCY_USER =
 const RACK_EMERGENCY_PASSWORD =
   process.env.RACK_EMERGENCY_PASSWORD || "";
 const DASHBOARD_ASSET_VERSION =
-  "dashboard-day-close-rates-20260711";
+  "dashboard-checkin-slip-search-20260713";
 const DASHBOARD_SCRIPT_FILES = [
   "dashboard-core.js",
   "dashboard-search.js",
@@ -2990,6 +2990,71 @@ function loadDailyRoomRates(input = {}) {
   };
 }
 
+function searchCheckinSlips(input = {}) {
+  if (!mysql.ensureSchema()) {
+    throw new Error("Activa MySQL para buscar check-ins.");
+  }
+
+  const query =
+    String(input.query || "").trim();
+  const date =
+    normalizeAuditDate(input.date || getOperationalDate());
+  const like =
+    `%${query.replace(/[%_]/g, "\\$&")}%`;
+  const queryFilter =
+    query
+      ? `AND (
+          checkin.room_number_snapshot LIKE ${mysql.quote(like)}
+          OR checkin.guest_name_snapshot LIKE ${mysql.quote(like)}
+          OR COALESCE(reservation.folio, '') LIKE ${mysql.quote(like)}
+          OR COALESCE(guest.phone, '') LIKE ${mysql.quote(like)}
+        )`
+      : "";
+
+  return mysql.queryJson(`
+    SELECT JSON_OBJECT(
+      'id', checkin.id,
+      'guestName', checkin.guest_name_snapshot,
+      'room', checkin.room_number_snapshot,
+      'checkedInAt', DATE_FORMAT(checkin.checked_in_at, '%Y-%m-%dT%H:%i:%s'),
+      'checkedOutAt', DATE_FORMAT(checkin.checked_out_at, '%Y-%m-%dT%H:%i:%s'),
+      'status', checkin.status,
+      'reservationId', checkin.reservation_id,
+      'folio', COALESCE(reservation.folio, ''),
+      'rate', COALESCE(reservation.rate_text, ''),
+      'startDate', DATE_FORMAT(COALESCE(reservation.start_date, DATE(checkin.checked_in_at)), '%Y-%m-%d'),
+      'endDate', DATE_FORMAT(COALESCE(DATE_ADD(MAX(stay.stay_date), INTERVAL 1 DAY), DATE(checkin.checked_out_at), DATE_ADD(DATE(checkin.checked_in_at), INTERVAL 1 DAY)), '%Y-%m-%d'),
+      'roomType', COALESCE(room_type.name, ''),
+      'roomsCount', COALESCE(reservation.rooms_count, 1),
+      'pax', COALESCE(reservation.adults_count, 0) + COALESCE(reservation.children_count, 0),
+      'phone', COALESCE(guest.phone, ''),
+      'notes', COALESCE(reservation_note.note, ''),
+      'paymentMethod', COALESCE((
+        SELECT movement.payment_method
+        FROM account_movements movement
+        WHERE movement.checkin_id = checkin.id
+          AND NULLIF(movement.payment_method, '') IS NOT NULL
+        ORDER BY movement.occurred_at DESC, movement.id DESC
+        LIMIT 1
+      ), '')
+    )
+    FROM checkins checkin
+    JOIN guests guest ON guest.id = checkin.guest_id
+    LEFT JOIN reservations reservation ON reservation.id = checkin.reservation_id
+    LEFT JOIN reservation_dates stay ON stay.reservation_id = reservation.id
+    LEFT JOIN room_types room_type ON room_type.id = reservation.room_type_id
+    LEFT JOIN reservation_notes reservation_note ON reservation_note.reservation_id = reservation.id
+    WHERE checkin.checked_in_at < ${mysql.quote(`${date} 23:59:59`)}
+      AND (checkin.checked_out_at IS NULL OR checkin.checked_out_at >= ${mysql.quote(`${date} 00:00:00`)})
+      AND checkin.room_id IS NOT NULL
+      AND NULLIF(checkin.room_number_snapshot, '') IS NOT NULL
+      ${queryFilter}
+    GROUP BY checkin.id, checkin.guest_name_snapshot, checkin.room_number_snapshot, checkin.checked_in_at, checkin.checked_out_at, checkin.status, checkin.reservation_id, reservation.folio, reservation.rate_text, reservation.start_date, reservation.rooms_count, reservation.adults_count, reservation.children_count, room_type.name, guest.phone, reservation_note.note
+    ORDER BY CAST(checkin.room_number_snapshot AS UNSIGNED), checkin.room_number_snapshot, checkin.checked_in_at DESC
+    LIMIT 80;
+  `);
+}
+
 function getAuditReports({ date } = {}) {
   const auditDate = normalizeAuditDate(date);
   const auditWindow =
@@ -4532,6 +4597,23 @@ function pageHtml() {
       <div id="reportKpis" class="report-kpis"></div>
       <div class="report-grid">
         <div class="report-card wide">
+          <h3>Buscar check-ins / papeleta de entrada</h3>
+          <div class="muted">Busca por habitacion, huesped, folio o telefono para reimprimir la comprobacion de entrada.</div>
+          <div class="room-event-form">
+            <label>
+              Dia
+              <input id="checkinSlipDate" type="date">
+            </label>
+            <label class="wide">
+              Buscar
+              <input id="checkinSlipQuery" placeholder="Ej. 110, PEMEX, Juan, folio...">
+            </label>
+            <button class="primary" onclick="searchCheckinSlips()">Buscar check-ins</button>
+          </div>
+          <div id="checkinSlipSearchStatus" class="muted" style="margin-top:8px"></div>
+          <div id="checkinSlipSearchResults" style="margin-top:12px"></div>
+        </div>
+        <div class="report-card wide">
           <h3>Ocupacion diaria del mes</h3>
           <div class="muted">Habitaciones ocupadas por fecha.</div>
           <div id="dailyOccupancyReport"></div>
@@ -5747,6 +5829,34 @@ const server =
         });
       } catch (error) {
         sendJson(res, 400, { ok: false, error: error.message || "No se pudo consultar el check-in" });
+      }
+      return;
+    }
+
+    if (
+      req.method === "GET"
+      &&
+      url.pathname === "/api/checkins/search"
+    ) {
+      try {
+        sendJson(res, 200, {
+          ok:
+            true,
+          checkins:
+            searchCheckinSlips({
+              query:
+                url.searchParams.get("q") || "",
+              date:
+                url.searchParams.get("date") || ""
+            })
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok:
+            false,
+          error:
+            error.message || "No se pudieron buscar check-ins"
+        });
       }
       return;
     }

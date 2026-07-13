@@ -47,6 +47,138 @@ function renderReports(report) {
   eventReport.innerHTML = renderEventReport(report.eventSummary || [], report.events || []);
   roomEventsReport.innerHTML = renderRoomEventsTable(report.roomEvents || []);
   renderRoomEventOptions(report);
+  initCheckinSlipSearch();
+}
+
+function initCheckinSlipSearch() {
+  const dateInput = document.getElementById('checkinSlipDate');
+  const results = document.getElementById('checkinSlipSearchResults');
+
+  if (!dateInput || !results) {
+    return;
+  }
+
+  if (!dateInput.value) {
+    const auditDateInput = document.getElementById('reportAuditDate');
+    dateInput.value = auditDateInput?.value || dashboardData?.operationalDate || dashboardData?.today || dateToIso(new Date());
+  }
+}
+
+async function searchCheckinSlips() {
+  const dateInput = document.getElementById('checkinSlipDate');
+  const queryInput = document.getElementById('checkinSlipQuery');
+  const status = document.getElementById('checkinSlipSearchStatus');
+  const results = document.getElementById('checkinSlipSearchResults');
+
+  if (!dateInput || !queryInput || !status || !results) {
+    return;
+  }
+
+  const date = dateInput.value || dashboardData?.operationalDate || dashboardData?.today || '';
+  const query = queryInput.value.trim();
+  status.textContent = 'Buscando check-ins...';
+  results.innerHTML = '';
+
+  const response = await fetch('/api/checkins/search?date=' + encodeURIComponent(date) + '&q=' + encodeURIComponent(query));
+  const data = await response.json();
+
+  if (!data.ok) {
+    status.textContent = data.error || 'No se pudieron buscar check-ins.';
+    return;
+  }
+
+  const rows = data.checkins || [];
+  window.checkinSlipSearchRows = rows;
+  status.textContent = rows.length
+    ? rows.length + ' check-in(s) encontrados para ' + (isoToDisplay(date) || date) + '.'
+    : 'Sin check-ins para esa busqueda.';
+  results.innerHTML = renderCheckinSlipSearchResults(rows);
+}
+
+function renderCheckinSlipSearchResults(rows) {
+  if (!rows.length) {
+    return '<div class="muted">Busca por habitacion, nombre, folio o telefono.</div>';
+  }
+
+  return '<table class="report-table"><thead><tr><th>Hab</th><th>Huesped</th><th>Entrada</th><th>Salida</th><th>Tarifa</th><th>Estado</th><th></th></tr></thead><tbody>' +
+    rows.map((row, index) =>
+      '<tr>' +
+        '<td><strong>' + escapeHtml(row.room || '-') + '</strong></td>' +
+        '<td>' + escapeHtml(row.guestName || '-') + '<div class="muted">' + escapeHtml(row.folio ? ('Folio ' + row.folio) : '') + '</div></td>' +
+        '<td>' + escapeHtml(formatReportCheckinDate(row.startDate || row.checkedInAt)) + '</td>' +
+        '<td>' + escapeHtml(formatReportCheckinDate(row.endDate || row.checkedOutAt)) + '</td>' +
+        '<td>' + escapeHtml(row.rate || '-') + '</td>' +
+        '<td>' + escapeHtml(row.status || '-') + '</td>' +
+        '<td><button onclick="printCheckinSlipFromReport(' + index + ')">Imprimir papeleta</button></td>' +
+      '</tr>'
+    ).join('') +
+  '</tbody></table>';
+}
+
+function getCheckinSlipRowsFromReport() {
+  return Array.isArray(window.checkinSlipSearchRows)
+    ? window.checkinSlipSearchRows
+    : [];
+}
+
+function printCheckinSlipFromReport(index) {
+  const rows = getCheckinSlipRowsFromReport();
+  const checkin = rows[index];
+
+  if (!checkin) {
+    alert('No se encontro el check-in seleccionado.');
+    return;
+  }
+
+  if (typeof printCheckinSlip !== 'function') {
+    alert('No esta cargado el formato de impresion de check-in.');
+    return;
+  }
+
+  printCheckinSlip({
+    slipNumber: checkin.folio || checkin.reservationId || checkin.id || '',
+    guestName: checkin.guestName || '',
+    address: '',
+    city: '',
+    country: 'MEXICO',
+    company: '',
+    room: checkin.room || '',
+    guestNumber: checkin.folio || '',
+    agency: '',
+    seq: '1.4',
+    roomType: checkin.roomType || '',
+    roomsCount: checkin.roomsCount || '1',
+    peopleCount: checkin.pax || '1',
+    start: isoToDisplay(checkin.startDate || '') || formatReportCheckinDate(checkin.checkedInAt),
+    end: isoToDisplay(checkin.endDate || '') || formatReportCheckinDate(checkin.checkedOutAt),
+    rate: checkin.rate || '',
+    deposit: '0.00',
+    paymentMethod: checkin.paymentMethod || '',
+    travelPlan: '',
+    reservationDate: formatReportCheckinDate(checkin.checkedInAt),
+    checkinUser: 'DASH',
+    time: formatReportCheckinDate(checkin.checkedInAt),
+    extraCharges: ['', '', '', '', ''],
+    extraConcepts: ['', '', '', '', ''],
+    notes: checkin.notes || ''
+  });
+}
+
+function formatReportCheckinDate(value) {
+  if (!value) return '';
+  const text = String(value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return isoToDisplay(text) || text;
+  }
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) {
+    return text;
+  }
+  return date.toLocaleString('es-MX', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+    timeZone: 'America/Mexico_City'
+  });
 }
 
 function renderReportKpi(label, value, caption, icon) {
