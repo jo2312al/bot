@@ -2621,127 +2621,44 @@ function findAuditRentMatch({ rackRoom, rows, usedIndexes }) {
 function getMysqlAuditRentSheet(auditDate) {
   const auditWindow =
     getAuditDayWindow(auditDate);
-  const rackRooms =
-    (readLatestRackStatus()?.rooms || [])
-      .filter(isAuditRackOccupiedRoom);
-
-  const reservationRows =
-    mysql.queryJson(`
-      SELECT JSON_OBJECT(
-        'room', room.room_number, 'guestName', guest.name,
-        'startDate', DATE_FORMAT(GREATEST(COALESCE(reservation.start_date, ${mysql.quote(auditDate)}), ${mysql.quote(AUDIT_CHECKIN_START_DATE)}), '%d/%m/%Y'),
-        'endDate', DATE_FORMAT(MAX(stay.stay_date), '%d/%m/%Y'),
-        'roomType', COALESCE(room_type.name, ''),
-        'pax', COALESCE(reservation.adults_count, 0) + COALESCE(reservation.children_count, 0),
-        'rate', COALESCE(reservation.rate_text, ''),
-        'extras', COALESCE(movement_reservation.extras, 0)
-      )
-      FROM reservations reservation
-      JOIN guests guest ON guest.id = reservation.guest_id
-      JOIN reservation_dates stay ON stay.reservation_id = reservation.id AND stay.stay_date = ${mysql.quote(auditDate)}
-      JOIN rooms room ON room.id = reservation.assigned_room_id
-      LEFT JOIN room_types room_type ON room_type.id = reservation.room_type_id
-      LEFT JOIN (
-        SELECT
-          checkin.reservation_id,
-          SUM(movement.charge_amount) AS extras
-        FROM account_movements movement
-        JOIN checkins checkin ON checkin.id = movement.checkin_id
-        WHERE movement.occurred_at >= ${mysql.quote(auditWindow.start)}
-          AND movement.occurred_at < ${mysql.quote(auditWindow.end)}
-        GROUP BY checkin.reservation_id
-      ) movement_reservation ON movement_reservation.reservation_id = reservation.id
-      WHERE reservation.assigned_room_id IS NOT NULL
-        AND COALESCE(reservation.status, '') != 'cancelada'
-      GROUP BY reservation.id, room.room_number, guest.name, reservation.start_date, room_type.name, reservation.adults_count, reservation.children_count, reservation.rate_text, movement_reservation.extras
-      ORDER BY CAST(room.room_number AS UNSIGNED), room.room_number, guest.name;
-    `);
-
-  const checkinRows =
-    mysql.queryJson(`
-      SELECT JSON_OBJECT(
-        'room', checkin.room_number_snapshot, 'guestName', checkin.guest_name_snapshot,
-        'startDate', DATE_FORMAT(DATE(checkin.checked_in_at), '%d/%m/%Y'),
-        'endDate', DATE_FORMAT(COALESCE(DATE(checkin.checked_out_at), ${mysql.quote(auditDate)}), '%d/%m/%Y'),
-        'roomType', COALESCE(room_type.name, ''),
-        'pax', COALESCE(reservation.adults_count, 0) + COALESCE(reservation.children_count, 0),
-        'rate', COALESCE(reservation.rate_text, ''),
-        'extras', COALESCE(movement_checkin.extras, 0)
-      )
-      FROM checkins checkin
-      LEFT JOIN reservations reservation ON reservation.id = checkin.reservation_id
-      LEFT JOIN room_types room_type ON room_type.id = reservation.room_type_id
-      LEFT JOIN (
-        SELECT
-          checkin_id,
-          SUM(charge_amount) AS extras
-        FROM account_movements
-        WHERE occurred_at >= ${mysql.quote(auditWindow.start)}
-          AND occurred_at < ${mysql.quote(auditWindow.end)}
-        GROUP BY checkin_id
-      ) movement_checkin ON movement_checkin.checkin_id = checkin.id
-      WHERE checkin.checked_in_at < ${mysql.quote(auditWindow.end)}
-        AND (checkin.checked_out_at IS NULL OR checkin.checked_out_at >= ${mysql.quote(auditWindow.start)})
-        AND checkin.room_id IS NOT NULL
-        AND NULLIF(checkin.room_number_snapshot, '') IS NOT NULL
-      ORDER BY CAST(checkin.room_number_snapshot AS UNSIGNED), checkin.room_number_snapshot, checkin.checked_in_at DESC;
-    `);
-
-  const lookupRows =
-    [
-      ...reservationRows,
-      ...checkinRows
-    ];
-  const usedIndexes =
-    new Set();
-
-  if (!rackRooms.length) {
-    return lookupRows
-      .sort((left, right) =>
-        Number(left.room) - Number(right.room)
-        ||
-        String(left.room).localeCompare(String(right.room))
-        ||
-        String(left.guestName).localeCompare(String(right.guestName))
-      );
-  }
-
-  return rackRooms
-    .map(rackRoom => {
-      const match =
-        findAuditRentMatch({
-          rackRoom,
-          rows:
-            lookupRows,
-          usedIndexes
-        }) || {};
-
-      return {
-        room:
-          rackRoom.room || match.room || "",
-        guestName:
-          rackRoom.guestName || match.guestName || "",
-        startDate:
-          match.startDate || isoToDisplayDate(auditDate),
-        endDate:
-          match.endDate || isoToDisplayDate(auditDate),
-        roomType:
-          match.roomType || rackRoom.type || "",
-        pax:
-          Number(match.pax || 0),
-        rate:
-          match.rate || "",
-        extras:
-          Number(match.extras || 0)
-      };
-    })
-    .sort((left, right) =>
-      Number(left.room) - Number(right.room)
-      ||
-      String(left.room).localeCompare(String(right.room))
-      ||
-      String(left.guestName).localeCompare(String(right.guestName))
-    );
+  return mysql.queryJson(`
+    SELECT JSON_OBJECT(
+      'room', movement.room_number_snapshot,
+      'guestName', COALESCE(MAX(NULLIF(checkin.guest_name_snapshot, '')), MAX(guest.name), ''),
+      'startDate', DATE_FORMAT(
+        COALESCE(
+          MIN(reservation.start_date),
+          DATE(MIN(checkin.checked_in_at)),
+          ${mysql.quote(auditDate)}
+        ),
+        '%d/%m/%Y'
+      ),
+      'endDate', DATE_FORMAT(
+        COALESCE(
+          DATE(MAX(checkin.checked_out_at)),
+          ${mysql.quote(auditDate)}
+        ),
+        '%d/%m/%Y'
+      ),
+      'roomType', COALESCE(MAX(room_type.name), ''),
+      'pax', COALESCE(MAX(reservation.adults_count), 0) + COALESCE(MAX(reservation.children_count), 0),
+      'rate', COALESCE(MAX(reservation.rate_text), ''),
+      'extras', COALESCE(SUM(movement.charge_amount), 0)
+    )
+    FROM account_movements movement
+    JOIN checkins checkin ON checkin.id = movement.checkin_id
+    LEFT JOIN guests guest ON guest.id = checkin.guest_id
+    LEFT JOIN reservations reservation ON reservation.id = checkin.reservation_id
+    LEFT JOIN room_types room_type ON room_type.id = reservation.room_type_id
+    WHERE movement.occurred_at >= ${mysql.quote(auditWindow.start)}
+      AND movement.occurred_at < ${mysql.quote(auditWindow.end)}
+      AND checkin.room_id IS NOT NULL
+      AND NULLIF(movement.room_number_snapshot, '') IS NOT NULL
+      AND checkin.checked_in_at < ${mysql.quote(auditWindow.end)}
+      AND (checkin.checked_out_at IS NULL OR checkin.checked_out_at >= ${mysql.quote(auditWindow.start)})
+    GROUP BY movement.room_number_snapshot
+    ORDER BY CAST(movement.room_number_snapshot AS UNSIGNED), movement.room_number_snapshot;
+  `);
 }
 
 function addIsoDays(isoDate, days) {
