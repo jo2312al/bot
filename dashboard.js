@@ -66,6 +66,9 @@ const {
   createOperationalDayService
 } = require("./services/operationalDayService");
 const {
+  createOperationalPrecloseService
+} = require("./services/operationalPrecloseService");
+const {
   applyReservationPricing
 } = require("./services/reservationPricingService");
 const {
@@ -102,6 +105,8 @@ const operationalDay =
     propertyKey:
       process.env.HOTEL_PROPERTY_KEY || "villa-margaritas"
   });
+const operationalPreclose =
+  createOperationalPrecloseService(mysql, operationalDay);
 const checkinLedger =
   createCheckinLedgerService(mysql, {
     operationalDay
@@ -4524,6 +4529,7 @@ function pageHtml() {
         <button onclick="printAuditReport('balances')">Imprimir saldos</button>
         <button onclick="printAuditReport('movements')">Imprimir cargos y créditos</button>
         <button onclick="loadDailyRoomRates()">Cargar tarifas</button>
+        <button class="primary" onclick="runOperationalPreclose()">Ejecutar pre-cierre</button>
         <button class="danger" onclick="closeDailyOperations()">Cierre del dia</button>
         <button onclick="downloadReportCsv('all')">CSV completo</button>
         <button onclick="downloadReportCsv('occupancy')">CSV ocupacion</button>
@@ -4531,6 +4537,7 @@ function pageHtml() {
         <button onclick="downloadReportCsv('events')">CSV eventos</button>
         <div id="reportMode" class="muted"></div>
         <div id="dailyCloseStatus" class="muted"></div>
+        <div id="operationalPreclosePanel"></div>
       </div>
       <div id="reportKpis" class="report-kpis"></div>
       <div class="report-grid">
@@ -5016,6 +5023,25 @@ const server =
       url.pathname === "/api/summary"
     ) {
       sendJson(res, 200, getSummary());
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/business-day/status") {
+      try {
+        sendJson(res, 200, { ok: true, status: operationalPreclose.getStatus() });
+      } catch (error) {
+        sendJson(res, 409, { ok: false, error: error.message });
+      }
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/business-day/preclose") {
+      try {
+        operationalDay.getOrOpenDay({ businessDate: getMexicoTodayIso(), userId: req.authUser?.id || null });
+        sendJson(res, 200, { ok: true, preclose: operationalPreclose.runPreclose() });
+      } catch (error) {
+        sendJson(res, 409, { ok: false, error: error.message });
+      }
       return;
     }
 

@@ -23,6 +23,8 @@ const EXACT_PERMISSIONS = new Map([
   ["GET /api/reports/export-csv", "reports.export"],
   ["POST /api/day-rate-charges", "business_day.audit"],
   ["POST /api/day-close", "business_day.close"],
+  ["GET /api/business-day/status", "business_day.view"],
+  ["POST /api/business-day/preclose", "business_day.audit"],
   ["GET /api/checkins/room", "stays.view"],
   ["GET /api/checkins/search", "stays.view"],
   ["POST /api/checkins/movement", "ledger.charge"],

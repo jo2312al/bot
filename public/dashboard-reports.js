@@ -538,6 +538,29 @@ async function closeDailyOperations() {
   }
 }
 
+async function runOperationalPreclose() {
+  const panel = document.getElementById('operationalPreclosePanel');
+  if (!panel) return;
+  panel.innerHTML = '<div class="muted">Revisando el dia operativo...</div>';
+  const response = await fetch('/api/business-day/preclose', { method: 'POST' });
+  const data = await response.json();
+  if (!data.ok) {
+    panel.innerHTML = '<div class="muted">' + escapeHtml(data.error || 'No se pudo ejecutar el pre-cierre.') + '</div>';
+    return;
+  }
+  const result = data.preclose || {};
+  const issues = Array.isArray(result.issues) ? result.issues : [];
+  const summary = '<div class="report-kpis">' +
+    renderReportKpi('Bloqueantes', result.counts?.blocking || 0, 'Deben corregirse antes de cerrar', 'error') +
+    renderReportKpi('Advertencias', result.counts?.warning || 0, 'Requieren revision', 'warning') +
+    renderReportKpi('Ocupadas', result.rooms?.occupiedRooms || 0, 'Habitaciones en estancia', 'bed') +
+    renderReportKpi('Movimientos', result.ledger?.movements || 0, 'Cargos y pagos del dia', 'receipt_long') + '</div>';
+  const table = issues.length ? '<table class="report-table"><thead><tr><th>Nivel</th><th>Problema</th><th>Hab.</th><th>Detalle</th><th>Importe</th></tr></thead><tbody>' + issues.map(item =>
+    '<tr><td><strong>' + (item.severity === 'blocking' ? 'BLOQUEA' : 'AVISO') + '</strong></td><td>' + escapeHtml(item.title || item.code) + '</td><td>' + escapeHtml(item.room || '-') + '</td><td>' + escapeHtml(item.guestName || item.concept || '') + '</td><td>' + escapeHtml(item.balance ?? item.amount ?? '') + '</td></tr>'
+  ).join('') + '</tbody></table>' : '<div class="muted">Sin excepciones: el dia esta listo para cierre.</div>';
+  panel.innerHTML = summary + table;
+}
+
 async function printAuditReport(type) {
   const date = getReportAuditIsoDate();
   const response = await fetch('/api/reports/audit?date=' + encodeURIComponent(date));
