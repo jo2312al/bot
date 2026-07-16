@@ -75,6 +75,9 @@ const {
   createRackEmergencyRouteHandler
 } = require("./dashboard/routes/rackEmergencyRoutes");
 const {
+  createDashboardAuth
+} = require("./dashboard/dashboardAuth");
+const {
   EVENT_HALLS,
   getEventVoucher,
   getQuotation,
@@ -109,6 +112,7 @@ const RACK_EMERGENCY_PASSWORD =
 const DASHBOARD_ASSET_VERSION =
   "dashboard-checkin-slip-search-20260713";
 const DASHBOARD_SCRIPT_FILES = [
+  "dashboard-auth.js",
   "dashboard-core.js",
   "dashboard-search.js",
   "dashboard-reports.js",
@@ -182,6 +186,13 @@ function readBody(req) {
     req.on("error", reject);
   });
 }
+
+const dashboardAuth =
+  createDashboardAuth({
+    mysql,
+    readBody,
+    sendJson
+  });
 
 function buildOccupancy(reservations) {
   const limits =
@@ -4889,6 +4900,16 @@ const server =
     const url =
       new URL(req.url, `http://${req.headers.host}`);
 
+    dashboardAuth.attachSession(req);
+
+    if (await dashboardAuth.handleRoute(req, res, url)) {
+      return;
+    }
+
+    if (!dashboardAuth.authorize(req, res, url)) {
+      return;
+    }
+
     if (await handleRackEmergencyRoute(req, res, url)) {
       return;
     }
@@ -5105,7 +5126,13 @@ const server =
           ok:
             true,
           result:
-            closeOperationalDay(body)
+            closeOperationalDay({
+              ...body,
+              closedBy:
+                req.authUser?.displayName || "legacy-dashboard",
+              closedByUserId:
+                req.authUser?.id || null
+            })
         });
       } catch (error) {
         sendJson(res, 400, {

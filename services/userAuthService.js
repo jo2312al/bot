@@ -110,6 +110,7 @@ function createUserAuthService(mysql, options = {}) {
     if (!roleRows[0]?.id) throw new Error("Rol no reconocido.");
 
     mysql.runSql(`
+      START TRANSACTION;
       INSERT INTO app_users (
         property_key, username, display_name, password_hash, status,
         password_changed_at, created_by_user_id
@@ -123,6 +124,7 @@ function createUserAuthService(mysql, options = {}) {
       SELECT user.id, role.id, ${createdByUserId ? Number(createdByUserId) : "NULL"}
       FROM app_users user JOIN app_roles role ON role.code = ${mysql.quote(role)}
       WHERE user.property_key = ${mysql.quote(propertyKey)} AND user.username = ${mysql.quote(login)};
+      COMMIT;
     `);
     return getUserByUsername(login);
   }

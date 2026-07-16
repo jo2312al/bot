@@ -281,10 +281,17 @@ CREATE TABLE IF NOT EXISTS operational_days (
   close_notes TEXT NOT NULL,
   close_version INT UNSIGNED NOT NULL DEFAULT 0,
   totals_json JSON NULL,
+  active_property_key VARCHAR(80) GENERATED ALWAYS AS (
+    CASE
+      WHEN status IN ('opening', 'open', 'closing', 'reopened') THEN property_key
+      ELSE NULL
+    END
+  ) STORED,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY ux_operational_days_property_date (property_key, business_date),
+  UNIQUE KEY ux_operational_days_one_active (active_property_key),
   KEY ix_operational_days_property_status (property_key, status),
   CONSTRAINT fk_operational_days_opened_by FOREIGN KEY (opened_by_user_id) REFERENCES app_users(id)
     ON UPDATE CASCADE ON DELETE SET NULL,
