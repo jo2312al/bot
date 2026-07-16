@@ -340,6 +340,9 @@ function ensureSchemaEvolution() {
       ["operational_day_id", "BIGINT UNSIGNED NULL AFTER business_date"],
       ["created_by_user_id", "BIGINT UNSIGNED NULL AFTER operational_day_id"],
       ["idempotency_key", "VARCHAR(160) NOT NULL DEFAULT '' AFTER created_by_user_id"]
+    ],
+    app_users: [
+      ["must_change_password", "TINYINT(1) NOT NULL DEFAULT 1 AFTER password_changed_at"]
     ]
   };
 

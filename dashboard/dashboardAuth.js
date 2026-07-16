@@ -98,8 +98,12 @@ function createDashboardAuth({ mysql, readBody, sendJson }) {
       try {
         const body = await readBody(req);
         if (body.action === "create") sendJson(res, 201, { ok: true, user: auth.createUser({ ...body, createdByUserId: req.authUser.id }) });
-        else if (body.action === "update") sendJson(res, 200, { ok: true, user: auth.updateUser(body) });
+        else if (body.action === "update") {
+          if (Number(body.userId) === Number(req.authUser.id) && body.status === "disabled") throw new Error("No puedes deshabilitar tu propia cuenta.");
+          sendJson(res, 200, { ok: true, user: auth.updateUser(body) });
+        }
         else if (body.action === "reset_password") { auth.resetPassword(body); sendJson(res, 200, { ok: true }); }
+        else if (body.action === "revoke_sessions") { auth.revokeUserSessions(body.userId); sendJson(res, 200, { ok: true }); }
         else sendJson(res, 400, { ok: false, error: "Acción no reconocida." });
       } catch (error) { sendJson(res, 400, { ok: false, error: error.message }); }
       return true;

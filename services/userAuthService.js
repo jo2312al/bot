@@ -113,10 +113,10 @@ function createUserAuthService(mysql, options = {}) {
       START TRANSACTION;
       INSERT INTO app_users (
         property_key, username, display_name, password_hash, status,
-        password_changed_at, created_by_user_id
+        password_changed_at, must_change_password, created_by_user_id
       ) VALUES (
         ${mysql.quote(propertyKey)}, ${mysql.quote(login)}, ${mysql.quote(name)},
-        ${mysql.quote(hashPassword(password))}, 'active', ${mysql.quote(mysql.mexicoNowSql())},
+        ${mysql.quote(hashPassword(password))}, 'active', ${mysql.quote(mysql.mexicoNowSql())}, 1,
         ${createdByUserId ? Number(createdByUserId) : "NULL"}
       );
 
@@ -165,6 +165,7 @@ function createUserAuthService(mysql, options = {}) {
         'id', user.id, 'username', user.username, 'displayName', user.display_name,
         'status', user.status,
         'lastLoginAt', IFNULL(DATE_FORMAT(user.last_login_at, '%Y-%m-%dT%H:%i:%s'), ''),
+        'mustChangePassword', user.must_change_password,
         'createdAt', DATE_FORMAT(user.created_at, '%Y-%m-%dT%H:%i:%s'),
         'roles', COALESCE((SELECT JSON_ARRAYAGG(role.code) FROM app_user_roles ur
           JOIN app_roles role ON role.id = ur.role_id WHERE ur.user_id = user.id), JSON_ARRAY())
@@ -208,13 +209,22 @@ function createUserAuthService(mysql, options = {}) {
     mysql.runSql(`
       START TRANSACTION;
       UPDATE app_users SET password_hash = ${mysql.quote(hashPassword(password))},
-        password_changed_at = ${mysql.quote(mysql.mexicoNowSql())}, status = 'active',
+        password_changed_at = ${mysql.quote(mysql.mexicoNowSql())}, must_change_password = 1, status = 'active',
         failed_login_count = 0, locked_until = NULL
       WHERE id = ${id} AND property_key = ${mysql.quote(propertyKey)};
       UPDATE app_sessions SET revoked_at = ${mysql.quote(mysql.mexicoNowSql())}
       WHERE user_id = ${id} AND revoked_at IS NULL;
       COMMIT;
     `);
+    return true;
+  }
+
+  function revokeUserSessions(userId) {
+    requireDatabase();
+    const id = Number(userId);
+    if (!id) throw new Error("Usuario invalido.");
+    mysql.runSql(`UPDATE app_sessions SET revoked_at = ${mysql.quote(mysql.mexicoNowSql())}
+      WHERE user_id = ${id} AND revoked_at IS NULL;`);
     return true;
   }
 
@@ -318,7 +328,7 @@ function createUserAuthService(mysql, options = {}) {
 
   return {
     authenticate, countUsers, createSession, createUser, getSession,
-    getUserByUsername, hasPermission, listUsers, resetPassword, revokeSession,
+    getUserByUsername, hasPermission, listUsers, resetPassword, revokeSession, revokeUserSessions,
     updateUser, validateCsrf
   };
 }
