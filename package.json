@@ -9,6 +9,7 @@
     "qa": "npm run check && node scripts/qa-smoke.js",
     "dashboard": "node dashboard.js",
     "mysql:migrate": "node scripts/migrate-to-mysql.js",
+    "admin:create": "node scripts/create-admin-user.js",
     "analyze:users": "node scripts/analyze-user-logs.js"
   },
   "dependencies": {
