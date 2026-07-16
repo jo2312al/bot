@@ -550,15 +550,38 @@ async function runOperationalPreclose() {
   }
   const result = data.preclose || {};
   const issues = Array.isArray(result.issues) ? result.issues : [];
+  const missingRents = issues.filter(item => item.code === 'MISSING_DAILY_RENT');
   const summary = '<div class="report-kpis">' +
     renderReportKpi('Bloqueantes', result.counts?.blocking || 0, 'Deben corregirse antes de cerrar', 'error') +
     renderReportKpi('Advertencias', result.counts?.warning || 0, 'Requieren revision', 'warning') +
     renderReportKpi('Ocupadas', result.rooms?.occupiedRooms || 0, 'Habitaciones en estancia', 'bed') +
-    renderReportKpi('Movimientos', result.ledger?.movements || 0, 'Cargos y pagos del dia', 'receipt_long') + '</div>';
+    renderReportKpi('Movimientos', result.ledger?.movements || 0, 'Cargos y pagos del dia', 'receipt_long') + '</div>' +
+    (missingRents.length ? '<div class="report-toolbar"><button class="primary" onclick="loadMissingDailyRents()">Cargar ' + missingRents.length + ' renta(s) faltante(s)</button><span class="muted">Se revisaran importes y no se duplicaran cargos existentes.</span></div>' : '');
   const table = issues.length ? '<table class="report-table"><thead><tr><th>Nivel</th><th>Problema</th><th>Hab.</th><th>Detalle</th><th>Importe</th></tr></thead><tbody>' + issues.map(item =>
     '<tr><td><strong>' + (item.severity === 'blocking' ? 'BLOQUEA' : 'AVISO') + '</strong></td><td>' + escapeHtml(item.title || item.code) + '</td><td>' + escapeHtml(item.room || '-') + '</td><td>' + escapeHtml(item.guestName || item.concept || '') + '</td><td>' + escapeHtml(item.balance ?? item.amount ?? '') + '</td></tr>'
   ).join('') + '</tbody></table>' : '<div class="muted">Sin excepciones: el dia esta listo para cierre.</div>';
   panel.innerHTML = summary + table;
+}
+
+async function loadMissingDailyRents() {
+  const date = getReportAuditIsoDate();
+  if (!confirm('Cargar solamente las rentas faltantes del dia ' + (isoToDisplay(date) || date) + '? Los cargos existentes no se duplicaran.')) return;
+  const panel = document.getElementById('operationalPreclosePanel');
+  if (panel) panel.innerHTML = '<div class="muted">Cargando rentas faltantes...</div>';
+  const response = await fetch('/api/day-rate-charges', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date })
+  });
+  const data = await response.json();
+  if (!data.ok) {
+    if (panel) panel.innerHTML = '<div class="muted">' + escapeHtml(data.error || 'No se pudieron cargar las rentas.') + '</div>';
+    return;
+  }
+  const result = data.result || {};
+  dailyCloseStatus.textContent = 'Rentas aplicadas: ' + (result.applied?.length || 0) +
+    ' / omitidas: ' + (result.skipped?.length || 0) + ' / total: ' + formatAuditMoney(result.total || 0);
+  await runOperationalPreclose();
 }
 
 async function printAuditReport(type) {
