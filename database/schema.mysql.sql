@@ -178,6 +178,190 @@ CREATE TABLE IF NOT EXISTS daily_closures (
   PRIMARY KEY (closed_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS app_roles (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  code VARCHAR(60) NOT NULL,
+  name VARCHAR(120) NOT NULL,
+  description VARCHAR(255) NOT NULL DEFAULT '',
+  is_system TINYINT(1) NOT NULL DEFAULT 1,
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY ux_app_roles_code (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS app_permissions (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  code VARCHAR(100) NOT NULL,
+  module_code VARCHAR(60) NOT NULL,
+  name VARCHAR(160) NOT NULL,
+  description VARCHAR(255) NOT NULL DEFAULT '',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY ux_app_permissions_code (code),
+  KEY ix_app_permissions_module (module_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS app_users (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  property_key VARCHAR(80) NOT NULL DEFAULT 'villa-margaritas',
+  username VARCHAR(80) NOT NULL,
+  display_name VARCHAR(160) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  status ENUM('pending', 'active', 'locked', 'disabled') NOT NULL DEFAULT 'pending',
+  failed_login_count INT UNSIGNED NOT NULL DEFAULT 0,
+  locked_until DATETIME NULL,
+  last_login_at DATETIME NULL,
+  password_changed_at DATETIME NULL,
+  created_by_user_id BIGINT UNSIGNED NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY ux_app_users_property_username (property_key, username),
+  KEY ix_app_users_status (property_key, status),
+  CONSTRAINT fk_app_users_created_by FOREIGN KEY (created_by_user_id) REFERENCES app_users(id)
+    ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS app_user_roles (
+  user_id BIGINT UNSIGNED NOT NULL,
+  role_id BIGINT UNSIGNED NOT NULL,
+  assigned_by_user_id BIGINT UNSIGNED NULL,
+  assigned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, role_id),
+  KEY ix_app_user_roles_role (role_id),
+  CONSTRAINT fk_app_user_roles_user FOREIGN KEY (user_id) REFERENCES app_users(id)
+    ON UPDATE CASCADE ON DELETE CASCADE,
+  CONSTRAINT fk_app_user_roles_role FOREIGN KEY (role_id) REFERENCES app_roles(id)
+    ON UPDATE CASCADE ON DELETE CASCADE,
+  CONSTRAINT fk_app_user_roles_assigned_by FOREIGN KEY (assigned_by_user_id) REFERENCES app_users(id)
+    ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS app_role_permissions (
+  role_id BIGINT UNSIGNED NOT NULL,
+  permission_id BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (role_id, permission_id),
+  KEY ix_app_role_permissions_permission (permission_id),
+  CONSTRAINT fk_app_role_permissions_role FOREIGN KEY (role_id) REFERENCES app_roles(id)
+    ON UPDATE CASCADE ON DELETE CASCADE,
+  CONSTRAINT fk_app_role_permissions_permission FOREIGN KEY (permission_id) REFERENCES app_permissions(id)
+    ON UPDATE CASCADE ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS app_sessions (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  token_hash CHAR(64) NOT NULL,
+  csrf_token_hash CHAR(64) NOT NULL,
+  ip_address VARCHAR(64) NOT NULL DEFAULT '',
+  user_agent VARCHAR(500) NOT NULL DEFAULT '',
+  last_seen_at DATETIME NOT NULL,
+  expires_at DATETIME NOT NULL,
+  absolute_expires_at DATETIME NOT NULL,
+  revoked_at DATETIME NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY ux_app_sessions_token (token_hash),
+  KEY ix_app_sessions_user_active (user_id, revoked_at, expires_at),
+  CONSTRAINT fk_app_sessions_user FOREIGN KEY (user_id) REFERENCES app_users(id)
+    ON UPDATE CASCADE ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS operational_days (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  property_key VARCHAR(80) NOT NULL DEFAULT 'villa-margaritas',
+  business_date DATE NOT NULL,
+  status ENUM('opening', 'open', 'closing', 'closed', 'reopened') NOT NULL DEFAULT 'opening',
+  opened_at DATETIME NOT NULL,
+  opened_by_user_id BIGINT UNSIGNED NULL,
+  closed_at DATETIME NULL,
+  closed_by_user_id BIGINT UNSIGNED NULL,
+  close_notes TEXT NOT NULL,
+  close_version INT UNSIGNED NOT NULL DEFAULT 0,
+  totals_json JSON NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY ux_operational_days_property_date (property_key, business_date),
+  KEY ix_operational_days_property_status (property_key, status),
+  CONSTRAINT fk_operational_days_opened_by FOREIGN KEY (opened_by_user_id) REFERENCES app_users(id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT fk_operational_days_closed_by FOREIGN KEY (closed_by_user_id) REFERENCES app_users(id)
+    ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS operational_room_states (
+  operational_day_id BIGINT UNSIGNED NOT NULL,
+  room_id BIGINT UNSIGNED NOT NULL,
+  opening_status VARCHAR(30) NOT NULL DEFAULT 'libre',
+  current_status VARCHAR(30) NOT NULL DEFAULT 'libre',
+  closing_status VARCHAR(30) NULL,
+  active_checkin_id BIGINT UNSIGNED NULL,
+  source VARCHAR(40) NOT NULL DEFAULT 'system',
+  version INT UNSIGNED NOT NULL DEFAULT 1,
+  updated_by_user_id BIGINT UNSIGNED NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (operational_day_id, room_id),
+  KEY ix_operational_room_states_status (operational_day_id, current_status),
+  KEY ix_operational_room_states_checkin (active_checkin_id),
+  CONSTRAINT fk_operational_room_states_day FOREIGN KEY (operational_day_id) REFERENCES operational_days(id)
+    ON UPDATE CASCADE ON DELETE CASCADE,
+  CONSTRAINT fk_operational_room_states_room FOREIGN KEY (room_id) REFERENCES rooms(id)
+    ON UPDATE CASCADE ON DELETE RESTRICT,
+  CONSTRAINT fk_operational_room_states_checkin FOREIGN KEY (active_checkin_id) REFERENCES checkins(id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT fk_operational_room_states_updated_by FOREIGN KEY (updated_by_user_id) REFERENCES app_users(id)
+    ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS operational_day_snapshots (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  operational_day_id BIGINT UNSIGNED NOT NULL,
+  snapshot_type ENUM('opening', 'closing', 'reopening', 'imported') NOT NULL,
+  version INT UNSIGNED NOT NULL DEFAULT 1,
+  payload_json JSON NOT NULL,
+  checksum CHAR(64) NOT NULL,
+  created_by_user_id BIGINT UNSIGNED NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY ux_operational_day_snapshots_version (operational_day_id, snapshot_type, version),
+  KEY ix_operational_day_snapshots_checksum (checksum),
+  CONSTRAINT fk_operational_day_snapshots_day FOREIGN KEY (operational_day_id) REFERENCES operational_days(id)
+    ON UPDATE CASCADE ON DELETE CASCADE,
+  CONSTRAINT fk_operational_day_snapshots_user FOREIGN KEY (created_by_user_id) REFERENCES app_users(id)
+    ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS audit_log (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  property_key VARCHAR(80) NOT NULL DEFAULT 'villa-margaritas',
+  user_id BIGINT UNSIGNED NULL,
+  operational_day_id BIGINT UNSIGNED NULL,
+  permission_code VARCHAR(100) NOT NULL DEFAULT '',
+  action_code VARCHAR(100) NOT NULL,
+  entity_type VARCHAR(80) NOT NULL DEFAULT '',
+  entity_id VARCHAR(120) NOT NULL DEFAULT '',
+  outcome ENUM('success', 'rejected', 'error') NOT NULL,
+  reason VARCHAR(500) NOT NULL DEFAULT '',
+  before_json JSON NULL,
+  after_json JSON NULL,
+  ip_address VARCHAR(64) NOT NULL DEFAULT '',
+  user_agent VARCHAR(500) NOT NULL DEFAULT '',
+  occurred_at DATETIME NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY ix_audit_log_property_time (property_key, occurred_at),
+  KEY ix_audit_log_user_time (user_id, occurred_at),
+  KEY ix_audit_log_entity (entity_type, entity_id),
+  CONSTRAINT fk_audit_log_user FOREIGN KEY (user_id) REFERENCES app_users(id)
+    ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT fk_audit_log_day FOREIGN KEY (operational_day_id) REFERENCES operational_days(id)
+    ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS closed_dates (
   closed_date DATE NOT NULL,
   reason VARCHAR(160) NOT NULL DEFAULT '',

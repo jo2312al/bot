@@ -2,6 +2,11 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const {
+  PERMISSIONS,
+  ROLES,
+  ROLE_PERMISSIONS
+} = require("./accessControlCatalog");
+const {
   execFileSync,
   spawnSync
 } = require("child_process");
@@ -300,6 +305,7 @@ function ensureSchema() {
 }
 
 function seedReferenceData() {
+  seedAccessControl();
   const roomTypes = [
     [
       "KING",
@@ -452,6 +458,35 @@ function seedReferenceData() {
       sort_order = VALUES(sort_order),
       active = 1;
   `);
+}
+
+function seedAccessControl() {
+  runSql(`
+    INSERT INTO app_roles (code, name, description, is_system, active)
+    VALUES ${ROLES.map(([code, name, description]) =>
+      `(${quote(code)}, ${quote(name)}, ${quote(description)}, 1, 1)`
+    ).join(",")}
+    ON DUPLICATE KEY UPDATE
+      name = VALUES(name), description = VALUES(description), active = 1;
+
+    INSERT INTO app_permissions (code, module_code, name)
+    VALUES ${PERMISSIONS.map(([code, moduleCode, name]) =>
+      `(${quote(code)}, ${quote(moduleCode)}, ${quote(name)})`
+    ).join(",")}
+    ON DUPLICATE KEY UPDATE
+      module_code = VALUES(module_code), name = VALUES(name);
+  `);
+
+  Object.entries(ROLE_PERMISSIONS).forEach(([roleCode, permissions]) => {
+    if (!permissions.length) return;
+    runSql(`
+      INSERT IGNORE INTO app_role_permissions (role_id, permission_id)
+      SELECT role.id, permission.id
+      FROM app_roles role
+      JOIN app_permissions permission ON permission.code IN (${permissions.map(quote).join(",")})
+      WHERE role.code = ${quote(roleCode)};
+    `);
+  });
 }
 
 module.exports = {
