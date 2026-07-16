@@ -5,6 +5,7 @@ const {
 const {
   createAuditLogService
 } = require("../services/auditLogService");
+const { usersPage } = require("./usersPage");
 
 const CSRF_COOKIE = "hotel_csrf";
 const PUBLIC_PATHS = new Set([
@@ -85,6 +86,24 @@ function createDashboardAuth({ mysql, readBody, sendJson }) {
     : "observe";
 
   async function handleRoute(req, res, url) {
+    if (url.pathname === "/usuarios" || url.pathname === "/api/admin/users") {
+      if (!req.authUser || !auth.hasPermission(req.authUser, "users.view")) {
+        if (url.pathname === "/usuarios") { res.writeHead(302, { Location: "/login" }); res.end(); }
+        else sendJson(res, req.authUser ? 403 : 401, { ok: false, error: "Se requiere una sesión de administrador." });
+        return true;
+      }
+      if (req.method === "GET" && url.pathname === "/usuarios") { res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }); res.end(usersPage()); return true; }
+      if (req.method === "GET") { sendJson(res, 200, { ok: true, users: auth.listUsers() }); return true; }
+      if (!auth.validateCsrf(req.authUser, req.headers["x-csrf-token"])) { sendJson(res, 403, { ok: false, error: "Sesión inválida." }); return true; }
+      try {
+        const body = await readBody(req);
+        if (body.action === "create") sendJson(res, 201, { ok: true, user: auth.createUser({ ...body, createdByUserId: req.authUser.id }) });
+        else if (body.action === "update") sendJson(res, 200, { ok: true, user: auth.updateUser(body) });
+        else if (body.action === "reset_password") { auth.resetPassword(body); sendJson(res, 200, { ok: true }); }
+        else sendJson(res, 400, { ok: false, error: "Acción no reconocida." });
+      } catch (error) { sendJson(res, 400, { ok: false, error: error.message }); }
+      return true;
+    }
     if (req.method === "GET" && url.pathname === "/login") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
       res.end(loginPage());

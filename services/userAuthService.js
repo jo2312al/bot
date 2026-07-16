@@ -158,6 +158,66 @@ function createUserAuthService(mysql, options = {}) {
     return rows[0] || null;
   }
 
+  function listUsers() {
+    requireDatabase();
+    return mysql.queryJson(`
+      SELECT JSON_OBJECT(
+        'id', user.id, 'username', user.username, 'displayName', user.display_name,
+        'status', user.status,
+        'lastLoginAt', IFNULL(DATE_FORMAT(user.last_login_at, '%Y-%m-%dT%H:%i:%s'), ''),
+        'createdAt', DATE_FORMAT(user.created_at, '%Y-%m-%dT%H:%i:%s'),
+        'roles', COALESCE((SELECT JSON_ARRAYAGG(role.code) FROM app_user_roles ur
+          JOIN app_roles role ON role.id = ur.role_id WHERE ur.user_id = user.id), JSON_ARRAY())
+      )
+      FROM app_users user WHERE user.property_key = ${mysql.quote(propertyKey)}
+      ORDER BY user.display_name, user.username;
+    `);
+  }
+
+  function updateUser({ userId, status, roleCode, displayName }) {
+    requireDatabase();
+    const id = Number(userId);
+    if (!id) throw new Error("Usuario invalido.");
+    const allowedStatuses = ["active", "locked", "disabled"];
+    if (status && !allowedStatuses.includes(status)) throw new Error("Estado de usuario invalido.");
+    const assignments = [];
+    if (status) assignments.push(`status = ${mysql.quote(status)}`);
+    if (displayName !== undefined) {
+      const name = String(displayName || "").trim();
+      if (!name) throw new Error("El nombre visible es requerido.");
+      assignments.push(`display_name = ${mysql.quote(name)}`);
+    }
+    if (assignments.length) mysql.runSql(`UPDATE app_users SET ${assignments.join(", ")} WHERE id = ${id} AND property_key = ${mysql.quote(propertyKey)};`);
+    if (roleCode) {
+      const role = String(roleCode).trim().toLowerCase();
+      mysql.runSql(`
+        START TRANSACTION;
+        DELETE FROM app_user_roles WHERE user_id = ${id};
+        INSERT INTO app_user_roles (user_id, role_id)
+        SELECT ${id}, id FROM app_roles WHERE code = ${mysql.quote(role)} AND active = 1;
+        COMMIT;
+      `);
+    }
+    return listUsers().find(user => Number(user.id) === id) || null;
+  }
+
+  function resetPassword({ userId, password }) {
+    requireDatabase();
+    const id = Number(userId);
+    if (!id) throw new Error("Usuario invalido.");
+    mysql.runSql(`
+      START TRANSACTION;
+      UPDATE app_users SET password_hash = ${mysql.quote(hashPassword(password))},
+        password_changed_at = ${mysql.quote(mysql.mexicoNowSql())}, status = 'active',
+        failed_login_count = 0, locked_until = NULL
+      WHERE id = ${id} AND property_key = ${mysql.quote(propertyKey)};
+      UPDATE app_sessions SET revoked_at = ${mysql.quote(mysql.mexicoNowSql())}
+      WHERE user_id = ${id} AND revoked_at IS NULL;
+      COMMIT;
+    `);
+    return true;
+  }
+
   function recordFailedLogin(user) {
     const now = mysql.mexicoNowSql();
     mysql.runSql(`
@@ -258,7 +318,8 @@ function createUserAuthService(mysql, options = {}) {
 
   return {
     authenticate, countUsers, createSession, createUser, getSession,
-    getUserByUsername, hasPermission, revokeSession, validateCsrf
+    getUserByUsername, hasPermission, listUsers, resetPassword, revokeSession,
+    updateUser, validateCsrf
   };
 }
 
