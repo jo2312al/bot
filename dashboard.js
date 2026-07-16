@@ -63,6 +63,9 @@ const {
   createCheckinLedgerService
 } = require("./services/checkinLedgerService");
 const {
+  createOperationalDayService
+} = require("./services/operationalDayService");
+const {
   applyReservationPricing
 } = require("./services/reservationPricingService");
 const {
@@ -94,8 +97,15 @@ const {
 } = require("./services/dashboardExtrasService");
 const mysql =
   require("./services/mysqlCliService");
+const operationalDay =
+  createOperationalDayService(mysql, {
+    propertyKey:
+      process.env.HOTEL_PROPERTY_KEY || "villa-margaritas"
+  });
 const checkinLedger =
-  createCheckinLedgerService(mysql);
+  createCheckinLedgerService(mysql, {
+    operationalDay
+  });
 const {
   readRoomBlocks,
   saveRoomBlock
@@ -5739,7 +5749,7 @@ const server =
             ...(room ? { roomNumber: room } : {})
           });
         if (room && mysql.ensureSchema()) {
-          checkinLedger.recordCheckin({ sourceKey, room });
+          checkinLedger.recordCheckin({ sourceKey, room, userId: req.authUser?.id || null });
         }
         sendJson(res, 200, {
           ok: true,
@@ -5812,7 +5822,7 @@ const server =
     ) {
       try {
         const body = await readBody(req);
-        sendJson(res, 200, { ok: true, checkin: checkinLedger.addMovement(body) });
+        sendJson(res, 200, { ok: true, checkin: checkinLedger.addMovement({ ...body, userId: req.authUser?.id || null }) });
       } catch (error) {
         sendJson(res, 400, { ok: false, error: error.message || "No se pudo guardar el movimiento" });
       }
@@ -5848,7 +5858,7 @@ const server =
     ) {
       try {
         const body = await readBody(req);
-        const checkin = checkinLedger.checkout(body.room);
+        const checkin = checkinLedger.checkout(body.room, { userId: req.authUser?.id || null });
         const rackStatus = updateRackRoomStatus({ room: body.room, status: "VS", guestName: "" });
         sendJson(res, 200, { ok: true, checkin, rackStatus });
       } catch (error) {

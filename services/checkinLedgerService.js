@@ -1,24 +1,36 @@
-function createCheckinLedgerService(mysql) {
+function createCheckinLedgerService(mysql, options = {}) {
+  const operationalDay = options.operationalDay || null;
+
+  function currentOperationalDay(userId) {
+    if (!operationalDay) return null;
+    return operationalDay.getOrOpenDay({
+      businessDate: mysql.mexicoNowSql().slice(0, 10),
+      userId: userId || null
+    });
+  }
   function requireDatabase() {
     if (!mysql.ensureSchema()) {
       throw new Error('Activa MySQL para consultar check-ins y movimientos.');
     }
   }
 
-  function recordCheckin({ sourceKey, room }) {
+  function recordCheckin({ sourceKey, room, userId = null }) {
     requireDatabase();
     const key = String(sourceKey || '').trim();
     const roomNumber = String(room || '').replace(/\D/g, '');
     const now =
       mysql.mexicoNowSql();
+    const day = currentOperationalDay(userId);
 
     if (!key || !roomNumber) throw new Error('Reserva y habitación son requeridas.');
 
     mysql.runSql(`
       INSERT INTO checkins (
-        reservation_id, guest_id, room_id, guest_name_snapshot, room_number_snapshot, checked_in_at
+        reservation_id, guest_id, room_id, guest_name_snapshot, room_number_snapshot,
+        checked_in_at, checkin_business_date, created_by_user_id
       )
-      SELECT reservation.id, reservation.guest_id, room.id, guest.name, room.room_number, ${mysql.quote(now)}
+      SELECT reservation.id, reservation.guest_id, room.id, guest.name, room.room_number,
+        ${mysql.quote(now)}, ${day ? mysql.quote(day.businessDate) : "NULL"}, ${userId ? Number(userId) : "NULL"}
       FROM reservations reservation
       JOIN guests guest ON guest.id = reservation.guest_id
       JOIN rooms room ON room.room_number = ${mysql.quote(roomNumber)}
@@ -28,8 +40,21 @@ function createCheckinLedgerService(mysql) {
         room_id = VALUES(room_id),
         guest_name_snapshot = VALUES(guest_name_snapshot),
         room_number_snapshot = VALUES(room_number_snapshot),
+        checkin_business_date = VALUES(checkin_business_date),
+        created_by_user_id = COALESCE(VALUES(created_by_user_id), created_by_user_id),
         checked_out_at = NULL,
+        checkout_business_date = NULL,
+        checked_out_by_user_id = NULL,
         status = 'activo';
+
+      UPDATE operational_room_states state
+      JOIN rooms room ON room.id = state.room_id
+      JOIN checkins checkin ON checkin.room_id = room.id AND checkin.status = 'activo'
+      SET state.current_status = 'ocupada', state.active_checkin_id = checkin.id,
+        state.source = 'checkin', state.updated_by_user_id = ${userId ? Number(userId) : "NULL"},
+        state.version = state.version + 1
+      WHERE state.operational_day_id = ${day ? Number(day.id) : 0}
+        AND room.room_number = ${mysql.quote(roomNumber)};
     `);
 
     return getCheckinByRoom(roomNumber);
@@ -41,6 +66,7 @@ function createCheckinLedgerService(mysql) {
     const rows = mysql.queryJson(`
       SELECT JSON_OBJECT(
         'id', checkin.id,
+        'roomId', checkin.room_id,
         'guestName', checkin.guest_name_snapshot,
         'room', checkin.room_number_snapshot,
         'checkedInAt', DATE_FORMAT(checkin.checked_in_at, '%Y-%m-%dT%H:%i:%s'),
@@ -112,17 +138,21 @@ function createCheckinLedgerService(mysql) {
 
     const charge = Math.max(Number(input.charge || 0), 0);
     const payment = Math.max(Number(input.payment || 0), 0);
+    const day = currentOperationalDay(input.userId);
     if (!charge && !payment) throw new Error('Indica un cargo o un pago mayor a cero.');
 
     mysql.runSql(`
       INSERT INTO account_movements (
         checkin_id, guest_id, room_id, room_number_snapshot, movement_type,
-        payment_method, reference_code, concept, charge_amount, payment_amount, occurred_at
+        payment_method, reference_code, concept, charge_amount, payment_amount, occurred_at,
+        business_date, operational_day_id, created_by_user_id, idempotency_key
       )
       SELECT checkin.id, checkin.guest_id, checkin.room_id, checkin.room_number_snapshot,
         ${mysql.quote(payment ? 'pago' : 'cargo')},
         ${mysql.quote(input.paymentMethod || '')}, ${mysql.quote(input.reference || '')},
-        ${mysql.quote(input.concept || '')}, ${charge}, ${payment}, ${mysql.quote(mysql.mexicoNowSql())}
+        ${mysql.quote(input.concept || '')}, ${charge}, ${payment}, ${mysql.quote(mysql.mexicoNowSql())},
+        ${day ? mysql.quote(day.businessDate) : "NULL"}, ${day ? Number(day.id) : "NULL"},
+        ${input.userId ? Number(input.userId) : "NULL"}, ${mysql.quote(input.idempotencyKey || "")}
       FROM checkins checkin WHERE checkin.id = ${Number(checkin.id)};
     `);
 
@@ -212,19 +242,29 @@ function createCheckinLedgerService(mysql) {
     return getCheckinByRoom(roomNumber);
   }
 
-  function checkout(room) {
+  function checkout(room, options = {}) {
     requireDatabase();
     const checkin = getCheckinByRoom(room);
     if (!checkin) return null;
     const balance = Number(checkin.balance || 0);
+    const day = currentOperationalDay(options.userId);
     if (Math.abs(balance) > 0.009) {
       throw new Error('No se puede hacer check-out: la habitacion debe quedar en 0. Saldo actual ' + balance.toFixed(2) + '.');
     }
 
     mysql.runSql(`
       UPDATE checkins
-      SET status = 'cerrado', checked_out_at = ${mysql.quote(mysql.mexicoNowSql())}
+      SET status = 'cerrado', checked_out_at = ${mysql.quote(mysql.mexicoNowSql())},
+        checkout_business_date = ${day ? mysql.quote(day.businessDate) : "NULL"},
+        checked_out_by_user_id = ${options.userId ? Number(options.userId) : "NULL"}
       WHERE id = ${Number(checkin.id)};
+
+      UPDATE operational_room_states
+      SET current_status = 'vacia_sucia', active_checkin_id = NULL,
+        source = 'checkout', updated_by_user_id = ${options.userId ? Number(options.userId) : "NULL"},
+        version = version + 1
+      WHERE operational_day_id = ${day ? Number(day.id) : 0}
+        AND room_id = ${Number(checkin.roomId || 0)};
     `);
 
     return checkin;

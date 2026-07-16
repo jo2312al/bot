@@ -297,11 +297,70 @@ function ensureSchema() {
     )
   );
 
+  ensureSchemaEvolution();
   seedReferenceData();
   schemaReady =
     true;
 
   return true;
+}
+
+function schemaColumnExists(tableName, columnName) {
+  const rows = queryJson(`
+    SELECT JSON_OBJECT('exists', COUNT(*) > 0)
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = ${quote(tableName)}
+      AND column_name = ${quote(columnName)};
+  `);
+  return Boolean(rows[0]?.exists);
+}
+
+function schemaIndexExists(tableName, indexName) {
+  const rows = queryJson(`
+    SELECT JSON_OBJECT('exists', COUNT(*) > 0)
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = ${quote(tableName)}
+      AND index_name = ${quote(indexName)};
+  `);
+  return Boolean(rows[0]?.exists);
+}
+
+function ensureSchemaEvolution() {
+  const additions = {
+    checkins: [
+      ["checkin_business_date", "DATE NULL AFTER checked_in_at"],
+      ["checkout_business_date", "DATE NULL AFTER checked_out_at"],
+      ["created_by_user_id", "BIGINT UNSIGNED NULL AFTER checkout_business_date"],
+      ["checked_out_by_user_id", "BIGINT UNSIGNED NULL AFTER created_by_user_id"]
+    ],
+    account_movements: [
+      ["business_date", "DATE NULL AFTER occurred_at"],
+      ["operational_day_id", "BIGINT UNSIGNED NULL AFTER business_date"],
+      ["created_by_user_id", "BIGINT UNSIGNED NULL AFTER operational_day_id"],
+      ["idempotency_key", "VARCHAR(160) NOT NULL DEFAULT '' AFTER created_by_user_id"]
+    ]
+  };
+
+  Object.entries(additions).forEach(([tableName, columns]) => {
+    const missing = columns.filter(([columnName]) => !schemaColumnExists(tableName, columnName));
+    if (!missing.length) return;
+    runSql(`ALTER TABLE ${tableName} ${missing.map(([columnName, definition]) =>
+      `ADD COLUMN ${columnName} ${definition}`
+    ).join(", ")};`);
+  });
+
+  const indexes = [
+    ["checkins", "ix_checkins_business_date", "checkin_business_date, status"],
+    ["account_movements", "ix_account_movements_business_date", "business_date, occurred_at"],
+    ["account_movements", "ix_account_movements_operational_day", "operational_day_id"]
+  ];
+  indexes.forEach(([tableName, indexName, columns]) => {
+    if (!schemaIndexExists(tableName, indexName)) {
+      runSql(`ALTER TABLE ${tableName} ADD INDEX ${indexName} (${columns});`);
+    }
+  });
 }
 
 function seedReferenceData() {
