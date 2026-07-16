@@ -63,6 +63,15 @@ function createOperationalPrecloseService(mysql, operationalDay) {
       WHERE checkin.status = 'activo' AND TRIM(COALESCE(reservation.rate_text, '')) = '';`)
       .forEach(row => issues.push(issue("blocking", "MISSING_RATE", "Estancia activa sin tarifa", row)));
 
+    rows(`SELECT JSON_OBJECT('room', checkin.room_number_snapshot, 'guestName', checkin.guest_name_snapshot, 'checkinId', checkin.id)
+      FROM checkins checkin
+      WHERE checkin.status = 'activo' AND NOT EXISTS (
+        SELECT 1 FROM account_movements movement
+        WHERE movement.checkin_id = checkin.id
+          AND movement.reference_code = CONCAT('TARIFA:', ${mysql.quote(day.businessDate)}, ':', checkin.room_number_snapshot)
+      );`)
+      .forEach(row => issues.push(issue("blocking", "MISSING_DAILY_RENT", "Estancia activa sin renta cargada para el dia", row)));
+
     rows(`SELECT JSON_OBJECT('room', checkin.room_number_snapshot, 'guestName', checkin.guest_name_snapshot,
         'checkinId', checkin.id, 'balance', COALESCE(SUM(movement.charge_amount - movement.payment_amount), 0))
       FROM checkins checkin LEFT JOIN account_movements movement ON movement.checkin_id = checkin.id

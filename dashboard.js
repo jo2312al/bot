@@ -5158,16 +5158,21 @@ const server =
       try {
         const body =
           await readBody(req);
+        operationalDay.getOrOpenDay({ businessDate: getMexicoTodayIso(), userId: req.authUser?.id || null });
+        const preclose = operationalPreclose.runPreclose();
+        if (!preclose.readyToClose) {
+          sendJson(res, 409, { ok: false, error: "El dia tiene excepciones bloqueantes.", preclose });
+          return;
+        }
         sendJson(res, 200, {
           ok:
             true,
           result:
-            closeOperationalDay({
-              ...body,
-              closedBy:
-                req.authUser?.displayName || "legacy-dashboard",
-              closedByUserId:
-                req.authUser?.id || null
+            operationalDay.closeDay({
+              userId: req.authUser?.id || null,
+              userName: req.authUser?.displayName || "legacy-dashboard",
+              notes: String(body.notes || ""),
+              totals: { rooms: preclose.rooms, ledger: preclose.ledger, warnings: preclose.counts.warning }
             })
         });
       } catch (error) {
