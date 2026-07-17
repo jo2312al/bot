@@ -2847,6 +2847,10 @@ function loadDailyRoomRates(input = {}) {
       'currency', COALESCE(reservation.rate_currency, 'MXN')
     )
     FROM checkins checkin
+    JOIN operational_room_states state
+      ON state.operational_day_id = ${Number(day.id)}
+      AND state.active_checkin_id = checkin.id
+      AND state.current_status = 'ocupada'
     LEFT JOIN reservations reservation ON reservation.id = checkin.reservation_id
     WHERE DATE(checkin.checked_in_at) <= ${mysql.quote(date)}
       AND (checkin.checked_out_at IS NULL OR DATE(checkin.checked_out_at) >= ${mysql.quote(date)})

@@ -59,13 +59,18 @@ function createOperationalPrecloseService(mysql, operationalDay) {
 
     rows(`SELECT JSON_OBJECT('room', checkin.room_number_snapshot, 'guestName', checkin.guest_name_snapshot,
         'checkinId', checkin.id, 'rate', COALESCE(reservation.rate_amount, 0), 'rateText', COALESCE(reservation.rate_text, ''))
-      FROM checkins checkin LEFT JOIN reservations reservation ON reservation.id = checkin.reservation_id
-      WHERE checkin.status = 'activo' AND COALESCE(reservation.rate_amount, 0) <= 0;`)
+      FROM operational_room_states state
+      JOIN checkins checkin ON checkin.id = state.active_checkin_id AND checkin.status = 'activo'
+      LEFT JOIN reservations reservation ON reservation.id = checkin.reservation_id
+      WHERE state.operational_day_id = ${Number(day.id)} AND state.current_status = 'ocupada'
+        AND COALESCE(reservation.rate_amount, 0) <= 0;`)
       .forEach(row => issues.push(issue("blocking", "MISSING_RATE", "Estancia activa sin tarifa", row)));
 
     rows(`SELECT JSON_OBJECT('room', checkin.room_number_snapshot, 'guestName', checkin.guest_name_snapshot, 'checkinId', checkin.id)
-      FROM checkins checkin
-      WHERE checkin.status = 'activo' AND NOT EXISTS (
+      FROM operational_room_states state
+      JOIN checkins checkin ON checkin.id = state.active_checkin_id AND checkin.status = 'activo'
+      WHERE state.operational_day_id = ${Number(day.id)} AND state.current_status = 'ocupada'
+        AND NOT EXISTS (
         SELECT 1 FROM account_movements movement
         WHERE movement.checkin_id = checkin.id
           AND movement.reference_code = CONCAT('TARIFA:', ${mysql.quote(day.businessDate)}, ':', checkin.room_number_snapshot)
@@ -74,8 +79,11 @@ function createOperationalPrecloseService(mysql, operationalDay) {
 
     rows(`SELECT JSON_OBJECT('room', checkin.room_number_snapshot, 'guestName', checkin.guest_name_snapshot,
         'checkinId', checkin.id, 'balance', COALESCE(SUM(movement.charge_amount - movement.payment_amount), 0))
-      FROM checkins checkin LEFT JOIN account_movements movement ON movement.checkin_id = checkin.id
-      WHERE checkin.status = 'activo' GROUP BY checkin.id, checkin.room_number_snapshot, checkin.guest_name_snapshot
+      FROM operational_room_states state
+      JOIN checkins checkin ON checkin.id = state.active_checkin_id AND checkin.status = 'activo'
+      LEFT JOIN account_movements movement ON movement.checkin_id = checkin.id
+      WHERE state.operational_day_id = ${Number(day.id)} AND state.current_status = 'ocupada'
+      GROUP BY checkin.id, checkin.room_number_snapshot, checkin.guest_name_snapshot
       HAVING ABS(COALESCE(SUM(movement.charge_amount - movement.payment_amount), 0)) > 0.009;`)
       .forEach(row => issues.push(issue("warning", "OPEN_BALANCE", "Huesped con saldo abierto", row)));
 
