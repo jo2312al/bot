@@ -88,7 +88,13 @@ function createOperationalDayService(mysql, options = {}) {
         ${userSql}
       FROM rooms room
       LEFT JOIN checkins active_checkin
-        ON active_checkin.room_id = room.id AND active_checkin.status = 'activo';
+        ON active_checkin.id = (
+          SELECT candidate.id
+          FROM checkins candidate
+          WHERE candidate.room_id = room.id AND candidate.status = 'activo'
+          ORDER BY candidate.checked_in_at DESC, candidate.id DESC
+          LIMIT 1
+        );
 
       SET @snapshot_payload = (
         SELECT JSON_OBJECT(
