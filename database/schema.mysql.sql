@@ -51,6 +51,9 @@ CREATE TABLE IF NOT EXISTS reservations (
   children_count INT UNSIGNED NOT NULL DEFAULT 0,
   room_type_id BIGINT UNSIGNED NULL,
   rate_text VARCHAR(120) NOT NULL DEFAULT '',
+  rate_amount DECIMAL(12,2) NULL,
+  rate_currency CHAR(3) NOT NULL DEFAULT 'MXN',
+  rate_includes_taxes TINYINT(1) NOT NULL DEFAULT 1,
   phone_snapshot VARCHAR(60) NOT NULL DEFAULT '',
   arrival_time_text VARCHAR(120) NOT NULL DEFAULT '',
   raw_text TEXT NULL,
@@ -166,6 +169,11 @@ CREATE TABLE IF NOT EXISTS account_movements (
   operational_day_id BIGINT UNSIGNED NULL,
   created_by_user_id BIGINT UNSIGNED NULL,
   idempotency_key VARCHAR(160) NOT NULL DEFAULT '',
+  service_date DATE NULL,
+  currency CHAR(3) NOT NULL DEFAULT 'MXN',
+  subtotal_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  vat_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  lodging_tax_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY ix_account_movements_checkin_time (checkin_id, occurred_at),
@@ -178,6 +186,18 @@ CREATE TABLE IF NOT EXISTS account_movements (
     ON UPDATE CASCADE ON DELETE RESTRICT,
   CONSTRAINT fk_account_movements_room FOREIGN KEY (room_id) REFERENCES rooms(id)
     ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS property_financial_settings (
+  property_key VARCHAR(80) NOT NULL,
+  currency CHAR(3) NOT NULL DEFAULT 'MXN',
+  vat_rate DECIMAL(7,6) NOT NULL DEFAULT 0.160000,
+  lodging_tax_rate DECIMAL(7,6) NOT NULL DEFAULT 0.030000,
+  prices_include_taxes TINYINT(1) NOT NULL DEFAULT 1,
+  updated_by_user_id BIGINT UNSIGNED NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (property_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS daily_closures (

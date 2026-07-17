@@ -25,6 +25,8 @@ const EXACT_PERMISSIONS = new Map([
   ["POST /api/day-close", "business_day.close"],
   ["GET /api/business-day/status", "business_day.view"],
   ["POST /api/business-day/preclose", "business_day.audit"],
+  ["GET /api/financial-settings", "reports.financial"],
+  ["POST /api/financial-settings", "invoices.configure"],
   ["GET /api/checkins/room", "stays.view"],
   ["GET /api/checkins/search", "stays.view"],
   ["POST /api/checkins/movement", "ledger.charge"],

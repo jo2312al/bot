@@ -58,9 +58,9 @@ function createOperationalPrecloseService(mysql, operationalDay) {
       .forEach(row => issues.push(issue("blocking", "OCCUPIED_WITHOUT_CHECKIN", "Habitacion ocupada sin check-in activo", row)));
 
     rows(`SELECT JSON_OBJECT('room', checkin.room_number_snapshot, 'guestName', checkin.guest_name_snapshot,
-        'checkinId', checkin.id, 'rate', COALESCE(reservation.rate_text, ''))
+        'checkinId', checkin.id, 'rate', COALESCE(reservation.rate_amount, 0), 'rateText', COALESCE(reservation.rate_text, ''))
       FROM checkins checkin LEFT JOIN reservations reservation ON reservation.id = checkin.reservation_id
-      WHERE checkin.status = 'activo' AND TRIM(COALESCE(reservation.rate_text, '')) = '';`)
+      WHERE checkin.status = 'activo' AND COALESCE(reservation.rate_amount, 0) <= 0;`)
       .forEach(row => issues.push(issue("blocking", "MISSING_RATE", "Estancia activa sin tarifa", row)));
 
     rows(`SELECT JSON_OBJECT('room', checkin.room_number_snapshot, 'guestName', checkin.guest_name_snapshot, 'checkinId', checkin.id)

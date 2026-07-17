@@ -69,6 +69,9 @@ const {
   createOperationalPrecloseService
 } = require("./services/operationalPrecloseService");
 const {
+  createFinancialPricingService
+} = require("./services/financialPricingService");
+const {
   applyReservationPricing
 } = require("./services/reservationPricingService");
 const {
@@ -107,6 +110,10 @@ const operationalDay =
   });
 const operationalPreclose =
   createOperationalPrecloseService(mysql, operationalDay);
+const financialPricing =
+  createFinancialPricingService(mysql, {
+    propertyKey: process.env.HOTEL_PROPERTY_KEY || "villa-margaritas"
+  });
 const checkinLedger =
   createCheckinLedgerService(mysql, {
     operationalDay
@@ -2826,6 +2833,7 @@ function loadDailyRoomRates(input = {}) {
 
   const date =
     normalizeAuditDate(input.date || getOperationalDate());
+  const day = operationalDay.getOrOpenDay({ businessDate: date, userId: input.userId || null });
 
   const rows = mysql.queryJson(`
     SELECT JSON_OBJECT(
@@ -2834,7 +2842,9 @@ function loadDailyRoomRates(input = {}) {
       'roomId', checkin.room_id,
       'room', checkin.room_number_snapshot,
       'guestName', checkin.guest_name_snapshot,
-      'rate', COALESCE(reservation.rate_text, '')
+      'rate', COALESCE(reservation.rate_amount, 0),
+      'rateText', COALESCE(reservation.rate_text, ''),
+      'currency', COALESCE(reservation.rate_currency, 'MXN')
     )
     FROM checkins checkin
     LEFT JOIN reservations reservation ON reservation.id = checkin.reservation_id
@@ -2847,12 +2857,14 @@ function loadDailyRoomRates(input = {}) {
 
   const applied =
     [];
+  const planned =
+    [];
   const skipped =
     [];
 
   rows.forEach(row => {
     const amount =
-      parseMoneyValue(row.rate);
+      Number(row.rate || 0) || parseMoneyValue(row.rateText);
     const reference =
       `TARIFA:${date}:${row.room}`;
 
@@ -2887,6 +2899,19 @@ function loadDailyRoomRates(input = {}) {
       return;
     }
 
+    const breakdown = financialPricing.calculate(amount);
+    const plannedRow = {
+      room: row.room,
+      guestName: row.guestName,
+      amount: breakdown.total,
+      subtotal: breakdown.subtotal,
+      vat: breakdown.vat,
+      lodgingTax: breakdown.lodgingTax,
+      currency: breakdown.currency
+    };
+    planned.push(plannedRow);
+    if (input.preview === true) return;
+
     mysql.runSql(`
       INSERT INTO account_movements (
         checkin_id,
@@ -2899,7 +2924,16 @@ function loadDailyRoomRates(input = {}) {
         concept,
         charge_amount,
         payment_amount,
-        occurred_at
+        occurred_at,
+        business_date,
+        operational_day_id,
+        created_by_user_id,
+        idempotency_key,
+        service_date,
+        currency,
+        subtotal_amount,
+        vat_amount,
+        lodging_tax_amount
       ) VALUES (
         ${Number(row.checkinId)},
         ${Number(row.guestId)},
@@ -2911,7 +2945,16 @@ function loadDailyRoomRates(input = {}) {
         ${mysql.quote(`Tarifa habitacion ${date}`)},
         ${amount.toFixed(2)},
         0,
-        ${mysql.quote(`${date} 23:59:00`)}
+        ${mysql.quote(`${date} 23:59:00`)},
+        ${mysql.quote(date)},
+        ${Number(day.id)},
+        ${input.userId ? Number(input.userId) : "NULL"},
+        ${mysql.quote(reference)},
+        ${mysql.quote(date)},
+        ${mysql.quote(breakdown.currency)},
+        ${breakdown.subtotal.toFixed(2)},
+        ${breakdown.vat.toFixed(2)},
+        ${breakdown.lodgingTax.toFixed(2)}
       );
     `);
 
@@ -2920,16 +2963,21 @@ function loadDailyRoomRates(input = {}) {
         row.room,
       guestName:
         row.guestName,
-      amount
+      ...plannedRow
     });
   });
 
   return {
     date,
     applied,
+    planned,
     skipped,
     total:
-      applied.reduce((sum, row) => sum + Number(row.amount || 0), 0)
+      (input.preview === true ? planned : applied).reduce((sum, row) => sum + Number(row.amount || 0), 0),
+    settings:
+      financialPricing.getSettings(),
+    preview:
+      input.preview === true
   };
 }
 
@@ -4530,6 +4578,8 @@ function pageHtml() {
         <button onclick="printAuditReport('movements')">Imprimir cargos y créditos</button>
         <button onclick="loadDailyRoomRates()">Cargar tarifas</button>
         <button class="primary" onclick="runOperationalPreclose()">Ejecutar pre-cierre</button>
+        <label>Moneda<input id="financialCurrency" value="MXN" maxlength="3" style="width:72px;text-transform:uppercase"></label>
+        <button onclick="saveFinancialCurrency()">Guardar moneda</button>
         <button class="danger" onclick="closeDailyOperations()">Cierre del dia</button>
         <button onclick="downloadReportCsv('all')">CSV completo</button>
         <button onclick="downloadReportCsv('occupancy')">CSV ocupacion</button>
@@ -5026,6 +5076,25 @@ const server =
       return;
     }
 
+    if (url.pathname === "/api/financial-settings") {
+      try {
+        if (req.method === "GET") sendJson(res, 200, { ok: true, settings: financialPricing.getSettings() });
+        else if (req.method === "POST" && !req.authUser) sendJson(res, 401, { ok: false, error: "Inicia sesion como administrador para cambiar la moneda." });
+        else if (req.method === "POST") sendJson(res, 200, { ok: true, settings: financialPricing.updateSettings(await readBody(req), req.authUser.id) });
+        else sendJson(res, 405, { ok: false, error: "Metodo no permitido" });
+      } catch (error) { sendJson(res, 400, { ok: false, error: error.message }); }
+      return;
+    }
+
+    if (url.pathname === "/api/financial-settings") {
+      try {
+        if (req.method === "GET") sendJson(res, 200, { ok: true, settings: financialPricing.getSettings() });
+        else if (req.method === "POST") sendJson(res, 200, { ok: true, settings: financialPricing.updateSettings(await readBody(req), req.authUser?.id || null) });
+        else sendJson(res, 405, { ok: false, error: "Metodo no permitido" });
+      } catch (error) { sendJson(res, 400, { ok: false, error: error.message }); }
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/api/business-day/status") {
       try {
         sendJson(res, 200, { ok: true, status: operationalPreclose.getStatus() });
@@ -5137,7 +5206,10 @@ const server =
           ok:
             true,
           result:
-            loadDailyRoomRates(body)
+            loadDailyRoomRates({
+              ...body,
+              userId: req.authUser?.id || null
+            })
         });
       } catch (error) {
         sendJson(res, 400, {

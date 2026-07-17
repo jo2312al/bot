@@ -1,3 +1,5 @@
+const { parseRateAmount } = require('./financialPricingService');
+
 function createCheckinLedgerService(mysql, options = {}) {
   const operationalDay = options.operationalDay || null;
 
@@ -216,7 +218,10 @@ function createCheckinLedgerService(mysql, options = {}) {
           start_date = ${startDate ? mysql.quote(startDate) : "start_date"},
           adults_count = ${pax},
           children_count = 0,
-          rate_text = ${mysql.quote(rate)}
+          rate_text = ${mysql.quote(rate)},
+          rate_amount = ${parseRateAmount(rate) || "NULL"},
+          rate_currency = COALESCE((SELECT currency FROM property_financial_settings WHERE property_key = 'villa-margaritas'), 'MXN'),
+          rate_includes_taxes = 1
         WHERE id = ${Number(current.reservationId)};
       `);
 

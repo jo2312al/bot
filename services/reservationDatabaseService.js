@@ -11,6 +11,7 @@ const {
   calculateExtraAdults,
   isMananeraRate
 } = require("./reservationPricingService");
+const { parseRateAmount } = require("./financialPricingService");
 
 const DATA_DIR =
   path.join(
@@ -768,6 +769,9 @@ function saveCalendarReservationMysql(row) {
       children_count,
       room_type_id,
       rate_text,
+      rate_amount,
+      rate_currency,
+      rate_includes_taxes,
       phone_snapshot,
       arrival_time_text,
       raw_text,
@@ -787,6 +791,9 @@ function saveCalendarReservationMysql(row) {
       ${Number(row.ninos)},
       ${roomTypeCode ? `(SELECT id FROM room_types WHERE code = ${mysql.quote(roomTypeCode)})` : "NULL"},
       ${mysql.quote(row.tarifa)},
+      ${parseRateAmount(row.tarifa) || "NULL"},
+      COALESCE((SELECT currency FROM property_financial_settings WHERE property_key = 'villa-margaritas'), 'MXN'),
+      1,
       ${mysql.quote(row.telefono)},
       ${mysql.quote(row.hora)},
       ${mysql.quote(row.raw)},
@@ -806,6 +813,9 @@ function saveCalendarReservationMysql(row) {
       children_count = VALUES(children_count),
       room_type_id = VALUES(room_type_id),
       rate_text = VALUES(rate_text),
+      rate_amount = VALUES(rate_amount),
+      rate_currency = VALUES(rate_currency),
+      rate_includes_taxes = VALUES(rate_includes_taxes),
       phone_snapshot = VALUES(phone_snapshot),
       arrival_time_text = VALUES(arrival_time_text),
       raw_text = VALUES(raw_text),

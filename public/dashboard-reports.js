@@ -48,6 +48,15 @@ function renderReports(report) {
   roomEventsReport.innerHTML = renderRoomEventsTable(report.roomEvents || []);
   renderRoomEventOptions(report);
   initCheckinSlipSearch();
+  loadFinancialSettings();
+}
+
+async function loadFinancialSettings() {
+  const input = document.getElementById('financialCurrency');
+  if (!input) return;
+  const response = await fetch('/api/financial-settings');
+  const data = await response.json();
+  if (data.ok && data.settings?.currency) input.value = data.settings.currency;
 }
 
 function initCheckinSlipSearch() {
@@ -538,6 +547,15 @@ async function closeDailyOperations() {
   }
 }
 
+async function saveFinancialCurrency() {
+  const input = document.getElementById('financialCurrency');
+  const response = await fetch('/api/financial-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currency: input?.value }) });
+  const data = await response.json();
+  if (!data.ok) return alert(data.error || 'No se pudo guardar la moneda.');
+  if (input) input.value = data.settings.currency;
+  alert('Moneda actualizada para tarifas nuevas: ' + data.settings.currency);
+}
+
 async function runOperationalPreclose() {
   const panel = document.getElementById('operationalPreclosePanel');
   if (!panel) return;
@@ -565,19 +583,28 @@ async function runOperationalPreclose() {
 
 async function loadMissingDailyRents() {
   const date = getReportAuditIsoDate();
-  if (!confirm('Cargar solamente las rentas faltantes del dia ' + (isoToDisplay(date) || date) + '? Los cargos existentes no se duplicaran.')) return;
   const panel = document.getElementById('operationalPreclosePanel');
-  if (panel) panel.innerHTML = '<div class="muted">Cargando rentas faltantes...</div>';
-  const response = await fetch('/api/day-rate-charges', {
+  if (panel) panel.innerHTML = '<div class="muted">Preparando vista previa...</div>';
+  const previewResponse = await fetch('/api/day-rate-charges', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ date })
+    body: JSON.stringify({ date, preview: true })
   });
-  const data = await response.json();
-  if (!data.ok) {
-    if (panel) panel.innerHTML = '<div class="muted">' + escapeHtml(data.error || 'No se pudieron cargar las rentas.') + '</div>';
+  const previewData = await previewResponse.json();
+  if (!previewData.ok) {
+    if (panel) panel.innerHTML = '<div class="muted">' + escapeHtml(previewData.error || 'No se pudo preparar la vista previa.') + '</div>';
     return;
   }
+  const preview = previewData.result || {};
+  const settings = preview.settings || {};
+  const detail = (preview.planned || []).map(row => 'Hab. ' + row.room + ': ' + formatAuditMoney(row.amount) + ' ' + (row.currency || settings.currency || 'MXN')).join('\n');
+  const message = 'Vista previa de rentas faltantes\n\n' + detail + '\n\nTotal: ' + formatAuditMoney(preview.total || 0) + ' ' + (settings.currency || 'MXN') +
+    '\nIVA incluido: ' + Number(settings.vatRate || 0) * 100 + '% / Hospedaje incluido: ' + Number(settings.lodgingTaxRate || 0) * 100 + '%\n\n¿Confirmas la carga?';
+  if (!preview.planned?.length || !confirm(message)) { await runOperationalPreclose(); return; }
+  if (panel) panel.innerHTML = '<div class="muted">Cargando rentas faltantes...</div>';
+  const response = await fetch('/api/day-rate-charges', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date }) });
+  const data = await response.json();
+  if (!data.ok) { if (panel) panel.innerHTML = '<div class="muted">' + escapeHtml(data.error || 'No se pudieron cargar las rentas.') + '</div>'; return; }
   const result = data.result || {};
   dailyCloseStatus.textContent = 'Rentas aplicadas: ' + (result.applied?.length || 0) +
     ' / omitidas: ' + (result.skipped?.length || 0) + ' / total: ' + formatAuditMoney(result.total || 0);

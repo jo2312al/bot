@@ -339,10 +339,20 @@ function ensureSchemaEvolution() {
       ["business_date", "DATE NULL AFTER occurred_at"],
       ["operational_day_id", "BIGINT UNSIGNED NULL AFTER business_date"],
       ["created_by_user_id", "BIGINT UNSIGNED NULL AFTER operational_day_id"],
-      ["idempotency_key", "VARCHAR(160) NOT NULL DEFAULT '' AFTER created_by_user_id"]
+      ["idempotency_key", "VARCHAR(160) NOT NULL DEFAULT '' AFTER created_by_user_id"],
+      ["service_date", "DATE NULL AFTER idempotency_key"],
+      ["currency", "CHAR(3) NOT NULL DEFAULT 'MXN' AFTER service_date"],
+      ["subtotal_amount", "DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER currency"],
+      ["vat_amount", "DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER subtotal_amount"],
+      ["lodging_tax_amount", "DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER vat_amount"]
     ],
     app_users: [
       ["must_change_password", "TINYINT(1) NOT NULL DEFAULT 1 AFTER password_changed_at"]
+    ],
+    reservations: [
+      ["rate_amount", "DECIMAL(12,2) NULL AFTER rate_text"],
+      ["rate_currency", "CHAR(3) NOT NULL DEFAULT 'MXN' AFTER rate_amount"],
+      ["rate_includes_taxes", "TINYINT(1) NOT NULL DEFAULT 1 AFTER rate_currency"]
     ]
   };
 
@@ -364,10 +374,20 @@ function ensureSchemaEvolution() {
       runSql(`ALTER TABLE ${tableName} ADD INDEX ${indexName} (${columns});`);
     }
   });
+
+  runSql(`
+    UPDATE reservations
+    SET rate_amount = CAST(REPLACE(REPLACE(TRIM(rate_text), '$', ''), ',', '') AS DECIMAL(12,2))
+    WHERE rate_amount IS NULL
+      AND TRIM(rate_text) REGEXP '^[$]?[0-9]+(,[0-9]{3})*([.][0-9]{1,2})?$';
+  `);
 }
 
 function seedReferenceData() {
   seedAccessControl();
+  runSql(`INSERT INTO property_financial_settings (property_key, currency, vat_rate, lodging_tax_rate, prices_include_taxes)
+    VALUES ('villa-margaritas', 'MXN', 0.160000, 0.030000, 1)
+    ON DUPLICATE KEY UPDATE property_key = VALUES(property_key);`);
   const roomTypes = [
     [
       "KING",
