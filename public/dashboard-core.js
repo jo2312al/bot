@@ -56,8 +56,33 @@ function updateDashboardThemeControls(isDark) {
   });
 }
 
+function toggleDashboardSidebar() {
+  const root = document.documentElement;
+  const collapsed = root.classList.toggle('sidebar-collapsed');
+
+  try {
+    localStorage.setItem('dashboardSidebarCollapsed', collapsed ? 'true' : 'false');
+  } catch {}
+
+  updateDashboardSidebarControl(collapsed);
+}
+
+function updateDashboardSidebarControl(collapsed) {
+  const button = document.querySelector('.sidebar-collapse-toggle');
+  if (!button) return;
+  const icon = button.querySelector('.material-symbols-outlined');
+  const label = button.querySelector('span:not(.material-symbols-outlined)');
+  const title = collapsed ? 'Expandir menú' : 'Contraer menú';
+  if (icon) icon.textContent = collapsed ? 'left_panel_open' : 'left_panel_close';
+  if (label) label.textContent = collapsed ? 'Expandir' : 'Contraer';
+  button.title = title;
+  button.setAttribute('aria-label', title);
+  button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   updateDashboardThemeControls(document.documentElement.classList.contains('dark-mode'));
+  updateDashboardSidebarControl(document.documentElement.classList.contains('sidebar-collapsed'));
 });
 
 function renderHotelRateOptions(selectedValue) {

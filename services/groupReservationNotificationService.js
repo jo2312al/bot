@@ -75,6 +75,8 @@ function cleanReservation(reservation = {}) {
       String(reservation.nombre || "Sin nombre").trim(),
     telefono:
       String(reservation.telefono || "").trim(),
+    email:
+      String(reservation.email || "").trim().toLowerCase(),
     fecha:
       String(reservation.fecha || "").trim(),
     dates:
@@ -106,7 +108,21 @@ function cleanReservation(reservation = {}) {
     roomNumber:
       String(reservation.roomNumber || "").trim(),
     arrivalAt:
-      String(reservation.arrivalAt || "").trim()
+      String(reservation.arrivalAt || "").trim(),
+    paymentUrl:
+      String(reservation.paymentUrl || "").trim(),
+    clientMessageType:
+      String(reservation.clientMessageType || "confirmation").trim(),
+    paymentAmount:
+      Number(reservation.paymentAmount || 0),
+    paymentCurrency:
+      String(reservation.paymentCurrency || "MXN").trim().toUpperCase(),
+    paidAt:
+      String(reservation.paidAt || "").trim(),
+    gatewayId:
+      String(reservation.gatewayId || "").trim(),
+    confirmationPdfUrl:
+      String(reservation.confirmationPdfUrl || "").trim()
   };
 }
 
@@ -158,6 +174,20 @@ function enqueueReservationGroupNotification(reservations, origin = "dashboard")
   queue.push(notification);
   writeQueue(queue);
   return notification;
+}
+
+function enqueueReservationClientNotification(reservation, paymentUrl, messageType = "confirmation") {
+  const phone = String(reservation?.telefono || "").replace(/\D/g, "");
+  if (phone.length < 10) throw new Error("La reserva no tiene un telefono valido");
+  if (reservation?.reservationMessagesConsent !== true) {
+    throw new Error("Falta confirmar el consentimiento de WhatsApp de la reserva");
+  }
+  return enqueueReservationGroupNotification([{
+    ...reservation,
+    paymentUrl,
+    clientMessageType: messageType,
+    reservationMessagesConsent: true
+  }], `client:${phone}`);
 }
 
 function readPendingReservationGroupNotifications() {
@@ -214,6 +244,7 @@ function markReservationGroupNotificationSent(id) {
 
 module.exports = {
   enqueueReservationGroupNotification,
+  enqueueReservationClientNotification,
   readPendingReservationGroupNotifications,
   markReservationGroupNotificationSent
 };

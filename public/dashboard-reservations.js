@@ -200,6 +200,7 @@ async function saveManualReservation() {
   const payload = {
     nombre: manualNombre.value.trim(),
     telefono: manualTelefono.value.trim(),
+    email: manualEmail.value.trim(),
     fecha: manualFecha.value,
     noches: Number.parseInt(manualNoches.value, 10) || 1,
     habitaciones: Number(manualHabitaciones.value || 1),
@@ -208,11 +209,17 @@ async function saveManualReservation() {
     tipo: manualTipo.value,
     hora: manualHora.value.trim(),
     tarifa: manualTarifa.value.trim(),
-    note: manualNota.value.trim()
+    note: manualNota.value.trim(),
+    reservationMessagesConsent: manualReservationMessagesConsent.checked,
+    marketingConsent: manualMarketingConsent.checked
   };
 
   if (!payload.nombre || !payload.fecha) {
     alert('Nombre y fecha de entrada son requeridos.');
+    return;
+  }
+  if (payload.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) {
+    alert('Escribe un correo valido para enviar la confirmacion y el PDF.');
     return;
   }
 
@@ -234,6 +241,7 @@ async function saveManualReservation() {
 
   manualNombre.value = '';
   manualTelefono.value = '';
+  manualEmail.value = '';
   manualHabitaciones.value = '1';
   manualNoches.value = '1';
   manualAdultos.value = '2';
@@ -242,6 +250,8 @@ async function saveManualReservation() {
   manualTarifa.value = '$700';
   manualRateLocked = false;
   manualNota.value = '';
+  manualReservationMessagesConsent.checked = false;
+  manualMarketingConsent.checked = false;
   renderManualCheckoutPreview();
   manualReservationStatus.textContent = 'Reserva guardada: #' + data.reservation.folio;
   await loadDashboard();
@@ -295,8 +305,15 @@ function openGroupSendConfirm(reservations, source) {
     ? 'Enviar reserva al grupo'
     : 'Enviar reservas al grupo';
   groupSendConfirmText.textContent = count === 1
-    ? 'La reserva ' + source + ' se enviara al grupo de reservas.'
-    : count + ' reservas ' + source + ' se enviaran al grupo de reservas.';
+    ? 'Elige si la reserva ' + source + ' se envia al grupo, al cliente o a ambos.'
+    : 'Elige los destinatarios para las ' + count + ' reservas ' + source + '.';
+  sendReservationToGroup.checked = true;
+  sendReservationToClient.checked = count === 1 && Boolean(pendingGroupReservations[0].telefono);
+  sendReservationToClient.disabled = count !== 1 || !pendingGroupReservations[0]?.telefono;
+  confirmReservationWhatsAppConsent.checked = Boolean(
+    count === 1 && pendingGroupReservations[0].reservationMessagesConsent
+  );
+  confirmReservationWhatsAppConsent.disabled = sendReservationToClient.disabled;
   groupSendConfirmBackdrop.classList.remove('hidden');
   document.body.classList.add('app-modal-open');
 }
@@ -332,6 +349,43 @@ async function sendPendingReservationsToGroup() {
   manualReservationStatus.textContent = data.count === 1
     ? 'Reserva preparada. El bot la enviara al grupo en unos segundos.'
     : data.count + ' reservas preparadas. El bot las enviara al grupo en unos segundos.';
+  closeGroupSendConfirm();
+}
+
+async function sendPendingReservationNotifications() {
+  if (!pendingGroupReservations.length) return closeGroupSendConfirm();
+  const tasks = [];
+  if (sendReservationToGroup.checked) {
+    tasks.push(fetch('/api/reservations/send-to-group', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reservations: pendingGroupReservations })
+    }));
+  }
+  if (sendReservationToClient.checked) {
+    if (!confirmReservationWhatsAppConsent.checked) {
+      alert('Confirma que el huesped autorizo los mensajes de WhatsApp de la reserva.');
+      return;
+    }
+    tasks.push(fetch('/api/reservations/send-to-client', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        reservation: pendingGroupReservations[0],
+        reservationMessagesConsent: true,
+        marketingConsent: pendingGroupReservations[0].marketingConsent === true
+      })
+    }));
+  }
+  if (!tasks.length) return closeGroupSendConfirm();
+  const responses = await Promise.all(tasks);
+  const results = await Promise.all(responses.map(response => response.json()));
+  const failed = results.find(result => !result.ok);
+  if (failed) {
+    alert(failed.error || 'No se pudo preparar uno de los envios.');
+    return;
+  }
+  manualReservationStatus.textContent = 'Envio preparado. El bot lo procesara en unos segundos.';
   closeGroupSendConfirm();
 }
 

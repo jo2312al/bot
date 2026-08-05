@@ -56,6 +56,14 @@ const {
 } = require(
   "./services/groupReservationNotificationWorker"
 );
+const {
+  createArrivalReminderWorker,
+  requestNewArrivalTime,
+  recordNewArrivalTime
+} = require("./services/reservationArrivalReminderService");
+const {
+  recordCommunicationConsent
+} = require("./services/communicationConsentService");
 
 const BOT_ID =
   process.env.BOT_ID || "principal";
@@ -72,6 +80,11 @@ const groupReservationNotificationWorker =
   createGroupReservationNotificationWorker({
     botId: BOT_ID,
     groupId: GROUP_ID,
+    log
+  });
+const arrivalReminderWorker =
+  createArrivalReminderWorker({
+    botId: BOT_ID,
     log
   });
 
@@ -442,6 +455,7 @@ async function startBot() {
         });
 
         groupReservationNotificationWorker.start(sock);
+        arrivalReminderWorker.start(sock);
 
         log({usuario: "Sistema", modulo: "Core", accion: `✅ ${BOT_LABEL} CONECTADO`});
 
@@ -457,6 +471,7 @@ async function startBot() {
       ) {
 
         groupReservationNotificationWorker.stop();
+        arrivalReminderWorker.stop();
 
         log({usuario: "Sistema", modulo: "Core", accion: "❌ DESCONECTADO"});
 
@@ -606,6 +621,115 @@ async function startBot() {
           text
             .toLowerCase()
             .includes("rack");
+
+        const arrivalConfirmation =
+          String(text || "")
+            .trim()
+            .match(/^confirmar(?:\s+([a-z0-9-]{3,30}))?[.!\s]*$/i);
+        const marketingOptOut =
+          /^(?:baja(?:\s+(?:promociones|publicidad|marketing))?|cancelar\s+(?:promociones|publicidad|marketing)|no\s+(?:promociones|publicidad|marketing))[.!\s]*$/i
+            .test(String(text || "").trim());
+
+        if (!from.endsWith("@g.us") && marketingOptOut) {
+          recordCommunicationConsent({
+            phone:
+              msg.key.remoteJidAlt || from,
+            reservationMessages:
+              false,
+            marketingMessages:
+              false,
+            captureMethod:
+              "whatsapp-opt-out",
+            actor:
+              "guest"
+          });
+          await sock.sendMessage(from, {
+            text:
+              "Listo. Ya no enviaremos promociones a este numero. Los avisos necesarios de una reservacion activa, pagos o servicio solicitado pueden seguir llegando por separado."
+          });
+          return;
+        }
+
+        if (!from.endsWith("@g.us") && arrivalConfirmation) {
+          const confirmation =
+            requestNewArrivalTime({
+              folio:
+                arrivalConfirmation[1] || "",
+              senderJid:
+                from,
+              alternateJid:
+                msg.key.remoteJidAlt || ""
+            });
+
+          if (confirmation) {
+            await sock.sendMessage(from, {
+              text:
+                [
+                  `Gracias, ${confirmation.nombre || "te atendemos"}.`,
+                  `A que nueva hora calculas llegar para la reservacion *${confirmation.folio}*?`,
+                  "Responde indicando AM o PM, por ejemplo: *8:30 PM*."
+                ].join("\n\n")
+            });
+            return;
+          }
+
+          await sock.sendMessage(from, {
+            text:
+              "No encontre un recordatorio pendiente asociado a este WhatsApp. Responde *CONFIRMAR FOLIO* usando el codigo recibido, o comunicate con recepcion."
+          });
+          return;
+        }
+
+        if (!from.endsWith("@g.us")) {
+          const updatedArrival =
+            recordNewArrivalTime({
+              text,
+              senderJid:
+                from,
+              alternateJid:
+                msg.key.remoteJidAlt || ""
+            });
+
+          if (updatedArrival) {
+            if (updatedArrival.invalidTime) {
+              await sock.sendMessage(from, {
+                text:
+                  "Indica una hora valida con AM o PM. Ejemplo: *8:30 PM*."
+              });
+              return;
+            }
+
+            await sock.sendMessage(GROUP_ID, {
+              text:
+                [
+                  "HUESPED ACTUALIZA HORA DE LLEGADA",
+                  `Folio: *${updatedArrival.folio}*`,
+                  `Huesped: ${updatedArrival.nombre || "Sin nombre"}`,
+                  `Telefono: ${updatedArrival.telefono || "Sin telefono"}`,
+                  `Hora anterior: ${updatedArrival.previousArrivalTime || "No indicada"}`,
+                  `Nueva hora informada: *${updatedArrival.updatedArrivalTime}*`,
+                  updatedArrival.afterSeven
+                    ? "Recepcion: llegada posterior a las 7:00 p.m.; queda sujeta a disponibilidad mientras no este pagada."
+                    : "Recepcion: nueva hora registrada. Si no hay check-in, el bot volvera a confirmar 15 minutos despues."
+                ].join("\n")
+            });
+
+            await sock.sendMessage(from, {
+              text:
+                [
+                  "*NUEVA HORA REGISTRADA*",
+                  `Avisamos a recepcion que calculas llegar a las *${updatedArrival.updatedArrivalTime}* para la reservacion *${updatedArrival.folio}*.`,
+                  updatedArrival.afterSeven
+                    ? "Importante: al ser una llegada despues de las *7:00 p.m.*, si tu reserva aun no esta pagada la habitacion queda *sujeta a disponibilidad*."
+                    : "Si no registramos tu llegada en el nuevo horario, volveremos a escribirte 15 minutos despues.",
+                  updatedArrival.afterSeven && updatedArrival.paymentUrl
+                    ? `Para garantizarla, realiza el pago aqui:\n${updatedArrival.paymentUrl}`
+                    : ""
+                ].filter(Boolean).join("\n\n")
+            });
+            return;
+          }
+        }
 
         if (!getScheduleStatus().active) {
           updateScheduleStatus();

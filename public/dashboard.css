@@ -221,6 +221,39 @@ main {
 .view-tabs button.active:hover {
   background: var(--gold);
 }
+.sidebar-collapse-toggle {
+  border-bottom: 1px solid var(--line) !important;
+  border-radius: 0 !important;
+  color: var(--muted) !important;
+  margin-bottom: 8px;
+  padding-bottom: 14px !important;
+}
+@media (min-width: 901px) {
+  main,
+  .view-tabs {
+    transition: margin-left .22s ease, width .22s ease, padding .22s ease;
+  }
+  :root.sidebar-collapsed .view-tabs {
+    width: 76px;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  :root.sidebar-collapsed main {
+    margin-left: 76px;
+  }
+  :root.sidebar-collapsed .view-tabs button {
+    justify-content: center;
+    gap: 0;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  :root.sidebar-collapsed .view-tabs button span:not(.material-symbols-outlined) {
+    display: none;
+  }
+  :root.sidebar-collapsed .nav-new-reservation {
+    min-height: 48px;
+  }
+}
 .nav-new-reservation {
   margin-bottom: 14px;
   background: var(--accent) !important;
@@ -854,6 +887,20 @@ textarea {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   align-items: end;
+}
+.date-controls .consent-option {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  align-self: center;
+  color: var(--text);
+  font-weight: 500;
+}
+.date-controls .consent-option input,
+.app-modal-body input[type="checkbox"] {
+  min-width: 0;
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
 }
 label {
   display: grid;
@@ -2033,7 +2080,8 @@ body.app-modal-open {
     box-shadow: 0 8px 22px rgba(93, 64, 55, .08);
   }
   .sidebar-brand,
-  .nav-new-reservation {
+  .nav-new-reservation,
+  .sidebar-collapse-toggle {
     display: none !important;
   }
   .view-tabs button {
@@ -2178,6 +2226,9 @@ body.app-modal-open {
   .header-brand {
     gap: 8px;
     flex: 1 1 auto;
+  }
+  .header-brand > div {
+    display: none;
   }
   .header-logo {
     width: 56px;

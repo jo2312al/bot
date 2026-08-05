@@ -1,4 +1,5 @@
 const http = require("http");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const {
@@ -48,8 +49,20 @@ const {
   updateCalendarReservation
 } = require("./services/reservationDatabaseService");
 const {
-  enqueueReservationGroupNotification
+  enqueueReservationGroupNotification,
+  enqueueReservationClientNotification
 } = require("./services/groupReservationNotificationService");
+const {
+  sendReservationToPortal
+} = require("./services/reservationPortalService");
+const {
+  scheduleArrivalReminder
+} = require("./services/reservationArrivalReminderService");
+const {
+  NOTICE_VERSION,
+  TERMS_VERSION,
+  recordCommunicationConsent
+} = require("./services/communicationConsentService");
 const {
   createRoomBlockService
 } = require("./services/roomBlockService");
@@ -132,7 +145,7 @@ const RACK_EMERGENCY_USER =
 const RACK_EMERGENCY_PASSWORD =
   process.env.RACK_EMERGENCY_PASSWORD || "";
 const DASHBOARD_ASSET_VERSION =
-  "dashboard-checkin-slip-search-20260713";
+  "dashboard-mobile-logo-only-20260801";
 const DASHBOARD_SCRIPT_FILES = [
   "dashboard-auth.js",
   "dashboard-core.js",
@@ -184,29 +197,46 @@ function sendJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload));
 }
 
-function readBody(req) {
+function readRawBody(req, maxBytes = 1024 * 1024) {
   return new Promise((resolve, reject) => {
-    let body = "";
+    const chunks = [];
+    let total = 0;
+    let settled = false;
 
     req.on("data", chunk => {
-      body += chunk;
+      if (settled) return;
+      total += chunk.length;
+      if (total > maxBytes) {
+        settled = true;
+        reject(new Error("El cuerpo de la solicitud excede el limite permitido"));
+        return;
+      }
+      chunks.push(chunk);
     });
 
     req.on("end", () => {
-      if (!body) {
-        resolve({});
-        return;
-      }
-
-      try {
-        resolve(JSON.parse(body));
-      } catch (error) {
-        reject(error);
-      }
+      if (settled) return;
+      settled = true;
+      resolve(Buffer.concat(chunks).toString("utf8"));
     });
 
-    req.on("error", reject);
+    req.on("error", error => {
+      if (!settled) reject(error);
+      settled = true;
+    });
   });
+}
+
+async function readBody(req) {
+  const raw = await readRawBody(req);
+  return raw ? JSON.parse(raw) : {};
+}
+
+function writePrivateJsonFile(file, value) {
+  const temporary = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(temporary, JSON.stringify(value, null, 2), { encoding: "utf8", mode: 0o600 });
+  fs.renameSync(temporary, file);
+  try { fs.chmodSync(file, 0o600); } catch {}
 }
 
 const dashboardAuth =
@@ -471,6 +501,8 @@ function normalizeManualReservation(input) {
       String(pricedInput.nombre || "").trim(),
     telefono:
       String(pricedInput.telefono || "").trim(),
+    email:
+      String(pricedInput.email || "").trim().toLowerCase(),
     fecha:
       dates[0],
     dates,
@@ -500,6 +532,10 @@ function normalizeManualReservation(input) {
       String(pricedInput.note || "").trim(),
     raw:
       pricedInput.raw || "Captura manual",
+    reservationMessagesConsent:
+      pricedInput.reservationMessagesConsent === true,
+    marketingConsent:
+      pricedInput.marketingConsent === true,
     status:
       "activa"
   };
@@ -3918,6 +3954,9 @@ function pageHtml() {
         if (localStorage.getItem("dashboardTheme") === "dark") {
           document.documentElement.classList.add("dark-mode");
         }
+        if (localStorage.getItem("dashboardSidebarCollapsed") === "true") {
+          document.documentElement.classList.add("sidebar-collapsed");
+        }
       } catch {}
     })();
   </script>
@@ -3940,6 +3979,7 @@ function pageHtml() {
   </header>
   <main>
     <nav class="view-tabs">
+      <button class="sidebar-collapse-toggle" type="button" onclick="toggleDashboardSidebar()" title="Contraer menú" aria-label="Contraer menú" aria-expanded="true"><span class="material-symbols-outlined">left_panel_close</span><span>Contraer</span></button>
       <button class="nav-new-reservation" onclick="showView('reservations')"><span class="material-symbols-outlined">add</span><span>Nueva Reserva</span></button>
       <button id="tab-today" onclick="showView('today')"><span class="material-symbols-outlined">today</span><span>Hoy</span></button>
       <button id="tab-main" class="active" onclick="showView('main')"><span class="material-symbols-outlined">dashboard</span><span>Principal</span></button>
@@ -4208,6 +4248,10 @@ function pageHtml() {
           <input id="manualTelefono" placeholder="10 digitos">
         </label>
         <label>
+          Correo del huesped
+          <input id="manualEmail" type="email" placeholder="cliente@correo.com">
+        </label>
+        <label>
           Entrada
           <input id="manualFecha" type="date" onchange="renderManualCheckoutPreview()">
         </label>
@@ -4250,6 +4294,14 @@ function pageHtml() {
         <label>
           Nota
           <input id="manualNota" placeholder="Ej. llega tarde, anticipo, peticion especial">
+        </label>
+        <label class="consent-option">
+          <input id="manualReservationMessagesConsent" type="checkbox">
+          El huesped autorizo WhatsApp para confirmacion, pago y seguimiento de esta reserva
+        </label>
+        <label class="consent-option">
+          <input id="manualMarketingConsent" type="checkbox">
+          El huesped acepta recibir promociones por WhatsApp (opcional)
         </label>
         <button class="primary" onclick="saveManualReservation()">Guardar reserva</button>
       </div>
@@ -4790,9 +4842,13 @@ function pageHtml() {
         </div>
       </div>
       <div class="app-modal-body">
+        <label><input id="sendReservationToGroup" type="checkbox" checked> Enviar al grupo de recepcion</label>
+        <label style="margin-top:10px"><input id="sendReservationToClient" type="checkbox" checked> Enviar confirmacion y liga de pago al cliente</label>
+        <label style="margin-top:10px"><input id="confirmReservationWhatsAppConsent" type="checkbox"> El huesped autorizo recibir por WhatsApp mensajes necesarios de esta reserva</label>
+        <div class="muted" style="margin:6px 0 0 24px">Incluye confirmacion, pago y seguimiento de llegada. No autoriza promociones.</div>
         <div class="confirm-actions">
-          <button onclick="closeGroupSendConfirm()">No</button>
-          <button class="primary" onclick="sendPendingReservationsToGroup()">Si, enviar al grupo</button>
+          <button onclick="closeGroupSendConfirm()">No enviar</button>
+          <button class="primary" onclick="sendPendingReservationNotifications()">Enviar seleccionados</button>
         </div>
       </div>
     </div>
@@ -4970,6 +5026,92 @@ const server =
   http.createServer(async (req, res) => {
     const url =
       new URL(req.url, `http://${req.headers.host}`);
+
+    if (req.method === "POST" && url.pathname === "/api/v1/payment-webhooks") {
+      try {
+        const secret = String(process.env.PAYMENT_WEBHOOK_SECRET || "").trim();
+        const timestamp = String(req.headers["x-timestamp"] || "").trim();
+        const signature = String(req.headers["x-signature"] || "").trim();
+        if (!secret || !/^\d+$/.test(timestamp) || Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) {
+          throw new Error("Webhook no autorizado");
+        }
+        const rawBody = await readRawBody(req);
+        const body = JSON.parse(rawBody || "{}");
+        const expected = crypto.createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex");
+        if (!signature || signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
+          throw new Error("Firma de webhook invalida");
+        }
+        if (body.status !== "paid" || !/^[A-Z0-9][A-Z0-9-]{2,29}$/i.test(String(body.folio || ""))) {
+          throw new Error("Evento de pago invalido");
+        }
+        const eventId = String(body.eventId || "").trim();
+        const amount = Number(body.amount || 0);
+        const currency = String(body.currency || "MXN").trim().toUpperCase();
+        if (!/^[a-z0-9:_-]{6,160}$/i.test(eventId) || !Number.isFinite(amount) || amount <= 0 || !/^[A-Z]{3}$/.test(currency)) {
+          throw new Error("Evento de pago incompleto");
+        }
+        const paymentDir = path.join(__dirname, "data");
+        const paymentFile = path.join(paymentDir, "reservationPayments.json");
+        fs.mkdirSync(paymentDir, { recursive: true });
+        let payments = [];
+        try { payments = JSON.parse(fs.readFileSync(paymentFile, "utf8")); } catch {}
+        let payment = payments.find(item => item.eventId === eventId);
+        const duplicate = Boolean(payment);
+        if (!payment) {
+          payment = { ...body, receivedAt: new Date().toISOString() };
+          payments.push(payment);
+        }
+        const localReservation = readCalendarReservations().find(item =>
+          String(item.folio || "").toUpperCase() === String(body.folio).toUpperCase()
+        );
+        const suppliedReservation = body.reservation && typeof body.reservation === "object"
+          ? body.reservation
+          : {};
+        const reservation = {
+          ...suppliedReservation,
+          ...(localReservation || {}),
+          folio: String(body.folio || "").toUpperCase(),
+          nombre: localReservation?.nombre || suppliedReservation.nombre || suppliedReservation.guestName || "Huesped",
+          telefono: localReservation?.telefono || suppliedReservation.telefono || suppliedReservation.phone || "",
+          email: localReservation?.email || suppliedReservation.email || suppliedReservation.guestEmail || "",
+          fecha: localReservation?.fecha || suppliedReservation.fecha || suppliedReservation.arrivalDate || String(body.paidAt || "").slice(0, 10),
+          noches: Number(localReservation?.noches || suppliedReservation.noches || suppliedReservation.nights || 1),
+          habitaciones: Number(localReservation?.habitaciones || suppliedReservation.habitaciones || suppliedReservation.rooms || 1),
+          adultos: Number(localReservation?.adultos || suppliedReservation.adultos || suppliedReservation.adults || 0),
+          ninos: Number(localReservation?.ninos || suppliedReservation.ninos || suppliedReservation.children || 0),
+          tipo: localReservation?.tipo || suppliedReservation.tipo || suppliedReservation.roomType || "",
+          clientMessageType: "paid",
+          paymentAmount: amount,
+          paymentCurrency: currency,
+          paidAt: String(body.paidAt || ""),
+          gatewayId: String(body.gatewayId || "")
+        };
+        const portalApiUrl = String(process.env.RESERVATION_PORTAL_API_URL || "").replace(/\/$/, "");
+        const confirmationPdfUrl = String(
+          body.confirmationPdfUrl
+          || (portalApiUrl ? `${portalApiUrl}/${encodeURIComponent(reservation.folio)}/pdf` : "")
+        );
+        if (!confirmationPdfUrl) throw new Error("No se recibio la ruta segura del PDF de confirmacion");
+        if (!payment.groupNotificationQueuedAt) {
+          enqueueReservationGroupNotification(
+            [{ ...reservation, confirmationPdfUrl }],
+            "payment-webhook"
+          );
+          payment.groupNotificationQueuedAt = new Date().toISOString();
+          writePrivateJsonFile(paymentFile, payments);
+        }
+        payment.processedAt = new Date().toISOString();
+        writePrivateJsonFile(paymentFile, payments);
+        sendJson(res, 200, {
+          ok: true,
+          duplicate,
+          groupNotificationQueued: Boolean(payment.groupNotificationQueuedAt)
+        });
+      } catch (error) {
+        sendJson(res, 401, { ok: false, error: error.message || "Webhook rechazado" });
+      }
+      return;
+    }
 
     dashboardAuth.attachSession(req);
 
@@ -5680,6 +5822,19 @@ const server =
 
         saveCalendarReservation(reservation);
 
+        recordCommunicationConsent({
+          folio: reservation.folio,
+          phone: reservation.telefono,
+          reservationMessages: reservation.reservationMessagesConsent,
+          marketingMessages: reservation.marketingConsent,
+          captureMethod: "dashboard-verbal",
+          actor: req.authUser?.displayName || "legacy-dashboard",
+          privacyNoticeVersion: NOTICE_VERSION,
+          termsVersion: TERMS_VERSION,
+          ipAddress: req.socket?.remoteAddress || "",
+          userAgent: req.headers["user-agent"] || ""
+        });
+
         if (body.note) {
           saveReservationNote({
             reservationKey:
@@ -6001,6 +6156,65 @@ const server =
         });
       }
 
+      return;
+    }
+
+    if (
+      req.method === "POST"
+      &&
+      url.pathname === "/api/reservations/send-to-client"
+    ) {
+      try {
+        const body = await readBody(req);
+        const reservation = body.reservation || {};
+        if (String(reservation.telefono || "").replace(/\D/g, "").length < 10) {
+          throw new Error("Agrega un telefono valido antes de enviar al cliente");
+        }
+        if (body.reservationMessagesConsent !== true) {
+          throw new Error("Confirma que el huesped autorizo WhatsApp para gestionar esta reserva");
+        }
+        recordCommunicationConsent({
+          folio: reservation.folio,
+          phone: reservation.telefono,
+          reservationMessages: true,
+          marketingMessages: body.marketingConsent === true,
+          captureMethod: "dashboard-send-confirmation",
+          actor: req.authUser?.displayName || "legacy-dashboard",
+          privacyNoticeVersion: NOTICE_VERSION,
+          termsVersion: TERMS_VERSION,
+          ipAddress: req.socket?.remoteAddress || "",
+          userAgent: req.headers["user-agent"] || ""
+        });
+        const portal = await sendReservationToPortal(reservation);
+        const notification = enqueueReservationClientNotification(
+          {
+            ...reservation,
+            folio: portal.folio,
+            reservationMessagesConsent: true
+          },
+          portal.paymentUrl,
+          "confirmation"
+        );
+        scheduleArrivalReminder(
+          {
+            ...reservation,
+            folio: portal.folio,
+            reservationMessagesConsent: true
+          },
+          portal.paymentUrl
+        );
+        sendJson(res, 200, {
+          ok: true,
+          notificationId: notification.id,
+          folio: portal.folio,
+          paymentUrl: portal.paymentUrl
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok: false,
+          error: error.message || "No se pudo enviar la confirmacion al cliente"
+        });
+      }
       return;
     }
 
